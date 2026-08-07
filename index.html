@@ -1568,7 +1568,7 @@ function rgbToHsv(r,g,b){r/=255;g/=255;b/=255;let max=Math.max(r,g,b),min=Math.m
 function hsvToHex(h,s,v){h=((+h%360)+360)%360;s=clamp(+s,0,100)/100;v=clamp(+v,0,100)/100;let c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c,r=0,g=0,b=0;if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}return rgbToHex((r+m)*255,(g+m)*255,(b+m)*255);}
 function hexToHsv(hex){let {r,g,b}=hexToRgb(hex);return rgbToHsv(r,g,b);}
 function updateHSBControls(sync=true){let l=currentLayer(); if(!l)return; const hsv=hexToHsv(l.color||'#000000'); if(sync){$('tsHue').value=hsv.h;$('tsSat').value=hsv.s;$('tsBri').value=hsv.v;} const h=+$('tsHue').value,s=+$('tsSat').value,v=+$('tsBri').value; $('tsHueVal').textContent=h+'°';$('tsSatVal').textContent=s+'%';$('tsBriVal').textContent=v+'%';$('tsColourHex').textContent=(l.color||'#000000').toUpperCase();$('tsColourChip').style.background=l.color||'#000000';}
-function applyHSBColour(){let l=currentLayer(); if(!l)return; l.color=hsvToHex($('tsHue').value,$('tsSat').value,$('tsBri').value);refreshLayerColourName(l,true);renderAll(false);}
+function applyHSBColour(){let l=currentLayer(); if(!l)return; l.color=hsvToHex($('tsHue').value,$('tsSat').value,$('tsBri').value);l.manual=true;refreshLayerColourName(l,true);renderAll(false);}
 
 function stripeDefaults(){return {type:'stripes',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
  // v57 blueprint: plain black stripes on a white tile.
@@ -1692,7 +1692,7 @@ function markActiveSwatches(root){
  if(!root||!l)return;
  root.querySelectorAll('[data-colour]').forEach(el=>el.classList.toggle('selectedForLayer', el.dataset.colour.toLowerCase()===(l.color||'').toLowerCase()));
 }
-function setLayerColour(c){let l=currentLayer(); if(l){tsPushHistory();l.color=c;refreshLayerColourName(l,true);renderAll();}}
+function setLayerColour(c){let l=currentLayer(); if(l){tsPushHistory();l.color=c;l.manual=true;refreshLayerColourName(l,true);renderAll();}}
 function renderPalette(){const p=$('tsPalette');p.innerHTML='';palette.forEach(c=>{let d=document.createElement('div');d.className='tsSw';d.dataset.colour=c;d.style.background=c;d.title=c;d.onclick=()=>setLayerColour(c);p.appendChild(d);});markActiveSwatches(p);const title=$('tsPaletteTitle');if(title)title.textContent=paletteSource==='hero'?'Hero colours':paletteSource==='custom'?'Custom colours':'Collection colours';}
 function renderColourGrid(){const g=$('tsColourGrid');g.innerHTML='';let label=document.createElement('div');label.className='tsHint';label.style.gridColumn='1 / -1';label.textContent='Palette colours';g.appendChild(label);palette.forEach(c=>{let d=document.createElement('div');d.className='tsColourDot';d.dataset.colour=c;d.style.background=c;d.title=c;d.onclick=()=>setLayerColour(c);g.appendChild(d);});markActiveSwatches(g);}
 
@@ -1797,7 +1797,7 @@ function wire(){
   else if(l.kind==='dot' && id==='tsRotate'){l.rotate=+e.target.value;l.y=+e.target.value;}
   else l[key]=+e.target.value;
   renderAll(false);});
- $('tsBlend').onchange=e=>{let l=state.layers[selected];if(l){tsPushHistory();l.blend=e.target.value;renderAll();}};$('tsCustomColor').oninput=e=>{let l=state.layers[selected];if(l){tsPushHistory();l.color=e.target.value;refreshLayerColourName(l,true);renderAll();}};$('tsCustomColor').onclick=e=>e.currentTarget.showPicker&&e.currentTarget.showPicker();['tsHue','tsSat','tsBri'].forEach(id=>$(id).oninput=e=>{tsPushHistory();applyHSBColour(e);});
+ $('tsBlend').onchange=e=>{let l=state.layers[selected];if(l){tsPushHistory();l.blend=e.target.value;renderAll();}};$('tsCustomColor').oninput=e=>{let l=state.layers[selected];if(l){tsPushHistory();l.color=e.target.value;l.manual=true;refreshLayerColourName(l,true);renderAll();}};$('tsCustomColor').onclick=e=>e.currentTarget.showPicker&&e.currentTarget.showPicker();['tsHue','tsSat','tsBri'].forEach(id=>$(id).oninput=e=>{tsPushHistory();applyHSBColour(e);});
  const dirMap=[['tsDirV','vertical'],['tsDirH','horizontal'],['tsDirD1','diag1'],['tsDirD2','diag2']];dirMap.forEach(([id,dir])=>$(id).onclick=()=>{let l=state.layers[selected];if(l){tsPushHistory();l.direction=dir;renderAll();}});
  function duplicateSelectedTexture(){let l=state.layers[selected];if(!l)return;tsPushHistory();l=copy(l);l.name=(l.name||('layer '+(selected+1)))+' copy';l.pos=(l.pos+(l.width||10)+(l.gap||10))%100;state.layers.splice(selected+1,0,l);selected++;renderAll();}
  $('tsDuplicate').onclick=duplicateSelectedTexture; if($('tsDuplicateTop'))$('tsDuplicateTop').onclick=duplicateSelectedTexture;
@@ -1820,7 +1820,7 @@ function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.t
  if($('tsSequenceActionsRow'))$('tsSequenceActionsRow').style.display=bandBased?'':'none';
  if($('tsSequenceActionsHint'))$('tsSequenceActionsHint').style.display=bandBased?'':'none';
 }
-function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':(dirIcon[l.direction]||'│'));card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}</small></div><button class="tsEye">${l.visible?'shown':'hidden'}</button>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else selected=i;renderAll();};list.appendChild(card);});}
+function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':(dirIcon[l.direction]||'│'));let lock=l.manual?' · <span class="tsLockToggle" title="tap to unlock from preview cycling">🔒 locked</span>':'';card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}${lock}</small></div><button class="tsEye">${l.visible?'shown':'hidden'}</button>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else if(e.target.classList.contains('tsLockToggle')){l.manual=false;}else selected=i;renderAll();};list.appendChild(card);});}
 function renderInspector(sync=true){let l=state.layers[selected];$('tsInspectorTitle').textContent=l?'Classic Controls · '+(l.name||('Layer '+(selected+1))):'Classic Controls';if(!l)return;if(sync){$('tsMove').value=l.pos;$('tsRotate').value=((l.kind==='dot'||l.kind==='diamond') ? (l.y ?? l.rotate ?? 50) : (l.rotate||0));$('tsWidth').value=l.width;$('tsGap').value=l.gap;if($('tsAllWidths'))$('tsAllWidths').value=l.width;if($('tsAllGaps'))$('tsAllGaps').value=l.gap;$('tsOpacity').value=l.opacity;$('tsBlend').value=l.blend||'normal';if($('tsGroupOpacity'))$('tsGroupOpacity').value=l.opacity??100;if($('tsGroupBlend'))$('tsGroupBlend').value=l.blend||'normal';['tsDirV','tsDirH','tsDirD1','tsDirD2'].forEach(id=>$(id).classList.remove('active'));$({vertical:'tsDirV',horizontal:'tsDirH',diag1:'tsDirD1',diag2:'tsDirD2'}[l.direction]||'tsDirV').classList.add('active');}updateHSBControls(sync);}
 function pxFromSlider(v,cell){return Math.max(1,(v||10)*cell/900);}
 function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);ctx.fillStyle=l.color||'#000';let ww=pxFromSlider(l.width,cell);let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
@@ -1916,11 +1916,16 @@ window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElemen
 // same black, so classifying by original colour put every layer in the same 'hero' bucket and
 // "coloured all stripes" really meant "coloured all stripes the same single colour".
 const TS_CYCLE_ROLES=['hero','secondary','accent','accent2','filler','deep','tint'];
-function tsRecolourLayers(layers,roles){(layers||[]).forEach((l,i)=>{if(l.origColor===undefined)l.origColor=l.color;const role=TS_CYCLE_ROLES[i%TS_CYCLE_ROLES.length];if(roles[role])l.color=roles[role];});}
-function tsGreyLayers(layers){(layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;});}
-// "preview" (below) bulk-recolours every layer by role. Picking one of the generated swatches
-// (tsApplyColourToSelected) instead colours only the layer selected in LAYERS/ITEMS — that's
-// the precise, deliberate way to give individual stripes/bands their own colour.
+// Layers explicitly given their own colour (l.manual - set by tsApplyColourToSelected, the HSB
+// sliders, the palette dots, or the custom colour input) are skipped here, not cycled - "preview"
+// bulk-recolouring everything used to silently overwrite a colour you'd just deliberately picked
+// for one stripe. Only "reset to grey" (tsGreyLayers) clears that protection.
+function tsRecolourLayers(layers,roles){(layers||[]).forEach((l,i)=>{if(l.manual)return;if(l.origColor===undefined)l.origColor=l.color;const role=TS_CYCLE_ROLES[i%TS_CYCLE_ROLES.length];if(roles[role])l.color=roles[role];});}
+function tsGreyLayers(layers){(layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;l.manual=false;});}
+// "preview" (below) bulk-recolours every layer by role, except ones you've manually coloured.
+// Picking one of the generated swatches (tsApplyColourToSelected) instead colours only the layer
+// selected in LAYERS/ITEMS — that's the precise, deliberate way to give individual stripes/bands
+// their own colour, and it now stays put through further "preview" clicks.
 window.tsSetRoleColours=function(roles){
  if(state)tsRecolourLayers(state.layers,roles);
  if(tsAppliedState)tsRecolourLayers(tsAppliedState.state.layers,roles);
@@ -1930,7 +1935,7 @@ window.tsSetRoleColours=function(roles){
  if(typeof render==='function')render();
 };
 window.tsApplyColourToSelected=function(hex){
- const applyOne=(layers)=>{const l=layers&&layers[selected];if(!l)return;if(l.origColor===undefined)l.origColor=l.color;l.color=hex;refreshLayerColourName(l,true);};
+ const applyOne=(layers)=>{const l=layers&&layers[selected];if(!l)return;if(l.origColor===undefined)l.origColor=l.color;l.color=hex;l.manual=true;refreshLayerColourName(l,true);};
  if(state)applyOne(state.layers);
  if(tsAppliedState)applyOne(tsAppliedState.state.layers);
  tsAppliedDataUrl=null;
