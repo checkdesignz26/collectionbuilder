@@ -1600,9 +1600,12 @@ function setTsApplyStatus(msg){const s=$('tsStatus');if(!s)return;s.textContent=
 window.tsGetSnapshot=function(){return tsAppliedState?copy(tsAppliedState):null;};
 window.tsApplySnapshot=function(snap){tsAppliedState=snap?copy(snap):null;tsAppliedDataUrl=null;try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));else localStorage.removeItem('pkmActiveClassicV65');}catch(e){}if(typeof render==='function')render();};
 window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);return c.toDataURL('image/png');};
-function tsHexLuma(hex){const {r,g,b}=hexToRgb(hex);return (0.299*r+0.587*g+0.114*b)/255;}
-function tsRoleForColour(hex){const l=tsHexLuma(hex);return l<0.35?'hero':(l>0.85?'white':'secondary');}
-function tsRecolourLayers(layers,roles){(layers||[]).forEach(l=>{if(l.origColor===undefined)l.origColor=l.color;const role=tsRoleForColour(l.origColor||l.color||'#111111');if(roles[role])l.color=roles[role];});}
+// Bulk "preview" cycles the palette's chromatic roles across the layers by position, not by
+// classifying each layer's own colour — the default stripes/dots/checks all start as the exact
+// same black, so classifying by original colour put every layer in the same 'hero' bucket and
+// "coloured all stripes" really meant "coloured all stripes the same single colour".
+const TS_CYCLE_ROLES=['hero','secondary','accent','filler'];
+function tsRecolourLayers(layers,roles){(layers||[]).forEach((l,i)=>{if(l.origColor===undefined)l.origColor=l.color;const role=TS_CYCLE_ROLES[i%TS_CYCLE_ROLES.length];if(roles[role])l.color=roles[role];});}
 function tsGreyLayers(layers){(layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;});}
 // "preview" (below) bulk-recolours every layer by role. Picking one of the generated swatches
 // (tsApplyColourToSelected) instead colours only the layer selected in LAYERS/ITEMS — that's
