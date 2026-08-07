@@ -1544,15 +1544,31 @@ function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.len
    saved template — separate from `state`, which keeps changing as you keep editing. */
 let tsAppliedState=null,tsAppliedDataUrl=null;
 try{const raw=localStorage.getItem('pkmActiveClassicV65');if(raw)tsAppliedState=JSON.parse(raw);}catch(e){tsAppliedState=null;}
-function applyToPKM(){tsAppliedState=copy({type:state.type,state});(tsAppliedState.state.layers||[]).forEach(l=>{l.origColor=l.color;});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}setTsApplyStatus('applied ✓');if(typeof render==='function')render();}
+function applyToPKM(){tsAppliedState=copy({type:state.type,state});(tsAppliedState.state.layers||[]).forEach(l=>{if(l.origColor===undefined)l.origColor=l.color;});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}setTsApplyStatus('applied ✓');if(typeof render==='function')render();}
 function setTsApplyStatus(msg){const s=$('tsStatus');if(!s)return;s.textContent=msg;clearTimeout(setTsApplyStatus.t);setTsApplyStatus.t=setTimeout(()=>{s.textContent='';},1200);}
 window.tsGetSnapshot=function(){return tsAppliedState?copy(tsAppliedState):null;};
 window.tsApplySnapshot=function(snap){tsAppliedState=snap?copy(snap):null;tsAppliedDataUrl=null;try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));else localStorage.removeItem('pkmActiveClassicV65');}catch(e){}if(typeof render==='function')render();};
 window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);return c.toDataURL('image/png');};
 function tsHexLuma(hex){const {r,g,b}=hexToRgb(hex);return (0.299*r+0.587*g+0.114*b)/255;}
 function tsRoleForColour(hex){const l=tsHexLuma(hex);return l<0.35?'hero':(l>0.85?'white':'secondary');}
-window.tsSetRoleColours=function(roles){if(!tsAppliedState)return;(tsAppliedState.state.layers||[]).forEach(l=>{const role=tsRoleForColour(l.origColor||l.color||'#111111');if(roles[role])l.color=roles[role];});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}if(typeof render==='function')render();};
-window.tsResetToGrey=function(){if(!tsAppliedState)return;(tsAppliedState.state.layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}if(typeof render==='function')render();};
+function tsRecolourLayers(layers,roles){(layers||[]).forEach(l=>{if(l.origColor===undefined)l.origColor=l.color;const role=tsRoleForColour(l.origColor||l.color||'#111111');if(roles[role])l.color=roles[role];});}
+function tsGreyLayers(layers){(layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;});}
+window.tsSetRoleColours=function(roles){
+ if(state)tsRecolourLayers(state.layers,roles);
+ if(tsAppliedState)tsRecolourLayers(tsAppliedState.state.layers,roles);
+ tsAppliedDataUrl=null;
+ try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}
+ if(typeof renderAll==='function')renderAll(false);
+ if(typeof render==='function')render();
+};
+window.tsResetToGrey=function(){
+ if(state)tsGreyLayers(state.layers);
+ if(tsAppliedState)tsGreyLayers(tsAppliedState.state.layers);
+ tsAppliedDataUrl=null;
+ try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}
+ if(typeof renderAll==='function')renderAll(false);
+ if(typeof render==='function')render();
+};
 const originalRenderTextureTilesTs=window.renderTextureTiles||renderTextureTiles;
 window.renderTextureTiles=renderTextureTiles=function(stage,scale,origin){
  if(tsAppliedState){
