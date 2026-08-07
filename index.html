@@ -1278,7 +1278,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
         <div class="tsRow"><label>gap</label><input id="tsGap" type="range" min="0" max="120" value="18"></div>
         <div class="tsRow"><label>opacity</label><input id="tsOpacity" type="range" min="0" max="100" value="100"></div>
         <div class="tsRow"><label>blend</label><select id="tsBlend"><option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="soft-light">soft light</option></select></div>
-        <div class="tsBox" style="margin:10px 0 0"><h3>Global Stripe Controls</h3><div class="tsPad">
+        <div class="tsBox" id="tsGlobalStripeBox" style="margin:10px 0 0"><h3>Global Stripe Controls</h3><div class="tsPad">
           <div class="tsRow"><label>all widths</label><input id="tsAllWidths" type="range" min="2" max="120" value="20"></div>
           <div class="tsRow"><label>all gaps</label><input id="tsAllGaps" type="range" min="0" max="120" value="18"></div>
           <div class="tsGlobalGrid"><button id="tsApplyAllWidths">apply width</button><button id="tsApplyAllGaps">apply gap</button></div>
@@ -1293,7 +1293,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
           <p class="tsHint" style="margin-top:8px">Use these when the whole stripe recipe needs to get chunkier, airier, or evenly spaced.</p>
         </div></div>
       </div></div>
-      <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
+      <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
     </div>
     <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint">tap to load · all classic pattern types live together</span></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
@@ -1342,9 +1342,12 @@ function dotsDefault(){
  return {type:'dots',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers};
 }
 function checksDefault(){return {type:'checks',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
- // v59 blueprint: one centred vertical rectangle + one centred horizontal rectangle.
- {kind:'check',name:'black vertical rectangle',color:'#111111',pos:50,width:28,gap:0,opacity:100,blend:'normal',direction:'vertical',rotate:0,visible:true},
- {kind:'check',name:'grey horizontal rectangle',color:'#777777',pos:50,width:28,gap:0,opacity:70,blend:'multiply',direction:'horizontal',rotate:0,visible:true}
+ // v69: checks is a real 2x2 checkerboard of four independently paintable squares (not
+ // crossing bands) - each width:50 so edges land exactly on 0/50/100 with zero gap.
+ {kind:'square',name:'black square',color:'#111111',x:25,y:25,pos:25,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
+ {kind:'square',name:'white square',color:'#ffffff',x:75,y:25,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
+ {kind:'square',name:'white square',color:'#ffffff',x:25,y:75,pos:25,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
+ {kind:'square',name:'black square',color:'#111111',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function plaidDefault(){return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
  // v59 blueprint: centred plaid cross with editable black/grey rectangle bands.
@@ -1401,7 +1404,7 @@ function nearestColourName(hex){
  const tone=hsv.v<38?'dark ':(hsv.s<32?'pastel ':(hsv.v>88&&hsv.s>70?'vivid ':''));
  return (tone+best[1]).trim();
 }
-function layerKindName(l){if(!l)return 'layer'; if(l.kind==='dot')return 'dot'; if(l.kind==='check')return 'check'; if(l.kind==='diamond')return 'diamond'; return 'stripe';}
+function layerKindName(l){if(!l)return 'layer'; if(l.kind==='dot')return 'dot'; if(l.kind==='square')return 'square'; if(l.kind==='check')return 'check'; if(l.kind==='diamond')return 'diamond'; return 'stripe';}
 function refreshLayerColourName(l,force=false){
  if(!l)return; const kind=layerKindName(l), colour=nearestColourName(l.color);
  const generic=/^(navy|blue|sage|gold|cream|pink|lavender|white|black|grey|brown|green|orange|custom|stripe|layer|vertical|horizontal|gingham|small|large)/i;
@@ -1465,7 +1468,7 @@ function canvasPointToTile(ev){
 }
 function layerDistance(l,pt){
  if(!l)return 1e9;
- if(l.kind==='dot'||l.kind==='diamond'){
+ if(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'){
   const x=l.x ?? l.pos ?? 50, y=l.y ?? l.rotate ?? 50;
   const variants=[x-100,x,x+100].flatMap(xx=>[y-100,y,y+100].map(yy=>({xx,yy})));
   return Math.min(...variants.map(v=>Math.hypot(pt.x-v.xx,pt.y-v.yy)));
@@ -1487,7 +1490,7 @@ function selectLayerAtPoint(pt){
 }
 function moveSelectedToPoint(pt){
  const l=currentLayer(); if(!l)return;
- if(l.kind==='dot'||l.kind==='diamond'){
+ if(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'){
   l.x=pt.x; l.y=pt.y; l.pos=pt.x; l.rotate=pt.y;
  }else if(l.direction==='horizontal'){
   l.pos=pt.y;
@@ -1543,7 +1546,15 @@ function wire(){
  if($('tsColourModeBtn'))$('tsColourModeBtn').onclick=()=>tsShowMode('colour');
 }
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
-function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgColor').value=state.bgColor||'#fff1d6';$('tsBgOpacity').value=state.bgOpacity??100;$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();}
+function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgColor').value=state.bgColor||'#fff1d6';$('tsBgOpacity').value=state.bgOpacity??100;$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
+ // Global Stripe Controls / Selected Direction Group / sequence duplication only make sense
+ // for band recipes - a checkerboard of discrete squares has no "stripe sequence" to distribute
+ // or duplicate into a plaid.
+ const bandBased=(state.layers||[]).some(l=>l.kind==='stripe'||l.kind==='check');
+ if($('tsGlobalStripeBox'))$('tsGlobalStripeBox').style.display=bandBased?'':'none';
+ if($('tsSequenceActionsRow'))$('tsSequenceActionsRow').style.display=bandBased?'':'none';
+ if($('tsSequenceActionsHint'))$('tsSequenceActionsHint').style.display=bandBased?'':'none';
+}
 function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':(dirIcon[l.direction]||'│'));card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}</small></div><button class="tsEye">${l.visible?'shown':'hidden'}</button>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else selected=i;renderAll();};list.appendChild(card);});}
 function renderInspector(sync=true){let l=state.layers[selected];$('tsInspectorTitle').textContent=l?'Classic Controls · '+(l.name||('Layer '+(selected+1))):'Classic Controls';if(!l)return;if(sync){$('tsMove').value=l.pos;$('tsRotate').value=((l.kind==='dot'||l.kind==='diamond') ? (l.y ?? l.rotate ?? 50) : (l.rotate||0));$('tsWidth').value=l.width;$('tsGap').value=l.gap;if($('tsAllWidths'))$('tsAllWidths').value=l.width;if($('tsAllGaps'))$('tsAllGaps').value=l.gap;$('tsOpacity').value=l.opacity;$('tsBlend').value=l.blend||'normal';if($('tsGroupOpacity'))$('tsGroupOpacity').value=l.opacity??100;if($('tsGroupBlend'))$('tsGroupBlend').value=l.blend||'normal';['tsDirV','tsDirH','tsDirD1','tsDirD2'].forEach(id=>$(id).classList.remove('active'));$({vertical:'tsDirV',horizontal:'tsDirH',diag1:'tsDirD1',diag2:'tsDirD2'}[l.direction]||'tsDirV').classList.add('active');}updateHSBControls(sync);}
 function pxFromSlider(v,cell){return Math.max(1,(v||10)*cell/900);}
@@ -1554,6 +1565,15 @@ function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.
  let x=((l.x ?? l.pos ?? 50)/100)*cell;
  let y=((l.y ?? l.rotate ?? 50)/100)*cell;
  [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill(); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r+tsHighlightMargin(cell),0,Math.PI*2);ctx.stroke();});}));
+}
+else if(l.kind==='square'){
+ // v69: a discrete positioned square (checkerboard tile) rather than a full-tile band.
+ // Width is a direct 0-100% of the tile side, not pxFromSlider (which tops out far too
+ // small - that helper is calibrated for thin band widths and dot radii, not half-tile squares).
+ const side=(l.width/100)*cell;
+ const x=((l.x ?? l.pos ?? 50)/100)*cell;
+ const y=((l.y ?? l.rotate ?? 50)/100)*cell;
+ [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.fillRect(x+dx-side/2,y+dy-side/2,side,side); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(x+dx-side/2-m,y+dy-side/2-m,side+m*2,side+m*2));}}));
 }
 else if(l.kind==='check'){if(l.direction==='horizontal'){[-cell,0,cell].forEach(dy=>{ctx.fillRect(0,pos+dy-ww/2,cell,ww); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(0,pos+dy-ww/2-m,cell,ww+m*2));}});}else{[-cell,0,cell].forEach(dx=>{ctx.fillRect(pos+dx-ww/2,0,ww,cell); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(pos+dx-ww/2-m,0,ww+m*2,cell));}});}}
 else if(l.kind==='diamond'){
