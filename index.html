@@ -1373,15 +1373,26 @@ function checksDefault(){return {type:'checks',bg:true,bgColor:'#ffffff',bgOpaci
  {kind:'square',name:'white square',color:'#ffffff',x:25,y:75,pos:25,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
  {kind:'square',name:'black square',color:'#111111',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
-function plaidDefault(){return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
- // v59 blueprint: centred plaid cross with editable black/grey rectangle bands.
- {kind:'stripe',name:'black vertical band',color:'#111111',pos:50,width:14,gap:0,opacity:100,blend:'normal',direction:'vertical',rotate:0,visible:true},
- {kind:'stripe',name:'grey vertical accent left',color:'#777777',pos:42,width:5,gap:0,opacity:70,blend:'multiply',direction:'vertical',rotate:0,visible:true},
- {kind:'stripe',name:'grey vertical accent right',color:'#777777',pos:58,width:5,gap:0,opacity:70,blend:'multiply',direction:'vertical',rotate:0,visible:true},
- {kind:'stripe',name:'black horizontal band',color:'#111111',pos:50,width:14,gap:0,opacity:100,blend:'normal',direction:'horizontal',rotate:0,visible:true},
- {kind:'stripe',name:'grey horizontal accent top',color:'#777777',pos:42,width:5,gap:0,opacity:70,blend:'multiply',direction:'horizontal',rotate:0,visible:true},
- {kind:'stripe',name:'grey horizontal accent bottom',color:'#777777',pos:58,width:5,gap:0,opacity:70,blend:'multiply',direction:'horizontal',rotate:0,visible:true}
-]};}
+function plaidDefault(){
+ // v70: plaid/madras as a 4x4 grid of paintable squares, same square kind as checks/gingham,
+ // instead of crossing bands. Each row and column carries a "band colour" (thick dark / thin
+ // grey accent / light band, mimicking a woven tartan's stripe sequence); a cell takes
+ // whichever of its row/column band is more dominant, giving a real criss-cross instead of
+ // a plus-sign. Still just square layers underneath, so every square is individually
+ // selectable and recolourable exactly like checks.
+ const bandColours=['#111111','#f4ede1','#777777','#f4ede1'];
+ const dominance={'#111111':0,'#777777':1,'#f4ede1':2};
+ const layers=[];
+ for(let r=0;r<4;r++){
+  for(let c=0;c<4;c++){
+   const rc=bandColours[r], cc=bandColours[c];
+   const colour=(dominance[rc]<=dominance[cc])?rc:cc;
+   const x=12.5+c*25, y=12.5+r*25;
+   layers.push({kind:'square',name:'plaid square',color:colour,x,y,pos:x,width:25,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true});
+  }
+ }
+ return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers};
+}
 function argyleDefault(){return {type:'argyle',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
  // v61 blueprint: centred editable argyle skeleton, not a finished repeat.
  {kind:'diamond',name:'black centre diamond',color:'#111111',x:50,y:50,pos:50,width:70,gap:0,opacity:22,blend:'normal',direction:'vertical',rotate:50,visible:true},
@@ -1398,9 +1409,13 @@ function diagonalPlaidDefault(){return {type:'diagplaid',bg:true,bgColor:'#fffff
  {kind:'stripe',name:'grey fine \\ right',color:'#777777',pos:58,width:4,gap:0,opacity:70,blend:'normal',direction:'diag2',rotate:0,visible:true}
 ]};}
 function ginghamDefault(){return {type:'gingham',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
- // v59 blueprint: centred gingham cross, not pushed to the corner.
- {kind:'check',name:'black vertical rectangle',color:'#111111',pos:50,width:28,gap:0,opacity:35,blend:'multiply',direction:'vertical',rotate:0,visible:true},
- {kind:'check',name:'black horizontal rectangle',color:'#111111',pos:50,width:28,gap:0,opacity:35,blend:'multiply',direction:'horizontal',rotate:0,visible:true}
+ // v70: gingham's classic 3-tone woven look as four squares (same mechanism as checks) -
+ // a dark "blend" corner where both threads cross, two matching mid-tone corners where a
+ // single thread shows, and a white corner where neither does.
+ {kind:'square',name:'black square',color:'#111111',x:25,y:25,pos:25,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
+ {kind:'square',name:'grey square',color:'#777777',x:75,y:25,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
+ {kind:'square',name:'grey square',color:'#777777',x:25,y:75,pos:25,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
+ {kind:'square',name:'white square',color:'#ffffff',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
 function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');}
