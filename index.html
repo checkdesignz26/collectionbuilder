@@ -1259,7 +1259,11 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
         <div class="tsBelow"><div class="tsScaleBox"><div class="tsScaleTop"><span>Pattern Scale <em id="tsScaleName" class="tsScaleName">normal</em></span><span id="tsScaleValue">100%</span></div><input id="tsPatternScale" type="range" min="25" max="200" value="100"><div class="tsScaleTicks"><span>tiny</span><span>normal</span><span>bold</span></div></div><button id="tsGuides" class="small active">guides on</button></div>
       </section>
       <aside class="tsPanel tsLayersPanel"><div class="tsBox"><h3>Layers / Items</h3><div class="tsPad"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px"><button id="tsAddLayer">+ add</button><button id="tsDuplicateTop">⧉ duplicate</button><button id="tsRemoveLayer">− remove</button></div><div id="tsLayerList" class="tsLayerList" style="margin-top:10px"></div></div></div></aside>
-      <aside class="tsPanel right"><div id="tsColourModeSlot"></div><div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
+      <aside class="tsPanel right">
+        <div class="grid2" style="margin-bottom:9px"><button id="tsGreyModeBtn" class="small active">grey mode</button><button id="tsColourModeBtn" class="small">colour mode</button></div>
+        <div id="tsColourModeSlot" class="tsHidden"></div>
+        <div id="tsGreyModeBox">
+        <div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
         <p class="tsHint" style="margin-top:0">Edit the selected classic layer.</p><div class="tsColourGrid" id="tsColourGrid"></div>
         <div class="tsHSBPanel">
           <div class="tsColourReadout"><span id="tsColourChip" class="tsColourChip"></span><span id="tsColourHex">#14233f</span></div>
@@ -1288,7 +1292,9 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
           <p class="tsHint" style="margin-top:8px">Use these when the whole stripe recipe needs to get chunkier, airier, or evenly spaced.</p>
         </div></div>
       </div></div>
-      <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div></aside>
+      <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
+        </div>
+      </aside>
     </div>
     <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint">tap to load · all classic pattern types live together</span></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
   </div>
@@ -1376,10 +1382,24 @@ function close(){document.body.style.overflow='';$('textureStudioOverlay').class
 function init(){state=stripeDefaults();previewMode='single';try{saved=JSON.parse(localStorage.getItem('pkmTextureStudioV32')||'[]')}catch(e){saved=[]}renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
 function currentLayer(){return state.layers[selected];}
 function nearestColourName(hex){
- const names=[['black','#111111'],['dark grey','#555555'],['grey','#777777'],['light grey','#999999'],['white','#ffffff'],['off white','#f4f4f4'],['navy','#14233f'],['blue','#536f8d'],['sage','#8fa776'],['gold','#de913d'],['cream','#fff1d6'],['pink','#f4b9ca'],['lavender','#d8c9ff'],['brown','#8a5a3b'],['green','#73d48c'],['orange','#ffb45f']];
- const rgb=hexToRgb(hex||'#000000'); let best=names[0],bd=1e9;
- names.forEach(n=>{let c=hexToRgb(n[1]);let d=(rgb.r-c.r)**2+(rgb.g-c.g)**2+(rgb.b-c.b)**2;if(d<bd){bd=d;best=n;}});
- return best[0];
+ // Hue-based naming covers the full colour wheel the adaptive palette can generate — the old
+ // fixed 16-colour RGB-distance table left most generated hues (teal, magenta, indigo...)
+ // matched to a poorly-fitting neutral or pastel name.
+ const {r,g,b}=hexToRgb(hex||'#000000');
+ const hsv=rgbToHsv(r,g,b);
+ if(hsv.s<12){
+  if(hsv.v>92)return 'white';
+  if(hsv.v>78)return 'off white';
+  if(hsv.v>55)return 'light grey';
+  if(hsv.v>30)return 'grey';
+  if(hsv.v>12)return 'dark grey';
+  return 'black';
+ }
+ const hueNames=[[0,'red'],[15,'rust'],[30,'orange'],[45,'amber'],[60,'gold'],[75,'olive'],[90,'chartreuse'],[105,'lime'],[120,'green'],[150,'emerald'],[165,'mint'],[180,'teal'],[195,'cyan'],[210,'sky'],[225,'azure'],[240,'blue'],[255,'indigo'],[270,'violet'],[285,'purple'],[300,'magenta'],[315,'fuchsia'],[330,'pink'],[345,'rose'],[360,'red']];
+ let best=hueNames[0],bd=1e9;
+ hueNames.forEach(n=>{let d=Math.abs(hsv.h-n[0]);d=Math.min(d,360-d);if(d<bd){bd=d;best=n;}});
+ const tone=hsv.v<38?'dark ':(hsv.s<32?'pastel ':(hsv.v>88&&hsv.s>70?'vivid ':''));
+ return (tone+best[1]).trim();
 }
 function layerKindName(l){if(!l)return 'layer'; if(l.kind==='dot')return 'dot'; if(l.kind==='check')return 'check'; if(l.kind==='diamond')return 'diamond'; return 'stripe';}
 function refreshLayerColourName(l,force=false){
@@ -1494,6 +1514,8 @@ function wire(){
  if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal'); if($('tsApplyGroupStyle'))$('tsApplyGroupStyle').onclick=applyGroupStyle; if($('tsCopyToHorizontal'))$('tsCopyToHorizontal').onclick=()=>duplicateSequenceTo('horizontal'); if($('tsCopyToDiag1'))$('tsCopyToDiag1').onclick=()=>duplicateSequenceTo('diag1'); if($('tsCopyToDiag2'))$('tsCopyToDiag2').onclick=()=>duplicateSequenceTo('diag2'); if($('tsDuplicateSequence'))$('tsDuplicateSequence').onclick=()=>duplicateSequence(false); if($('tsPlaidAction'))$('tsPlaidAction').onclick=()=>duplicateSequence(true);
  $('tsReset').onclick=()=>{tsPushHistory();state=defaultFor(state.type);selected=0;renderAll();};$('tsSave').onclick=saveTexture; if($('tsUndo'))$('tsUndo').onclick=tsUndo; if($('tsRedo'))$('tsRedo').onclick=tsRedo; const ov=$('textureStudioOverlay'); let tsTap=null; ov.addEventListener('touchend',e=>{if(!ov.classList.contains('open'))return; if(e.changedTouches.length===2||e.touches.length===2){e.preventDefault();tsUndo();} if(e.changedTouches.length===3||e.touches.length===3){e.preventDefault();tsRedo();}}, {passive:false});
  if($('tsApplyToPKM'))$('tsApplyToPKM').onclick=applyToPKM;
+ if($('tsGreyModeBtn'))$('tsGreyModeBtn').onclick=()=>tsShowMode('grey');
+ if($('tsColourModeBtn'))$('tsColourModeBtn').onclick=()=>tsShowMode('colour');
 }
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
 function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgColor').value=state.bgColor||'#fff1d6';$('tsBgOpacity').value=state.bgOpacity??100;$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();}
@@ -1565,6 +1587,15 @@ function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.len
    saved template — separate from `state`, which keeps changing as you keep editing. */
 let tsAppliedState=null,tsAppliedDataUrl=null;
 try{const raw=localStorage.getItem('pkmActiveClassicV65');if(raw)tsAppliedState=JSON.parse(raw);}catch(e){tsAppliedState=null;}
+function tsShowMode(mode){
+ const grey=$('tsGreyModeBox'),colourSlot=$('tsColourModeSlot'),greyBtn=$('tsGreyModeBtn'),colourBtn=$('tsColourModeBtn');
+ if(!grey||!colourSlot)return;
+ const isColour=mode==='colour';
+ grey.classList.toggle('tsHidden',isColour);
+ colourSlot.classList.toggle('tsHidden',!isColour);
+ if(greyBtn)greyBtn.classList.toggle('active',!isColour);
+ if(colourBtn)colourBtn.classList.toggle('active',isColour);
+}
 function applyToPKM(){tsAppliedState=copy({type:state.type,state});(tsAppliedState.state.layers||[]).forEach(l=>{if(l.origColor===undefined)l.origColor=l.color;});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}setTsApplyStatus('applied ✓');if(typeof render==='function')render();}
 function setTsApplyStatus(msg){const s=$('tsStatus');if(!s)return;s.textContent=msg;clearTimeout(setTsApplyStatus.t);setTsApplyStatus.t=setTimeout(()=>{s.textContent='';},1200);}
 window.tsGetSnapshot=function(){return tsAppliedState?copy(tsAppliedState):null;};
@@ -1640,7 +1671,9 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
         <div class="bgCanvasWrap"><canvas id="bgPreviewCanvas" width="720" height="720"></canvas><div id="bgRepeatBox" class="hidden"></div></div>
       </section>
       <aside class="bgStudioPanel right">
-        <div id="bgColourModeSlot"></div>
+        <div class="grid2" style="margin-bottom:9px"><button id="bgGreyModeBtn" class="small active">grey mode</button><button id="bgColourModeBtn" class="small">colour mode</button></div>
+        <div id="bgColourModeSlot" class="hidden"></div>
+        <div id="bgGreyModeBox">
         <div class="bgBox"><h3>recipe controls</h3><div class="bgPad">
           <div class="bgControlsRow"><label>base</label><input id="bgBaseColor" type="color"><output></output></div>
           <div class="bgControlsRow"><label>texture</label><input id="bgTexColor" type="color"><output></output></div>
@@ -1675,6 +1708,7 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
           <div id="bgSelectedInspector" class="bgSelectedControls"><div class="bgSelectedEmpty">No blob selected yet. Tap a splash, doodle or mark in edit mode.</div></div>
         </div></div>
         <pre id="bgRecipeText" class="bgRecipeTextGone"></pre>
+        </div>
       </aside>
     </div>
     <footer class="bgFilm"><div class="bgFilmHead"><b>🎞️ saved backgrounds</b><span id="bgStatus" class="saveStatus"></span></div><div id="bgFilmstrip" class="bgFilmstrip"></div></footer>
@@ -1968,7 +2002,19 @@ function wireBgEditTools(){
  wireBgCanvas(); updateBgEditUI();
 }
 
-function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();});q('bgPalette')?.addEventListener('click',e=>{let b=e.target.closest('[data-colour]');if(!b)return;bgRecipe.base=b.dataset.colour;syncBgUI();});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgHex').onchange=e=>{let v=e.target.value.trim();if(/^#?[0-9a-f]{6}$/i.test(v)){bgRecipe.base=v.startsWith('#')?v:'#'+v;syncBgUI();}};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>{let a=document.createElement('a');a.download='pkm-background-seamless.png';a.href=recipeToUrl(bgRecipe);a.click();};q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};}
+function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();});q('bgPalette')?.addEventListener('click',e=>{let b=e.target.closest('[data-colour]');if(!b)return;bgRecipe.base=b.dataset.colour;syncBgUI();});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgHex').onchange=e=>{let v=e.target.value.trim();if(/^#?[0-9a-f]{6}$/i.test(v)){bgRecipe.base=v.startsWith('#')?v:'#'+v;syncBgUI();}};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>{let a=document.createElement('a');a.download='pkm-background-seamless.png';a.href=recipeToUrl(bgRecipe);a.click();};q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};
+ if(q('bgGreyModeBtn'))q('bgGreyModeBtn').onclick=()=>bgShowMode('grey');
+ if(q('bgColourModeBtn'))q('bgColourModeBtn').onclick=()=>bgShowMode('colour');
+}
+function bgShowMode(mode){
+ const grey=q('bgGreyModeBox'),colourSlot=q('bgColourModeSlot'),greyBtn=q('bgGreyModeBtn'),colourBtn=q('bgColourModeBtn');
+ if(!grey||!colourSlot)return;
+ const isColour=mode==='colour';
+ grey.classList.toggle('hidden',isColour);
+ colourSlot.classList.toggle('hidden',!isColour);
+ if(greyBtn)greyBtn.classList.toggle('active',!isColour);
+ if(colourBtn)colourBtn.classList.toggle('active',isColour);
+}
 try{ localStorage.removeItem('pkmActiveBackgroundV34'); }catch(e){} // v37: blank sketchbook startup, no inherited background
 const originalRenderTextureTiles=window.renderTextureTiles || renderTextureTiles;
 window.renderTextureTiles=renderTextureTiles=function(stage,scale,origin){
