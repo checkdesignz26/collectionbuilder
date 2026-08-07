@@ -851,6 +851,28 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div>
   </section>
   <aside class="side right">
+    <div class="box"><h2>colour mode</h2><div class="body">
+      <p class="hint">Grey mode builds the shapes; colour mode recolours the whole template — placeholders, classic pattern and background — from one hero colour. Requires a saved template (save one first if the filmstrip is empty).</p>
+      <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
+      <div class="miniControl"><label>mood</label><select id="cmMood" class="selectTiny">
+        <option value="pastel">pastel</option><option value="earthy">earthy</option><option value="vibrant">vibrant</option><option value="moody">moody</option>
+      </select></div>
+      <div class="range"><label>richness</label><input id="cmRichness" type="range" min="0" max="100" value="40"></div>
+      <div class="swatches" id="cmSwatches"></div>
+      <div class="miniControl"><label>bg base</label><select id="cmBgBase" class="selectTiny">
+        <option value="white">white</option><option value="grey">grey</option><option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="black">black</option>
+      </select></div>
+      <div class="miniControl"><label>bg mark</label><select id="cmBgTex" class="selectTiny">
+        <option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="black">black</option><option value="grey">grey</option><option value="white">white</option>
+      </select></div>
+      <div class="grid2" style="margin-top:7px"><button id="cmApplyLive" class="small">preview</button><button id="cmResetGrey" class="small">reset to grey</button></div>
+      <div class="tsCustomAdd" style="margin-top:9px"><input id="cmColourwayName" placeholder="colourway name" class="selectTiny"><button id="cmSaveColourway" class="small primary">save colourway</button></div>
+      <span id="cmStatus" class="saveStatus"></span>
+      <div class="filmstripBlock" style="margin:9px 0 0;padding:0;border:0;background:transparent">
+        <div class="filmstripHead"><b>🎨 colourways</b><span class="footerNote">saved for the current template</span></div>
+        <div class="filmstrip" id="colourwayFilmstrip"></div>
+      </div>
+    </div></div>
     <div class="box"><h2>control room</h2><div class="body">
       <p class="hint">Alignment uses the selected brick as the anchor. Scope decides what follows it.</p>
       <div class="scopeRow"><button id="scopeType" class="active">same shape</button><button id="scopeRole">same colour</button><button id="scopeAll">all bricks</button></div>
@@ -886,6 +908,40 @@ function colorForBrick(b){return shapeColors[b.type] || colors[b.role] || colors
 function defaultRoleForType(type){const map={oval:'hero',arrowOval:'hero',circle:'accent',rect:'secondary',square:'secondary',diamond:'filler',triangle:'accent',hexagon:'hero'};return map[type]||activeColor;}
 const swatches=[['hero',colors.hero],['secondary',colors.secondary],['filler',colors.filler],['accent',colors.accent],['black',colors.black],['grey',colors.grey],['white',colors.white]];
 const texturePalette=[['purple',colors.hero],['green',colors.secondary],['blue',colors.filler],['orange',colors.accent],['cream','#fff4df'],['navy','#14233f'],['sage','#8aa47b'],['brown','#6b442d']];
+
+/* v65 colour mode: role colours (colors) and shape-identity colours (shapeColors) are
+   both live-mutable globals — colorForBrick() checks shapeColors[type] first, so
+   recolouring must update both or ovals/circles/rects/etc. won't visibly change. */
+const DEFAULT_COLORS={...colors};
+const DEFAULT_SHAPE_COLORS={...shapeColors};
+const shapeTypeRole={oval:'hero',arrowOval:'hero',circle:'accent',rect:'secondary',square:'secondary',diamond:'filler',triangle:'accent',hexagon:'hero'};
+function hexToRgbMB(hex){hex=(hex||'#000000').replace('#','').trim();if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');let n=parseInt(hex,16);if(Number.isNaN(n))n=0;return{r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
+function rgbToHexMB(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
+function rgbToHsvMB(r,g,b){r/=255;g/=255;b/=255;let max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,h=0,s=max===0?0:d/max,v=max;if(d!==0){switch(max){case r:h=((g-b)/d+(g<b?6:0));break;case g:h=((b-r)/d+2);break;case b:h=((r-g)/d+4);break;}h*=60;}return{h,s:s*100,v:v*100};}
+function hsvToHexMB(h,s,v){h=((h%360)+360)%360;s=Math.max(0,Math.min(100,s))/100;v=Math.max(0,Math.min(100,v))/100;let c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c,r=0,g=0,b=0;if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}return rgbToHexMB((r+m)*255,(g+m)*255,(b+m)*255);}
+// Placeholder adaptive palette generator — same (heroHex, mood, richness) input shape the
+// real adaptive colour model will use; swap this function's body only when that lands.
+const MOOD_CURVES={pastel:{sat:[18,42],val:[86,96]},earthy:{sat:[30,55],val:[45,68]},vibrant:{sat:[55,92],val:[55,78]},moody:{sat:[35,60],val:[22,42]}};
+function generateAdaptivePalette(heroHex,mood,richness){
+ const curve=MOOD_CURVES[mood]||MOOD_CURVES.pastel;
+ const r=Math.max(0,Math.min(100,+richness||0))/100;
+ const sat=curve.sat[0]+(curve.sat[1]-curve.sat[0])*r;
+ const val=curve.val[0]+(curve.val[1]-curve.val[0])*r;
+ const rgb=hexToRgbMB(heroHex);
+ const hue=rgbToHsvMB(rgb.r,rgb.g,rgb.b).h;
+ const roles={
+  hero:hsvToHexMB(hue,sat,val),
+  secondary:hsvToHexMB(hue+130,sat*0.85,Math.min(96,val+6)),
+  accent:hsvToHexMB(hue-40,Math.min(96,sat*1.1),Math.max(30,val-4)),
+  filler:hsvToHexMB(hue+200,sat*0.7,Math.min(96,val+10)),
+  black:hsvToHexMB(hue,Math.min(60,sat*0.6),14),
+  grey:hsvToHexMB(hue,Math.min(35,sat*0.35),52),
+  white:hsvToHexMB(hue,Math.min(14,sat*0.12),95)
+ };
+ return {roles,bg:{base:roles.white,tex:roles.hero}};
+}
+function applyRolesLive(roles){Object.assign(colors,roles);Object.keys(shapeColors).forEach(t=>{shapeColors[t]=roles[shapeTypeRole[t]]||shapeColors[t];});}
+function renderSwatchesUI(){const sw=document.getElementById('swatches');if(!sw)return;sw.innerHTML='';swatches.forEach(([name])=>{const d=document.createElement('div');d.className='sw '+(name===activeColor?'active':'');d.style.background=colors[name];d.title=name;d.onclick=()=>{activeColor=name;renderSwatchesUI();const b=selectedBrick();if(b){pushHistory();b.role=name;render();}};sw.appendChild(d);});}
 let activeTextureColor=texturePalette[0][1];
 let selectedTextureLayer=0;
 function blankTexture(){return {enabled:false,bgEnabled:false,bgColor:'#ffffff',bgOpacity:100,patternScale:100,layers:[]};}
@@ -895,6 +951,8 @@ let textureStore={};
 let mode='repeat', edgeClones=true, current=null, selected=null, activeColor='hero';
 let bricks=[];
 let blueprintStore={};
+let backgroundStore={};
+let colourStore={};
 let history=[], redoStack=[];
 let savedTemplates=[];
 const presets={
@@ -914,11 +972,14 @@ const presets={
 function p(type,x,y,w,h,role='hero',rot=0,flow=''){return {id:'b'+Math.random().toString(36).slice(2),type,x,y,w,h,role,rot,flow};}
 const skeletonOrder=['grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','stripe','polka','gingham','plaid','chevron','scallop'];
 function copyBricks(arr){return JSON.parse(JSON.stringify(arr)).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
-function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}}
+function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;colourStore[current]={colors:{...colors},shapeColors:{...shapeColors}};}}
 function sourceBricksFor(key){return blueprintStore[key]?copyBricks(blueprintStore[key]):copyBricks(presets[key].bricks);}
 function sourceTextureFor(key){if(textureStore[key])return copyTexture(textureStore[key]);if(key==='stripe')return stripeDefaultTexture();return blankTexture();}
-function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,texture});}
-function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
+function sourceBackgroundFor(key){return backgroundStore[key]!==undefined?backgroundStore[key]:null;}
+function sourceColoursFor(key){return colourStore[key]||{colors:{...DEFAULT_COLORS},shapeColors:{...DEFAULT_SHAPE_COLORS}};}
+function applyColoursFor(key){const c=sourceColoursFor(key);Object.assign(colors,c.colors);Object.assign(shapeColors,c.shapeColors);renderSwatchesUI();}
+function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,colourStore,texture,colors,shapeColors,background:window.bgGetSnapshot?window.bgGetSnapshot():null});}
+function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};colourStore=data.colourStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);if(data.colors)Object.assign(colors,data.colors);if(data.shapeColors)Object.assign(shapeColors,data.shapeColors);renderSwatchesUI();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
 function undo(){if(!history.length)return;redoStack.push(capture());restore(history.pop());}
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
@@ -926,7 +987,7 @@ function loadSavedTemplates(){try{savedTemplates=JSON.parse(localStorage.getItem
 function persistSavedTemplates(){localStorage.setItem('pkmSavedSkeletonsV13',JSON.stringify(savedTemplates));}
 let saveBusy=false;
 function flashSaveStatus(msg,ok=true){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},1200);}
-function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');c.innerHTML=`<div class="mini">${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}</span>`;c.onclick=()=>loadSavedTemplate(i);strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
+function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';c.innerHTML=`<div class="mini">${bgLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=()=>loadSavedTemplate(i);strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function saveTemplateToFilmstrip(){
  if(saveBusy)return;
  saveBusy=true;
@@ -936,7 +997,7 @@ function saveTemplateToFilmstrip(){
  const count=savedTemplates.length+1;
  const name=(presets[current]?.name||'skeleton')+' '+count;
  const key='saved_'+Date.now();
- savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture)});
+ savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,colourways:[],activeColourwayId:null});
  renderFilmstrip();
  // Let the new card appear immediately, then write to localStorage on the next tick.
  setTimeout(()=>{
@@ -945,8 +1006,8 @@ function saveTemplateToFilmstrip(){
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
-function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();render();syncControls();}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);texture=sourceTextureFor(key);renderTextureUI();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();render();syncControls();}
+function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{Object.assign(colors,DEFAULT_COLORS);Object.assign(shapeColors,DEFAULT_SHAPE_COLORS);renderSwatchesUI();cmRenderSwatches(DEFAULT_COLORS);document.getElementById('cmHero').value='#9b6bff';document.getElementById('cmMood').value='pastel';document.getElementById('cmRichness').value=40;document.getElementById('cmBgBase').value='white';document.getElementById('cmBgTex').value='hero';}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));applyColoursFor(key);selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];return [[-1,-1], [0,-1], [1,-1],[-1,0],[0,0,'center'],[1,0],[-1,1],[0,1],[1,1]];}
 function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
@@ -1045,17 +1106,19 @@ addDotBtn.onclick=()=>{pushHistory();const b=selectedBrick();const base=b&&b.typ
 function resetCurrentTemplate(){
   const saved=savedTemplates.find(t=>t.key===current);
   const base=(presets[current]?current:(saved&&saved.base)||'grid');
-  if(presets[current]){delete blueprintStore[current]; delete textureStore[current];}
+  if(presets[current]){delete blueprintStore[current]; delete textureStore[current]; delete backgroundStore[current]; delete colourStore[current];}
   current=base;
   bricks=copyBricks(presets[base].bricks||[]);
   texture=(base==='stripe')?stripeDefaultTexture():blankTexture();
   if(base==='stripe')texture.enabled=true;
+  if(window.bgApplySnapshot)window.bgApplySnapshot(null);
+  Object.assign(colors,DEFAULT_COLORS);Object.assign(shapeColors,DEFAULT_SHAPE_COLORS);renderSwatchesUI();
   selected=bricks[0]?.id||null;
   document.getElementById('currentName').textContent=presets[base].name;
-  renderTextureUI();renderGrid();renderFilmstrip();render();syncControls();
+  renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();
 }
 addRowBtn.onclick=()=>{pushHistory();[20,50,80].forEach(x=>bricks.push(p('oval',x,50,16,10,'filler')));render();};addColBtn.onclick=()=>{pushHistory();[20,50,80].forEach(y=>bricks.push(p('oval',50,y,16,10,'filler')));render();};resetBtn.onclick=()=>{pushHistory();resetCurrentTemplate();};undoBtn.onclick=undo;redoBtn.onclick=redo;saveBtn.onclick=()=>{saveTemplateToFilmstrip();};
-const sw=document.getElementById('swatches');swatches.forEach(([name,col])=>{const d=document.createElement('div');d.className='sw '+(name===activeColor?'active':'');d.style.background=col;d.title=name;d.onclick=()=>{activeColor=name;document.querySelectorAll('.sw').forEach(x=>x.classList.remove('active'));d.classList.add('active');const b=selectedBrick();if(b){pushHistory();b.role=name;render();}};sw.appendChild(d);});
+renderSwatchesUI();
 const legacyTextureToggle=document.getElementById('textureToggle');
 if(legacyTextureToggle)legacyTextureToggle.onclick=()=>{pushHistory();if(!texture.layers.length)texture=stripeDefaultTexture();else texture.enabled=!texture.enabled;renderTextureUI();render();};
 const legacyBgToggle=document.getElementById('bgToggle');
@@ -1071,7 +1134,67 @@ if(legacyAddStripeLayerBtn)legacyAddStripeLayerBtn.onclick=addStripeTextureLayer
 const legacyRemoveStripeLayerBtn=document.getElementById('removeStripeLayerBtn');
 if(legacyRemoveStripeLayerBtn)legacyRemoveStripeLayerBtn.onclick=removeStripeTextureLayer;
 let tapTimes=[];window.addEventListener('pointerup',e=>{if(e.pointerType==='touch'){tapTimes.push(Date.now());tapTimes=tapTimes.filter(t=>Date.now()-t<430);if(tapTimes.length===2){undo();tapTimes=[];}else if(tapTimes.length===3){redo();tapTimes=[];}}});window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}});const patternScaleRange=document.getElementById('patternScaleRange');if(patternScaleRange)patternScaleRange.oninput=()=>{texture.patternScale=+patternScaleRange.value;const psv=document.getElementById('patternScaleValue');if(psv)psv.textContent=texture.patternScale+'%';renderTextureUI();render();};
-window.addEventListener('resize',render);loadSavedTemplates();bgRecipe.enabled=false;bgDataUrl='';renderTextureUI();renderFilmstrip();setPreset('grid');
+/* v65 colour mode: recolour the current template (bricks + background) from one hero
+   colour via generateAdaptivePalette(), with named colourways saved per saved template. */
+function cmGetPalette(){const hero=document.getElementById('cmHero').value;const mood=document.getElementById('cmMood').value;const richness=document.getElementById('cmRichness').value;return generateAdaptivePalette(hero,mood,richness);}
+function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.style.background=col;d.title=name;box.appendChild(d);});}
+function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);applyRolesLive(pal.roles);const baseRole=document.getElementById('cmBgBase').value;const texRole=document.getElementById('cmBgTex').value;if(window.bgSetRoleColours)window.bgSetRoleColours(pal.roles[baseRole]||pal.roles.white,pal.roles[texRole]||pal.roles.hero);renderSwatchesUI();renderGrid();render();return pal;}
+function cmResetGrey(){Object.assign(colors,DEFAULT_COLORS);Object.assign(shapeColors,DEFAULT_SHAPE_COLORS);if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');renderSwatchesUI();renderGrid();render();cmRenderSwatches(DEFAULT_COLORS);}
+function currentSavedTemplateIndex(){return savedTemplates.findIndex(t=>t.key===current);}
+let cmStatusTimer=null;
+function cmFlashStatus(msg,ok=true){const s=document.getElementById('cmStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(cmStatusTimer);cmStatusTimer=setTimeout(()=>{s.textContent='';},1400);}
+function cmSaveColourway(){
+ let idx=currentSavedTemplateIndex();
+ if(idx<0){saveTemplateToFilmstrip();idx=savedTemplates.length-1;current=savedTemplates[idx].key;document.getElementById('currentName').textContent=savedTemplates[idx].name;}
+ const t=savedTemplates[idx];
+ const pal=cmApplyLive();
+ const nameInput=document.getElementById('cmColourwayName');
+ const name=(nameInput.value||'').trim()||('colourway '+((t.colourways||[]).length+1));
+ const cw={id:'cw_'+Date.now(),name,heroColour:document.getElementById('cmHero').value,mood:document.getElementById('cmMood').value,richness:+document.getElementById('cmRichness').value,roles:{...pal.roles},bg:{base:document.getElementById('cmBgBase').value,tex:document.getElementById('cmBgTex').value}};
+ t.colourways=t.colourways||[];
+ t.colourways.push(cw);
+ t.activeColourwayId=cw.id;
+ nameInput.value='';
+ persistSavedTemplates();
+ renderFilmstrip();
+ renderColourwayFilmstrip();
+ cmFlashStatus('saved ✓');
+}
+function cmApplyColourway(cw){
+ applyRolesLive(cw.roles);
+ if(window.bgSetRoleColours)window.bgSetRoleColours(cw.roles[cw.bg.base]||cw.roles.white,cw.roles[cw.bg.tex]||cw.roles.hero);
+ document.getElementById('cmHero').value=cw.heroColour;
+ document.getElementById('cmMood').value=cw.mood;
+ document.getElementById('cmRichness').value=cw.richness;
+ document.getElementById('cmBgBase').value=cw.bg.base;
+ document.getElementById('cmBgTex').value=cw.bg.tex;
+ cmRenderSwatches(cw.roles);
+ renderSwatchesUI();renderGrid();render();
+}
+function renderColourwayFilmstrip(){
+ const strip=document.getElementById('colourwayFilmstrip');if(!strip)return;
+ const idx=currentSavedTemplateIndex();
+ const t=idx>=0?savedTemplates[idx]:null;
+ const list=t&&t.colourways?t.colourways:[];
+ strip.innerHTML='';
+ if(!list.length){strip.innerHTML='<div class="emptyFilm">No colourways saved for this template yet.</div>';return;}
+ list.forEach(cw=>{
+  const c=document.createElement('div');
+  c.className='filmCard '+(t.activeColourwayId===cw.id?'active':'');
+  const dots=Object.values(cw.roles).map(col=>`<span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${col};margin:1px"></span>`).join('');
+  c.innerHTML=`<div class="mini" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;padding:6px">${dots}</div><span>${cw.name}</span>`;
+  c.onclick=()=>{t.activeColourwayId=cw.id;persistSavedTemplates();cmApplyColourway(cw);renderColourwayFilmstrip();};
+  strip.appendChild(c);
+ });
+ strip.scrollLeft=strip.scrollWidth;
+}
+['cmHero','cmMood','cmRichness','cmBgBase','cmBgTex'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',cmApplyLive);});
+document.getElementById('cmApplyLive').onclick=cmApplyLive;
+document.getElementById('cmResetGrey').onclick=cmResetGrey;
+document.getElementById('cmSaveColourway').onclick=cmSaveColourway;
+cmRenderSwatches(DEFAULT_COLORS);
+
+window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();setPreset('grid');
 </script>
 
 <div id="textureStudioOverlay" class="tsOverlay" aria-hidden="true">
@@ -1835,6 +1958,20 @@ function wireV40Controls(){
 }
 
 window.openBackgroundStudio=openBg; wireBg(); wireBgEditTools(); wireV40Controls(); buildBgUI(); renderBgFilm(); setTimeout(()=>{if(typeof render==='function')render();},0);
+
+/* v65 template-mode bridge: expose bgRecipe to the main builder script so a saved
+   template can carry its background with it (bgRecipe is local to this IIFE). */
+window.bgGetSnapshot=function(){return (bgRecipe&&bgRecipe.enabled)?JSON.parse(JSON.stringify(bgRecipe)):null;};
+window.bgApplySnapshot=function(rec){
+ if(rec){bgRecipe=JSON.parse(JSON.stringify(rec));bgRecipe.enabled=true;bgRecipe.objects=bgRecipe.objects||[];}
+ else{bgRecipe.enabled=false;}
+ bgDataUrl=bgRecipe.enabled?recipeToUrl(bgRecipe):'';
+ try{if(bgRecipe.enabled)localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));else localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){}
+ bgSelectedIds=[];
+ if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();
+};
+window.bgRecipeThumbUrl=function(rec){if(!rec)return'';let c=document.createElement('canvas');c.width=200;c.height=200;drawBackgroundToCanvas(c,rec);return c.toDataURL('image/png');};
+window.bgSetRoleColours=function(base,tex){if(!bgRecipe||!bgRecipe.enabled)return;bgRecipe.base=base;bgRecipe.tex=tex;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(typeof render==='function')render();if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
 })();
 </script>
 
