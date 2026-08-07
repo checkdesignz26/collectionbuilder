@@ -890,6 +890,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <p class="tsHint" style="margin-top:0">Upload a hero pattern photo to pull its dominant colours.</p>
       <input id="cmImageFile" type="file" accept="image/*" style="display:none">
       <button id="cmImageUploadBtn" class="full">upload image</button>
+      <div class="range" style="margin-top:7px"><label>colours</label><input id="cmImageCount" type="range" min="6" max="24" value="16"></div>
       <div class="grid2" style="margin-top:7px"><button id="cmImageModeHero" class="small active">tap sets hero</button><button id="cmImageModePalette" class="small">use all as palette</button></div>
       <div class="swatches" id="cmImageSwatches"><span class="footerNote">upload an image to pull its colours</span></div>
       <button id="cmApplyExtracted" class="full primary" style="display:none;margin-top:7px">use extracted palette</button>
@@ -1209,13 +1210,16 @@ function cmSwatchClick(hex){
 }
 function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.style.background=col;d.title=name+' — tap to apply';d.style.cursor='pointer';d.onclick=()=>cmSwatchClick(col);box.appendChild(d);});}
 
-// Pulls ~n dominant colours out of an uploaded photo: downsample onto a small canvas, bucket
-// pixels into coarse RGB cells (so near-identical shades count as one colour), rank buckets by
-// how many pixels landed in them, and prefer non-background (not near-white/near-black) buckets
-// so a plain backdrop doesn't crowd out the actual pattern colours - falling back to every
-// bucket if the image doesn't have enough non-background variety.
-function cmExtractColoursFromImage(img,n=7){
- const size=80;
+// Pulls ~n dominant colours out of an uploaded photo: downsample onto a canvas, bucket pixels
+// into coarse RGB cells (so near-identical shades count as one colour), rank buckets by how many
+// pixels landed in them, and prefer non-background (not near-white/near-black) buckets so a plain
+// backdrop doesn't crowd out the actual content colours - falling back to every bucket if the
+// image doesn't have enough non-background variety.
+// size=260 (not a tiny 80px thumbnail) matters most for dense reference images like swatch
+// sheets/colour charts: downsampling too small blurs many small flat-colour blocks together
+// before extraction ever sees them, so the real swatch colours get lost in anti-aliasing mush.
+function cmExtractColoursFromImage(img,n=16){
+ const size=260;
  const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
  const ctx=canvas.getContext('2d');
  const scale=Math.min(size/img.width,size/img.height);
@@ -1226,25 +1230,26 @@ function cmExtractColoursFromImage(img,n=7){
  for(let i=0;i<data.length;i+=4){
   const a=data[i+3];if(a<128)continue;
   const r=data[i],g=data[i+1],b=data[i+2];
-  const key=[Math.round(r/24),Math.round(g/24),Math.round(b/24)].join(',');
+  const key=[Math.round(r/16),Math.round(g/16),Math.round(b/16)].join(',');
   const cur=buckets.get(key)||{r:0,g:0,b:0,count:0};
   cur.r+=r;cur.g+=g;cur.b+=b;cur.count++;
   buckets.set(key,cur);
  }
  let entries=[...buckets.values()].map(v=>({r:v.r/v.count,g:v.g/v.count,b:v.b/v.count,count:v.count}));
  entries.sort((x,y)=>y.count-x.count);
- const nonBg=entries.filter(e=>{const v=rgbToHsvMB(e.r,e.g,e.b).v;return v>8&&v<96;});
+ const nonBg=entries.filter(e=>{const v=rgbToHsvMB(e.r,e.g,e.b).v;return v>8&&v<92;});
  const pool=nonBg.length>=n?nonBg:entries;
  const picked=[];
  for(const e of pool){
   if(picked.length>=n)break;
-  const tooClose=picked.some(p=>Math.abs(p.r-e.r)+Math.abs(p.g-e.g)+Math.abs(p.b-e.b)<40);
+  const tooClose=picked.some(p=>Math.abs(p.r-e.r)+Math.abs(p.g-e.g)+Math.abs(p.b-e.b)<55);
   if(!tooClose)picked.push(e);
  }
  return picked.map(e=>rgbToHexMB(e.r,e.g,e.b));
 }
 let cmExtractedColours=[];
 let cmImageMode='hero';
+let cmLastUploadedImg=null;
 function cmHandleImageUpload(e){
  const file=e.target.files&&e.target.files[0];
  if(!file)return;
@@ -1252,7 +1257,9 @@ function cmHandleImageUpload(e){
  reader.onload=ev=>{
   const img=new Image();
   img.onload=()=>{
-   cmExtractedColours=cmExtractColoursFromImage(img,7);
+   cmLastUploadedImg=img;
+   const count=+document.getElementById('cmImageCount').value||16;
+   cmExtractedColours=cmExtractColoursFromImage(img,count);
    cmRenderExtractedSwatches();
    cmFlashStatus(cmExtractedColours.length?'colours extracted ✓':'no colours found',!!cmExtractedColours.length);
   };
@@ -1365,6 +1372,11 @@ document.getElementById('cmResetGrey').onclick=cmResetGrey;
 document.getElementById('cmSaveColourway').onclick=cmSaveColourway;
 document.getElementById('cmImageUploadBtn').onclick=()=>document.getElementById('cmImageFile').click();
 document.getElementById('cmImageFile').addEventListener('change',cmHandleImageUpload);
+document.getElementById('cmImageCount').addEventListener('input',()=>{
+ if(!cmLastUploadedImg)return;
+ cmExtractedColours=cmExtractColoursFromImage(cmLastUploadedImg,+document.getElementById('cmImageCount').value);
+ cmRenderExtractedSwatches();
+});
 document.getElementById('cmImageModeHero').onclick=()=>cmSetImageMode('hero');
 document.getElementById('cmImageModePalette').onclick=()=>cmSetImageMode('palette');
 document.getElementById('cmApplyExtracted').onclick=cmApplyExtractedPalette;
