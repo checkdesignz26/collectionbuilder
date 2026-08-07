@@ -933,7 +933,7 @@ function generateAdaptivePalette(heroHex,mood,richness){
  const rgb=hexToRgbMB(heroHex);
  const hue=rgbToHsvMB(rgb.r,rgb.g,rgb.b).h;
  const roles={
-  hero:hsvToHexMB(hue,sat,val),
+  hero:heroHex,
   secondary:hsvToHexMB(hue+130,sat*0.85,Math.min(96,val+6)),
   accent:hsvToHexMB(hue-40,Math.min(96,sat*1.1),Math.max(30,val-4)),
   filler:hsvToHexMB(hue+200,sat*0.7,Math.min(96,val+10)),
@@ -1409,7 +1409,10 @@ function refreshLayerColourName(l,force=false){
 }
 function refreshAllLayerNames(){(state.layers||[]).forEach(l=>refreshLayerColourName(l,false));}
 function distributeClassic(dir){
- const arr=(state.layers||[]).filter(l=>l && l.direction===dir);
+ // Sort by current position before reassigning evenly-spaced ones, or this reorders the
+ // stripes to match their array/creation order instead of their actual left-to-right sequence
+ // (which drift apart whenever layers were duplicated, reordered, or moved individually).
+ const arr=(state.layers||[]).filter(l=>l && l.direction===dir).sort((a,b)=>(a.pos||0)-(b.pos||0));
  if(arr.length<2)return;
  tsPushHistory();
  const step=100/arr.length;
@@ -1499,10 +1502,15 @@ function moveSelectedToPoint(pt){
 }
 function wireCanvasDrag(){
  const canvas=$('tsPreview'); if(!canvas || canvas.dataset.dragReady)return; canvas.dataset.dragReady='1';
- let dragging=false, moved=false;
+ // A tap to select a layer (before recolouring it, say) was moving it instantly to wherever the
+ // finger landed, since the old code moved on pointerdown itself. Now it only selects on
+ // pointerdown, and only starts moving once the pointer has actually travelled past a small
+ // tolerance - a plain tap never repositions the layer.
+ let dragging=false, moved=false, startPt=null, historyPushed=false;
+ const TAP_TOLERANCE=2;
  canvas.style.touchAction='none';
- canvas.addEventListener('pointerdown',ev=>{if(!state)return; ev.preventDefault(); canvas.setPointerCapture(ev.pointerId); const pt=canvasPointToTile(ev); selectLayerAtPoint(pt); tsPushHistory(); moveSelectedToPoint(pt); dragging=true; moved=false;});
- canvas.addEventListener('pointermove',ev=>{if(!dragging)return; ev.preventDefault(); moved=true; moveSelectedToPoint(canvasPointToTile(ev));});
+ canvas.addEventListener('pointerdown',ev=>{if(!state)return; ev.preventDefault(); canvas.setPointerCapture(ev.pointerId); const pt=canvasPointToTile(ev); selectLayerAtPoint(pt); startPt=pt; dragging=true; moved=false; historyPushed=false;});
+ canvas.addEventListener('pointermove',ev=>{if(!dragging)return; ev.preventDefault(); const pt=canvasPointToTile(ev); if(!moved){if(Math.hypot(pt.x-startPt.x,pt.y-startPt.y)<TAP_TOLERANCE)return; moved=true;} if(!historyPushed){tsPushHistory();historyPushed=true;} moveSelectedToPoint(pt);});
  canvas.addEventListener('pointerup',ev=>{dragging=false;});
  canvas.addEventListener('pointercancel',ev=>{dragging=false;});
 }
