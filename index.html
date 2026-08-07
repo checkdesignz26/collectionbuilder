@@ -1284,6 +1284,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
           <div class="tsGlobalGrid"><button id="tsApplyAllWidths">apply width</button><button id="tsApplyAllGaps">apply gap</button></div>
           <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsDistributeV">distribute vertical</button><button id="tsDistributeH">distribute horizontal</button></div>
           <div class="tsBox" style="margin:10px 0 0"><h3>Selected Direction Group</h3><div class="tsPad">
+            <p class="tsHint" style="margin-top:0">Applies to every layer running the same way as the selected one (e.g. all verticals), and brings them to the front so blend/opacity actually show where they cross the other direction.</p>
             <div class="tsRow"><label>group opacity</label><input id="tsGroupOpacity" type="range" min="0" max="100" value="70"></div>
             <div class="tsRow"><label>group blend</label><select id="tsGroupBlend"><option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="soft-light">soft light</option></select></div>
             <div class="tsGlobalGrid"><button id="tsApplyGroupStyle">apply to group</button><button id="tsCopyToHorizontal">copy → horizontal</button></div>
@@ -1430,7 +1431,24 @@ function isStripeLike(l){return l && l.kind==='stripe';}
 function compositeFor(blend){return blend==='multiply'?'multiply':blend==='screen'?'screen':blend==='overlay'?'overlay':blend==='soft-light'?'soft-light':'source-over';}
 function selectedDirection(){return (state.layers[selected]&&state.layers[selected].direction)||'vertical';}
 function applyAllStripe(key,val){tsPushHistory();(state.layers||[]).forEach(l=>{if(isStripeLike(l))l[key]=+val;}); renderAll(false);}
-function applyGroupStyle(){const dir=selectedDirection();tsPushHistory();(state.layers||[]).forEach(l=>{if(isStripeLike(l)&&l.direction===dir){l.opacity=+$('tsGroupOpacity').value;l.blend=$('tsGroupBlend').value;}});renderAll();}
+function applyGroupStyle(){
+ // Canvas compositing only blends a layer against what's already drawn beneath it, so a
+ // same-direction group (which never overlaps itself) only visibly blends at all if it's
+ // also the last thing drawn - otherwise the other direction just opaquely covers it and
+ // the blend/opacity setting has no visible effect at the crossings.
+ const dir=selectedDirection();
+ tsPushHistory();
+ const prevSelectedLayer=state.layers[selected];
+ const group=[],rest=[];
+ (state.layers||[]).forEach(l=>{
+  if(isStripeLike(l)&&l.direction===dir){l.opacity=+$('tsGroupOpacity').value;l.blend=$('tsGroupBlend').value;group.push(l);}
+  else rest.push(l);
+ });
+ state.layers=[...rest,...group];
+ const newIdx=state.layers.indexOf(prevSelectedLayer);
+ if(newIdx>=0)selected=newIdx;
+ renderAll();
+}
 function duplicateSequenceTo(targetDir){const sourceDir=selectedDirection();const original=(state.layers||[]).filter(l=>isStripeLike(l)&&l.direction===sourceDir); if(!original.length)return; tsPushHistory(); const baseCount=state.layers.length; const copies=original.map((l,i)=>{let n=copy(l); n.direction=targetDir||l.direction; n.name=(targetDir?(({horizontal:'horizontal ',vertical:'vertical ',diag1:'diagonal / ',diag2:'diagonal \\ '}[targetDir])||'copy '):'copy ')+(l.name||('stripe '+(i+1))); return n;}); state.layers.push(...copies); selected=baseCount; renderAll();}
 function duplicateSequence(makePlaid=false){if(makePlaid){duplicateSequenceTo(selectedDirection()==='horizontal'?'vertical':'horizontal');return;} duplicateSequenceTo(null);}
 function deleteSavedTexture(i){if(i<0||i>=saved.length)return; const label=saved[i]?.name||'texture'; if(!confirm('Delete '+label+' from the filmstrip?'))return; saved.splice(i,1); try{localStorage.setItem('pkmTextureStudioV32',JSON.stringify(saved));}catch(e){} renderFilmstrip(); setSaveStatus('deleted ✓','ok');}
