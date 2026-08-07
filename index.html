@@ -935,7 +935,7 @@ const MOOD_CURVES={
  spring:   {sat:[25,50],val:[80,92],spread:1.0,accentPunch:1.0,damp:1.0},
  summer:   {sat:[45,75],val:[70,88],spread:1.0,accentPunch:1.0,damp:1.0},
  autumn:   {sat:[35,60],val:[45,65],spread:0.8,accentPunch:1.0,damp:1.0},
- winter:   {sat:[30,55],val:[35,60],spread:1.0,accentPunch:1.0,damp:1.0},
+ winter:   {sat:[20,42],val:[30,68],spread:0.7,accentPunch:1.05,damp:0.9,hueOffsets:[-30,-55,15,-15]},
  retro:    {sat:[35,55],val:[50,68],spread:0.9,accentPunch:1.0,damp:1.0},
  neon:     {sat:[75,98],val:[60,85],spread:1.3,accentPunch:1.2,damp:1.0},
  focused:  {sat:[8,20], val:[55,80],spread:0.25,accentPunch:1.6,damp:0.5},
@@ -951,15 +951,20 @@ function generateAdaptivePalette(heroHex,mood,richness){
  const sat=curve.sat[0]+(curve.sat[1]-curve.sat[0])*r;
  const val=curve.val[0]+(curve.val[1]-curve.val[0])*r;
  const spread=curve.spread??1, damp=curve.damp??1, punch=curve.accentPunch??1;
+ // Default offsets swing symmetrically around the hero hue (wide variety). A mood that needs a
+ // consistent directional identity instead (e.g. winter always reading as icy blue/teal, whatever
+ // hero was picked) can override with its own [secondary,accent,accent2,filler] hueOffsets so
+ // every derived role stays biased toward the same family rather than spreading across the wheel.
+ const [secOff,accOff,acc2Off,fillOff]=curve.hueOffsets||[130,-40,80,200];
  const rgb=hexToRgbMB(heroHex);
  const hue=rgbToHsvMB(rgb.r,rgb.g,rgb.b).h;
  const cs=(s)=>Math.max(4,Math.min(98,s)), cv=(v)=>Math.max(4,Math.min(98,v));
  const roles={
   hero:heroHex,
-  secondary:hsvToHexMB(hue+130*spread,cs(sat*0.85*damp),cv(Math.min(96,val+6))),
-  accent:hsvToHexMB(hue-40*spread,cs(Math.min(98,sat*1.1*punch)),cv(Math.max(20,val-4))),
-  accent2:hsvToHexMB(hue+80*spread,cs(sat*0.75*damp),cv(Math.min(96,val+2))),
-  filler:hsvToHexMB(hue+200*spread,cs(sat*0.7*damp),cv(Math.min(96,val+10))),
+  secondary:hsvToHexMB(hue+secOff*spread,cs(sat*0.85*damp),cv(Math.min(96,val+6))),
+  accent:hsvToHexMB(hue+accOff*spread,cs(Math.min(98,sat*1.1*punch)),cv(Math.max(20,val-4))),
+  accent2:hsvToHexMB(hue+acc2Off*spread,cs(sat*0.75*damp),cv(Math.min(96,val+2))),
+  filler:hsvToHexMB(hue+fillOff*spread,cs(sat*0.7*damp),cv(Math.min(96,val+10))),
   deep:hsvToHexMB(hue,cs(Math.min(98,sat*1.15)),cv(Math.max(12,val*0.42))),
   tint:hsvToHexMB(hue,cs(Math.max(6,sat*0.25)),cv(Math.min(97,val+(100-val)*0.55))),
   black:hsvToHexMB(hue,cs(Math.min(60,sat*0.6)),14),
