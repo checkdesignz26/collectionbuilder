@@ -886,6 +886,14 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   <h2>colour mode</h2><div class="body">
     <p class="hint">This tab only swaps how you pick a colour — position, size, opacity and blend stay visible either way. Hero/vibe/richness generate the swatches below — tap one to colour the selected layer (Classics Studio) or the background mark (Background Studio). "preview" instead colours every layer at once by tone, so you can then select one to change just that one. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
     <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
+    <div class="tsBox" style="margin:9px 0"><h3>from image</h3><div class="tsPad">
+      <p class="tsHint" style="margin-top:0">Upload a hero pattern photo to pull its dominant colours.</p>
+      <input id="cmImageFile" type="file" accept="image/*" style="display:none">
+      <button id="cmImageUploadBtn" class="full">upload image</button>
+      <div class="grid2" style="margin-top:7px"><button id="cmImageModeHero" class="small active">tap sets hero</button><button id="cmImageModePalette" class="small">use all as palette</button></div>
+      <div class="swatches" id="cmImageSwatches"><span class="footerNote">upload an image to pull its colours</span></div>
+      <button id="cmApplyExtracted" class="full primary" style="display:none;margin-top:7px">use extracted palette</button>
+    </div></div>
     <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
       <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="luxe">luxurious / opulent</option>
     </select></div>
@@ -1200,6 +1208,105 @@ function cmSwatchClick(hex){
  }
 }
 function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.style.background=col;d.title=name+' — tap to apply';d.style.cursor='pointer';d.onclick=()=>cmSwatchClick(col);box.appendChild(d);});}
+
+// Pulls ~n dominant colours out of an uploaded photo: downsample onto a small canvas, bucket
+// pixels into coarse RGB cells (so near-identical shades count as one colour), rank buckets by
+// how many pixels landed in them, and prefer non-background (not near-white/near-black) buckets
+// so a plain backdrop doesn't crowd out the actual pattern colours - falling back to every
+// bucket if the image doesn't have enough non-background variety.
+function cmExtractColoursFromImage(img,n=7){
+ const size=80;
+ const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+ const ctx=canvas.getContext('2d');
+ const scale=Math.min(size/img.width,size/img.height);
+ const dw=Math.max(1,img.width*scale),dh=Math.max(1,img.height*scale);
+ ctx.drawImage(img,(size-dw)/2,(size-dh)/2,dw,dh);
+ const data=ctx.getImageData(0,0,size,size).data;
+ const buckets=new Map();
+ for(let i=0;i<data.length;i+=4){
+  const a=data[i+3];if(a<128)continue;
+  const r=data[i],g=data[i+1],b=data[i+2];
+  const key=[Math.round(r/24),Math.round(g/24),Math.round(b/24)].join(',');
+  const cur=buckets.get(key)||{r:0,g:0,b:0,count:0};
+  cur.r+=r;cur.g+=g;cur.b+=b;cur.count++;
+  buckets.set(key,cur);
+ }
+ let entries=[...buckets.values()].map(v=>({r:v.r/v.count,g:v.g/v.count,b:v.b/v.count,count:v.count}));
+ entries.sort((x,y)=>y.count-x.count);
+ const nonBg=entries.filter(e=>{const v=rgbToHsvMB(e.r,e.g,e.b).v;return v>8&&v<96;});
+ const pool=nonBg.length>=n?nonBg:entries;
+ const picked=[];
+ for(const e of pool){
+  if(picked.length>=n)break;
+  const tooClose=picked.some(p=>Math.abs(p.r-e.r)+Math.abs(p.g-e.g)+Math.abs(p.b-e.b)<40);
+  if(!tooClose)picked.push(e);
+ }
+ return picked.map(e=>rgbToHexMB(e.r,e.g,e.b));
+}
+let cmExtractedColours=[];
+let cmImageMode='hero';
+function cmHandleImageUpload(e){
+ const file=e.target.files&&e.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=ev=>{
+  const img=new Image();
+  img.onload=()=>{
+   cmExtractedColours=cmExtractColoursFromImage(img,7);
+   cmRenderExtractedSwatches();
+   cmFlashStatus(cmExtractedColours.length?'colours extracted ✓':'no colours found',!!cmExtractedColours.length);
+  };
+  img.onerror=()=>cmFlashStatus('could not read image',false);
+  img.src=ev.target.result;
+ };
+ reader.readAsDataURL(file);
+ e.target.value='';
+}
+function cmRenderExtractedSwatches(){
+ const box=document.getElementById('cmImageSwatches');if(!box)return;
+ box.innerHTML='';
+ if(!cmExtractedColours.length){box.innerHTML='<span class="footerNote">upload an image to pull its colours</span>';return;}
+ cmExtractedColours.forEach(hex=>{
+  const d=document.createElement('div');
+  d.className='sw';
+  d.style.background=hex;
+  d.style.cursor=cmImageMode==='hero'?'pointer':'default';
+  d.title=hex+(cmImageMode==='hero'?' — tap to set as hero':'');
+  if(cmImageMode==='hero')d.onclick=()=>{
+   document.getElementById('cmHero').value=hex;
+   cmApplyLive();
+   cmFlashStatus('hero set from image ✓');
+  };
+  box.appendChild(d);
+ });
+}
+function cmSetImageMode(mode){
+ cmImageMode=mode;
+ document.getElementById('cmImageModeHero').classList.toggle('active',mode==='hero');
+ document.getElementById('cmImageModePalette').classList.toggle('active',mode==='palette');
+ document.getElementById('cmApplyExtracted').style.display=(mode==='palette'&&cmExtractedColours.length)?'block':'none';
+ cmRenderExtractedSwatches();
+}
+// "use all as palette" bypasses the mood curve for the expressive roles entirely - the photo's
+// own colours become hero/secondary/accent/accent2/filler directly. Neutrals (deep/tint/black/
+// grey/white) still come from generateAdaptivePalette (keyed off the first extracted colour) since
+// those are meant to stay unobtrusive regardless of source, not part of "the photo's colours".
+function cmApplyExtractedPalette(){
+ if(!cmExtractedColours.length)return;
+ const mood=document.getElementById('cmMood').value;
+ const richness=document.getElementById('cmRichness').value;
+ const base=generateAdaptivePalette(cmExtractedColours[0],mood,richness);
+ const roles={...base.roles};
+ ['hero','secondary','accent','accent2','filler'].forEach((role,i)=>{if(cmExtractedColours[i])roles[role]=cmExtractedColours[i];});
+ document.getElementById('cmHero').value=cmExtractedColours[0];
+ cmRenderSwatches(roles);
+ const baseRole=document.getElementById('cmBgBase').value;
+ const texRole=document.getElementById('cmBgTex').value;
+ if(window.bgSetRoleColours)window.bgSetRoleColours(roles[baseRole]||roles.white,roles[texRole]||roles.hero);
+ if(window.tsSetRoleColours)window.tsSetRoleColours(roles);
+ render();
+ cmFlashStatus('image palette applied ✓');
+}
 function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);const baseRole=document.getElementById('cmBgBase').value;const texRole=document.getElementById('cmBgTex').value;if(window.bgSetRoleColours)window.bgSetRoleColours(pal.roles[baseRole]||pal.roles.white,pal.roles[texRole]||pal.roles.hero);render();return pal;}
 function cmPreviewAll(){const pal=cmApplyLive();if(window.tsSetRoleColours)window.tsSetRoleColours(pal.roles);return pal;}
 function cmResetGrey(){if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');if(window.tsResetToGrey)window.tsResetToGrey();render();cmRenderSwatches(DEFAULT_COLORS);}
@@ -1256,6 +1363,11 @@ function renderColourwayFilmstrip(){
 document.getElementById('cmApplyLive').onclick=cmPreviewAll;
 document.getElementById('cmResetGrey').onclick=cmResetGrey;
 document.getElementById('cmSaveColourway').onclick=cmSaveColourway;
+document.getElementById('cmImageUploadBtn').onclick=()=>document.getElementById('cmImageFile').click();
+document.getElementById('cmImageFile').addEventListener('change',cmHandleImageUpload);
+document.getElementById('cmImageModeHero').onclick=()=>cmSetImageMode('hero');
+document.getElementById('cmImageModePalette').onclick=()=>cmSetImageMode('palette');
+document.getElementById('cmApplyExtracted').onclick=cmApplyExtractedPalette;
 cmRenderSwatches(DEFAULT_COLORS);
 
 window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();setPreset('grid');
