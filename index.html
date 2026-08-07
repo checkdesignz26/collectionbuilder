@@ -852,7 +852,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   </section>
   <aside class="side right">
     <div class="box"><h2>colour mode</h2><div class="body">
-      <p class="hint">Grey mode is Classics Studio (stripes/dots/checks/plaid/argyle) and Background Studio — build the classic pattern and background there, click "apply to template" in Classics Studio, then recolour everything here from one hero colour. Requires a saved template (save one first if the filmstrip is empty).</p>
+      <p class="hint">Grey mode is Classics Studio (stripes/dots/checks/plaid/argyle) and Background Studio — build the classic pattern and background there, click "apply to template" in Classics Studio, then recolour them here from one hero colour. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
       <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
       <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
         <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option>
@@ -909,12 +909,10 @@ function defaultRoleForType(type){const map={oval:'hero',arrowOval:'hero',circle
 const swatches=[['hero',colors.hero],['secondary',colors.secondary],['filler',colors.filler],['accent',colors.accent],['black',colors.black],['grey',colors.grey],['white',colors.white]];
 const texturePalette=[['purple',colors.hero],['green',colors.secondary],['blue',colors.filler],['orange',colors.accent],['cream','#fff4df'],['navy','#14233f'],['sage','#8aa47b'],['brown','#6b442d']];
 
-/* v65 colour mode: role colours (colors) and shape-identity colours (shapeColors) are
-   both live-mutable globals — colorForBrick() checks shapeColors[type] first, so
-   recolouring must update both or ovals/circles/rects/etc. won't visibly change. */
+/* v67 colour mode targets Classics Studio + Background Studio only. Placeholders are
+   structural motif slots (the shapes/roles here just mark where real motifs go later)
+   and must never be recoloured — colors/shapeColors stay fixed identity colours. */
 const DEFAULT_COLORS={...colors};
-const DEFAULT_SHAPE_COLORS={...shapeColors};
-const shapeTypeRole={oval:'hero',arrowOval:'hero',circle:'accent',rect:'secondary',square:'secondary',diamond:'filler',triangle:'accent',hexagon:'hero'};
 function hexToRgbMB(hex){hex=(hex||'#000000').replace('#','').trim();if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');let n=parseInt(hex,16);if(Number.isNaN(n))n=0;return{r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
 function rgbToHexMB(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
 function rgbToHsvMB(r,g,b){r/=255;g/=255;b/=255;let max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,h=0,s=max===0?0:d/max,v=max;if(d!==0){switch(max){case r:h=((g-b)/d+(g<b?6:0));break;case g:h=((b-r)/d+2);break;case b:h=((r-g)/d+4);break;}h*=60;}return{h,s:s*100,v:v*100};}
@@ -940,7 +938,6 @@ function generateAdaptivePalette(heroHex,mood,richness){
  };
  return {roles,bg:{base:roles.white,tex:roles.hero}};
 }
-function applyRolesLive(roles){Object.assign(colors,roles);Object.keys(shapeColors).forEach(t=>{shapeColors[t]=roles[shapeTypeRole[t]]||shapeColors[t];});}
 function renderSwatchesUI(){const sw=document.getElementById('swatches');if(!sw)return;sw.innerHTML='';swatches.forEach(([name])=>{const d=document.createElement('div');d.className='sw '+(name===activeColor?'active':'');d.style.background=colors[name];d.title=name;d.onclick=()=>{activeColor=name;renderSwatchesUI();const b=selectedBrick();if(b){pushHistory();b.role=name;render();}};sw.appendChild(d);});}
 let activeTextureColor=texturePalette[0][1];
 let selectedTextureLayer=0;
@@ -952,7 +949,6 @@ let mode='repeat', edgeClones=true, current=null, selected=null, activeColor='he
 let bricks=[];
 let blueprintStore={};
 let backgroundStore={};
-let colourStore={};
 let classicStore={};
 let history=[], redoStack=[];
 let savedTemplates=[];
@@ -973,15 +969,13 @@ const presets={
 function p(type,x,y,w,h,role='hero',rot=0,flow=''){return {id:'b'+Math.random().toString(36).slice(2),type,x,y,w,h,role,rot,flow};}
 const skeletonOrder=['grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','stripe','polka','gingham','plaid','chevron','scallop'];
 function copyBricks(arr){return JSON.parse(JSON.stringify(arr)).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
-function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;colourStore[current]={colors:{...colors},shapeColors:{...shapeColors}};}}
+function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;}}
 function sourceBricksFor(key){return blueprintStore[key]?copyBricks(blueprintStore[key]):copyBricks(presets[key].bricks);}
 function sourceTextureFor(key){if(textureStore[key])return copyTexture(textureStore[key]);if(key==='stripe')return stripeDefaultTexture();return blankTexture();}
 function sourceBackgroundFor(key){return backgroundStore[key]!==undefined?backgroundStore[key]:null;}
 function sourceClassicFor(key){return classicStore[key]!==undefined?classicStore[key]:null;}
-function sourceColoursFor(key){return colourStore[key]||{colors:{...DEFAULT_COLORS},shapeColors:{...DEFAULT_SHAPE_COLORS}};}
-function applyColoursFor(key){const c=sourceColoursFor(key);Object.assign(colors,c.colors);Object.assign(shapeColors,c.shapeColors);renderSwatchesUI();}
-function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,classicStore,colourStore,texture,colors,shapeColors,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
-function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};colourStore=data.colourStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);if(data.colors)Object.assign(colors,data.colors);if(data.shapeColors)Object.assign(shapeColors,data.shapeColors);renderSwatchesUI();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
+function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
+function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
 function undo(){if(!history.length)return;redoStack.push(capture());restore(history.pop());}
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
@@ -1008,8 +1002,8 @@ function saveTemplateToFilmstrip(){
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
-function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{Object.assign(colors,DEFAULT_COLORS);Object.assign(shapeColors,DEFAULT_SHAPE_COLORS);renderSwatchesUI();cmRenderSwatches(DEFAULT_COLORS);document.getElementById('cmHero').value='#9b6bff';document.getElementById('cmMood').value='summer';document.getElementById('cmRichness').value=40;document.getElementById('cmBgBase').value='white';document.getElementById('cmBgTex').value='hero';}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));applyColoursFor(key);selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
+function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];return [[-1,-1], [0,-1], [1,-1],[-1,0],[0,0,'center'],[1,0],[-1,1],[0,1],[1,1]];}
 function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
@@ -1108,14 +1102,14 @@ addDotBtn.onclick=()=>{pushHistory();const b=selectedBrick();const base=b&&b.typ
 function resetCurrentTemplate(){
   const saved=savedTemplates.find(t=>t.key===current);
   const base=(presets[current]?current:(saved&&saved.base)||'grid');
-  if(presets[current]){delete blueprintStore[current]; delete textureStore[current]; delete backgroundStore[current]; delete classicStore[current]; delete colourStore[current];}
+  if(presets[current]){delete blueprintStore[current]; delete textureStore[current]; delete backgroundStore[current]; delete classicStore[current];}
   current=base;
   bricks=copyBricks(presets[base].bricks||[]);
   texture=(base==='stripe')?stripeDefaultTexture():blankTexture();
   if(base==='stripe')texture.enabled=true;
   if(window.bgApplySnapshot)window.bgApplySnapshot(null);
   if(window.tsApplySnapshot)window.tsApplySnapshot(null);
-  Object.assign(colors,DEFAULT_COLORS);Object.assign(shapeColors,DEFAULT_SHAPE_COLORS);renderSwatchesUI();
+  cmResetPanelControls();
   selected=bricks[0]?.id||null;
   document.getElementById('currentName').textContent=presets[base].name;
   renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();
@@ -1141,8 +1135,9 @@ let tapTimes=[];window.addEventListener('pointerup',e=>{if(e.pointerType==='touc
    colour via generateAdaptivePalette(), with named colourways saved per saved template. */
 function cmGetPalette(){const hero=document.getElementById('cmHero').value;const mood=document.getElementById('cmMood').value;const richness=document.getElementById('cmRichness').value;return generateAdaptivePalette(hero,mood,richness);}
 function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.style.background=col;d.title=name;box.appendChild(d);});}
-function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);applyRolesLive(pal.roles);const baseRole=document.getElementById('cmBgBase').value;const texRole=document.getElementById('cmBgTex').value;if(window.bgSetRoleColours)window.bgSetRoleColours(pal.roles[baseRole]||pal.roles.white,pal.roles[texRole]||pal.roles.hero);if(window.tsSetRoleColours)window.tsSetRoleColours(pal.roles);renderSwatchesUI();renderGrid();render();return pal;}
-function cmResetGrey(){Object.assign(colors,DEFAULT_COLORS);Object.assign(shapeColors,DEFAULT_SHAPE_COLORS);if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');renderSwatchesUI();renderGrid();render();cmRenderSwatches(DEFAULT_COLORS);}
+function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);const baseRole=document.getElementById('cmBgBase').value;const texRole=document.getElementById('cmBgTex').value;if(window.bgSetRoleColours)window.bgSetRoleColours(pal.roles[baseRole]||pal.roles.white,pal.roles[texRole]||pal.roles.hero);if(window.tsSetRoleColours)window.tsSetRoleColours(pal.roles);render();return pal;}
+function cmResetGrey(){if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');if(window.tsResetToGrey)window.tsResetToGrey();render();cmRenderSwatches(DEFAULT_COLORS);}
+function cmResetPanelControls(){cmRenderSwatches(DEFAULT_COLORS);document.getElementById('cmHero').value='#9b6bff';document.getElementById('cmMood').value='summer';document.getElementById('cmRichness').value=40;document.getElementById('cmBgBase').value='white';document.getElementById('cmBgTex').value='hero';}
 function currentSavedTemplateIndex(){return savedTemplates.findIndex(t=>t.key===current);}
 let cmStatusTimer=null;
 function cmFlashStatus(msg,ok=true){const s=document.getElementById('cmStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(cmStatusTimer);cmStatusTimer=setTimeout(()=>{s.textContent='';},1400);}
@@ -1164,7 +1159,6 @@ function cmSaveColourway(){
  cmFlashStatus('saved ✓');
 }
 function cmApplyColourway(cw){
- applyRolesLive(cw.roles);
  if(window.bgSetRoleColours)window.bgSetRoleColours(cw.roles[cw.bg.base]||cw.roles.white,cw.roles[cw.bg.tex]||cw.roles.hero);
  if(window.tsSetRoleColours)window.tsSetRoleColours(cw.roles);
  document.getElementById('cmHero').value=cw.heroColour;
@@ -1173,7 +1167,7 @@ function cmApplyColourway(cw){
  document.getElementById('cmBgBase').value=cw.bg.base;
  document.getElementById('cmBgTex').value=cw.bg.tex;
  cmRenderSwatches(cw.roles);
- renderSwatchesUI();renderGrid();render();
+ render();
 }
 function renderColourwayFilmstrip(){
  const strip=document.getElementById('colourwayFilmstrip');if(!strip)return;
@@ -1551,6 +1545,7 @@ window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElemen
 function tsHexLuma(hex){const {r,g,b}=hexToRgb(hex);return (0.299*r+0.587*g+0.114*b)/255;}
 function tsRoleForColour(hex){const l=tsHexLuma(hex);return l<0.35?'hero':(l>0.85?'white':'secondary');}
 window.tsSetRoleColours=function(roles){if(!tsAppliedState)return;(tsAppliedState.state.layers||[]).forEach(l=>{const role=tsRoleForColour(l.origColor||l.color||'#111111');if(roles[role])l.color=roles[role];});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}if(typeof render==='function')render();};
+window.tsResetToGrey=function(){if(!tsAppliedState)return;(tsAppliedState.state.layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}if(typeof render==='function')render();};
 const originalRenderTextureTilesTs=window.renderTextureTiles||renderTextureTiles;
 window.renderTextureTiles=renderTextureTiles=function(stage,scale,origin){
  if(tsAppliedState){
