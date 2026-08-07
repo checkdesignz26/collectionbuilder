@@ -851,28 +851,6 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div>
   </section>
   <aside class="side right">
-    <div class="box"><h2>colour mode</h2><div class="body">
-      <p class="hint">Grey mode is Classics Studio (stripes/dots/checks/plaid/argyle) and Background Studio — build the classic pattern and background there, click "apply to template" in Classics Studio, then recolour them here from one hero colour. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
-      <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
-      <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
-        <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option>
-      </select></div>
-      <div class="range"><label>richness</label><input id="cmRichness" type="range" min="0" max="100" value="40"></div>
-      <div class="swatches" id="cmSwatches"></div>
-      <div class="miniControl"><label>bg base</label><select id="cmBgBase" class="selectTiny">
-        <option value="white">white</option><option value="grey">grey</option><option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="black">black</option>
-      </select></div>
-      <div class="miniControl"><label>bg mark</label><select id="cmBgTex" class="selectTiny">
-        <option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="black">black</option><option value="grey">grey</option><option value="white">white</option>
-      </select></div>
-      <div class="grid2" style="margin-top:7px"><button id="cmApplyLive" class="small">preview</button><button id="cmResetGrey" class="small">reset to grey</button></div>
-      <div class="tsCustomAdd" style="margin-top:9px"><input id="cmColourwayName" placeholder="colourway name" class="selectTiny"><button id="cmSaveColourway" class="small primary">save colourway</button></div>
-      <span id="cmStatus" class="saveStatus"></span>
-      <div class="filmstripBlock" style="margin:9px 0 0;padding:0;border:0;background:transparent">
-        <div class="filmstripHead"><b>🎨 colourways</b><span class="footerNote">saved for the current template</span></div>
-        <div class="filmstrip" id="colourwayFilmstrip"></div>
-      </div>
-    </div></div>
     <div class="box"><h2>control room</h2><div class="body">
       <p class="hint">Alignment uses the selected brick as the anchor. Scope decides what follows it.</p>
       <div class="scopeRow"><button id="scopeType" class="active">same shape</button><button id="scopeRole">same colour</button><button id="scopeAll">all bricks</button></div>
@@ -899,6 +877,33 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div></div>
   </aside>
 </main>
+</div>
+<!-- v68: colour mode now lives only inside Classics Studio / Background Studio — this
+     node gets moved (not copied) into whichever studio's #tsColourModeSlot /
+     #bgColourModeSlot is open, so there is exactly one copy and no state to sync. -->
+<div class="box" id="cmPanel" style="display:none">
+  <h2>colour mode</h2><div class="body">
+    <p class="hint">Recolours the classic pattern and background here from one hero colour. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
+    <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
+    <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
+      <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option>
+    </select></div>
+    <div class="range"><label>richness</label><input id="cmRichness" type="range" min="0" max="100" value="40"></div>
+    <div class="swatches" id="cmSwatches"></div>
+    <div class="miniControl"><label>bg base</label><select id="cmBgBase" class="selectTiny">
+      <option value="white">white</option><option value="grey">grey</option><option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="black">black</option>
+    </select></div>
+    <div class="miniControl"><label>bg mark</label><select id="cmBgTex" class="selectTiny">
+      <option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="black">black</option><option value="grey">grey</option><option value="white">white</option>
+    </select></div>
+    <div class="grid2" style="margin-top:7px"><button id="cmApplyLive" class="small">preview</button><button id="cmResetGrey" class="small">reset to grey</button></div>
+    <div class="tsCustomAdd" style="margin-top:9px"><input id="cmColourwayName" placeholder="colourway name" class="selectTiny"><button id="cmSaveColourway" class="small primary">save colourway</button></div>
+    <span id="cmStatus" class="saveStatus"></span>
+    <div class="filmstripBlock" style="margin:9px 0 0;padding:0;border:0;background:transparent">
+      <div class="filmstripHead"><b>🎨 colourways</b><span class="footerNote">saved for the current template</span></div>
+      <div class="filmstrip" id="colourwayFilmstrip"></div>
+    </div>
+  </div>
 </div>
 <script>
 const STAGE=1000;
@@ -1133,6 +1138,8 @@ if(legacyRemoveStripeLayerBtn)legacyRemoveStripeLayerBtn.onclick=removeStripeTex
 let tapTimes=[];window.addEventListener('pointerup',e=>{if(e.pointerType==='touch'){tapTimes.push(Date.now());tapTimes=tapTimes.filter(t=>Date.now()-t<430);if(tapTimes.length===2){undo();tapTimes=[];}else if(tapTimes.length===3){redo();tapTimes=[];}}});window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}});const patternScaleRange=document.getElementById('patternScaleRange');if(patternScaleRange)patternScaleRange.oninput=()=>{texture.patternScale=+patternScaleRange.value;const psv=document.getElementById('patternScaleValue');if(psv)psv.textContent=texture.patternScale+'%';renderTextureUI();render();};
 /* v65 colour mode: recolour the current template (bricks + background) from one hero
    colour via generateAdaptivePalette(), with named colourways saved per saved template. */
+function mountColourMode(slotId){const slot=document.getElementById(slotId);const panel=document.getElementById('cmPanel');if(!slot||!panel)return;panel.style.display='block';slot.appendChild(panel);}
+window.mountColourMode=mountColourMode;
 function cmGetPalette(){const hero=document.getElementById('cmHero').value;const mood=document.getElementById('cmMood').value;const richness=document.getElementById('cmRichness').value;return generateAdaptivePalette(hero,mood,richness);}
 function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.style.background=col;d.title=name;box.appendChild(d);});}
 function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);const baseRole=document.getElementById('cmBgBase').value;const texRole=document.getElementById('cmBgTex').value;if(window.bgSetRoleColours)window.bgSetRoleColours(pal.roles[baseRole]||pal.roles.white,pal.roles[texRole]||pal.roles.hero);if(window.tsSetRoleColours)window.tsSetRoleColours(pal.roles);render();return pal;}
@@ -1235,7 +1242,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
         <div class="tsBelow"><div class="tsScaleBox"><div class="tsScaleTop"><span>Pattern Scale <em id="tsScaleName" class="tsScaleName">normal</em></span><span id="tsScaleValue">100%</span></div><input id="tsPatternScale" type="range" min="25" max="200" value="100"><div class="tsScaleTicks"><span>tiny</span><span>normal</span><span>bold</span></div></div><button id="tsGuides" class="small active">guides on</button></div>
       </section>
       <aside class="tsPanel tsLayersPanel"><div class="tsBox"><h3>Layers / Items</h3><div class="tsPad"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px"><button id="tsAddLayer">+ add</button><button id="tsDuplicateTop">⧉ duplicate</button><button id="tsRemoveLayer">− remove</button></div><div id="tsLayerList" class="tsLayerList" style="margin-top:10px"></div></div></div></aside>
-      <aside class="tsPanel right"><div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
+      <aside class="tsPanel right"><div id="tsColourModeSlot"></div><div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
         <p class="tsHint" style="margin-top:0">Edit the selected classic layer.</p><div class="tsColourGrid" id="tsColourGrid"></div>
         <div class="tsHSBPanel">
           <div class="tsColourReadout"><span id="tsColourChip" class="tsColourChip"></span><span id="tsColourHex">#14233f</span></div>
@@ -1346,7 +1353,7 @@ function ginghamDefault(){return {type:'gingham',bg:true,bgColor:'#ffffff',bgOpa
  {kind:'check',name:'black horizontal rectangle',color:'#111111',pos:50,width:28,gap:0,opacity:35,blend:'multiply',direction:'horizontal',rotate:0,visible:true}
 ]};}
 function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
-function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();}
+function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');}
 function openType(type){state=defaultFor(type||'stripes');selected=0;previewMode='single';tsUndoStack=[];tsRedoStack=[];setSeg();document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));open();}
 function close(){document.body.style.overflow='';$('textureStudioOverlay').classList.remove('open');}
 function init(){state=stripeDefaults();previewMode='single';try{saved=JSON.parse(localStorage.getItem('pkmTextureStudioV32')||'[]')}catch(e){saved=[]}renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
@@ -1583,6 +1590,7 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
         <div class="bgCanvasWrap"><canvas id="bgPreviewCanvas" width="720" height="720"></canvas><div id="bgRepeatBox" class="hidden"></div></div>
       </section>
       <aside class="bgStudioPanel right">
+        <div id="bgColourModeSlot"></div>
         <div class="bgBox"><h3>recipe controls</h3><div class="bgPad">
           <div class="bgControlsRow"><label>base</label><input id="bgBaseColor" type="color"><output></output></div>
           <div class="bgControlsRow"><label>texture</label><input id="bgTexColor" type="color"><output></output></div>
@@ -1875,7 +1883,7 @@ function buildBgUI(){
 function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';card.innerHTML=`<button class="bgFilmDelete">×</button><canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));renderBgFilm();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
 function applyBgToPKM(){bgRecipe.enabled=true;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){} if(typeof render==='function')render(); if(typeof renderGrid==='function')renderGrid();}
 function clearBg(){bgRecipe.enabled=false;bgDataUrl='';try{localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){} if(typeof render==='function')render();}
-function openBg(){q('backgroundStudioOverlay').classList.add('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','false');buildBgUI();renderBgFilm();}
+function openBg(){q('backgroundStudioOverlay').classList.add('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','false');buildBgUI();renderBgFilm();if(window.mountColourMode)window.mountColourMode('bgColourModeSlot');}
 function closeBg(){q('backgroundStudioOverlay').classList.remove('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','true')}
 
 let bgEditOn=false, bgTool='select', bgSelectedIds=[], bgDrag=null;
