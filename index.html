@@ -948,16 +948,27 @@ const MOOD_CURVES={
 function generateAdaptivePalette(heroHex,mood,richness){
  const curve=MOOD_CURVES[mood]||MOOD_CURVES.summer;
  const r=Math.max(0,Math.min(100,+richness||0))/100;
- const sat=curve.sat[0]+(curve.sat[1]-curve.sat[0])*r;
- const val=curve.val[0]+(curve.val[1]-curve.val[0])*r;
+ const rgb=hexToRgbMB(heroHex);
+ const heroHsv=rgbToHsvMB(rgb.r,rgb.g,rgb.b);
+ const hue=heroHsv.h;
+ // The mood's own sat/val target, blended partway toward the hero's actual saturation/brightness.
+ // Without this, a hero picked well outside the mood's usual intensity (a vivid saturated blue
+ // under a soft "ice cream" mood) stands alone against a palette that never reacted to it - the
+ // rest of the roles stayed exactly as muted/bright as the mood curve says regardless of hero.
+ // Pulling the target toward the hero's own sat/val keeps the mood's character while letting the
+ // rest of the palette meet the hero partway, so nothing clashes. The hero swatch itself is
+ // untouched either way - only how intense the *other* roles are allowed to be shifts.
+ const pull=0.35;
+ const targetSat=curve.sat[0]+(curve.sat[1]-curve.sat[0])*r;
+ const targetVal=curve.val[0]+(curve.val[1]-curve.val[0])*r;
+ const sat=targetSat*(1-pull)+heroHsv.s*pull;
+ const val=targetVal*(1-pull)+heroHsv.v*pull;
  const spread=curve.spread??1, damp=curve.damp??1, punch=curve.accentPunch??1;
  // Default offsets swing symmetrically around the hero hue (wide variety). A mood that needs a
  // consistent directional identity instead (e.g. winter always reading as icy blue/teal, whatever
  // hero was picked) can override with its own [secondary,accent,accent2,filler] hueOffsets so
  // every derived role stays biased toward the same family rather than spreading across the wheel.
  const [secOff,accOff,acc2Off,fillOff]=curve.hueOffsets||[130,-40,80,200];
- const rgb=hexToRgbMB(heroHex);
- const hue=rgbToHsvMB(rgb.r,rgb.g,rgb.b).h;
  const cs=(s)=>Math.max(4,Math.min(98,s)), cv=(v)=>Math.max(4,Math.min(98,v));
  const roles={
   hero:heroHex,
