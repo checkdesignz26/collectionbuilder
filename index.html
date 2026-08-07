@@ -883,7 +883,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
      #bgColourModeSlot is open, so there is exactly one copy and no state to sync. -->
 <div class="box" id="cmPanel" style="display:none">
   <h2>colour mode</h2><div class="body">
-    <p class="hint">Hero/vibe/richness generate the swatches below — tap one to colour the selected layer (Classics Studio) or the background mark (Background Studio). "preview" instead colours every layer at once by tone, so you can then select one to change just that one. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
+    <p class="hint">This tab only swaps how you pick a colour — position, size, opacity and blend stay visible either way. Hero/vibe/richness generate the swatches below — tap one to colour the selected layer (Classics Studio) or the background mark (Background Studio). "preview" instead colours every layer at once by tone, so you can then select one to change just that one. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
     <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
     <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
       <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option>
@@ -1260,17 +1260,17 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
       </section>
       <aside class="tsPanel tsLayersPanel"><div class="tsBox"><h3>Layers / Items</h3><div class="tsPad"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px"><button id="tsAddLayer">+ add</button><button id="tsDuplicateTop">⧉ duplicate</button><button id="tsRemoveLayer">− remove</button></div><div id="tsLayerList" class="tsLayerList" style="margin-top:10px"></div></div></div></aside>
       <aside class="tsPanel right">
-        <div class="grid2" style="margin-bottom:9px"><button id="tsGreyModeBtn" class="small active">grey mode</button><button id="tsColourModeBtn" class="small">colour mode</button></div>
-        <div id="tsColourModeSlot" class="tsHidden"></div>
-        <div id="tsGreyModeBox">
         <div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
-        <p class="tsHint" style="margin-top:0">Edit the selected classic layer.</p><div class="tsColourGrid" id="tsColourGrid"></div>
+        <p class="tsHint" style="margin-top:0">Edit the selected classic layer. Position, size and blend work the same in either mode below — only how you pick the colour changes.</p>
+        <div class="grid2" style="margin-bottom:9px"><button id="tsGreyModeBtn" class="small active">grey mode</button><button id="tsColourModeBtn" class="small">colour mode</button></div>
+        <div id="tsGreyColourBox"><div class="tsColourGrid" id="tsColourGrid"></div>
         <div class="tsHSBPanel">
           <div class="tsColourReadout"><span id="tsColourChip" class="tsColourChip"></span><span id="tsColourHex">#14233f</span></div>
           <div class="tsRow compact"><label>Hue</label><input id="tsHue" type="range" min="0" max="360" value="220"><span id="tsHueVal" class="tsMiniValue">220°</span></div>
           <div class="tsRow compact"><label>Saturation</label><input id="tsSat" type="range" min="0" max="100" value="70"><span id="tsSatVal" class="tsMiniValue">70%</span></div>
           <div class="tsRow compact"><label>Brightness</label><input id="tsBri" type="range" min="0" max="100" value="25"><span id="tsBriVal" class="tsMiniValue">25%</span></div>
-        </div>
+        </div></div>
+        <div id="tsColourModeSlot" class="tsHidden"></div>
         <div class="tsRow"><label>move</label><input id="tsMove" type="range" min="0" max="100" value="0"></div>
         <div class="tsRow"><label>rotate</label><input id="tsRotate" type="range" min="-180" max="180" value="0"></div>
         <div class="tsDirGrid"><button id="tsDirV" class="active">Vertical</button><button id="tsDirH">Horizontal</button><button id="tsDirD1">Diagonal /</button><button id="tsDirD2">Diagonal \</button></div>
@@ -1293,7 +1293,6 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
         </div></div>
       </div></div>
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
-        </div>
       </aside>
     </div>
     <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint">tap to load · all classic pattern types live together</span></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
@@ -1588,7 +1587,7 @@ function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.len
 let tsAppliedState=null,tsAppliedDataUrl=null;
 try{const raw=localStorage.getItem('pkmActiveClassicV65');if(raw)tsAppliedState=JSON.parse(raw);}catch(e){tsAppliedState=null;}
 function tsShowMode(mode){
- const grey=$('tsGreyModeBox'),colourSlot=$('tsColourModeSlot'),greyBtn=$('tsGreyModeBtn'),colourBtn=$('tsColourModeBtn');
+ const grey=$('tsGreyColourBox'),colourSlot=$('tsColourModeSlot'),greyBtn=$('tsGreyModeBtn'),colourBtn=$('tsColourModeBtn');
  if(!grey||!colourSlot)return;
  const isColour=mode==='colour';
  grey.classList.toggle('tsHidden',isColour);
@@ -1671,12 +1670,14 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
         <div class="bgCanvasWrap"><canvas id="bgPreviewCanvas" width="720" height="720"></canvas><div id="bgRepeatBox" class="hidden"></div></div>
       </section>
       <aside class="bgStudioPanel right">
-        <div class="grid2" style="margin-bottom:9px"><button id="bgGreyModeBtn" class="small active">grey mode</button><button id="bgColourModeBtn" class="small">colour mode</button></div>
-        <div id="bgColourModeSlot" class="hidden"></div>
-        <div id="bgGreyModeBox">
         <div class="bgBox"><h3>recipe controls</h3><div class="bgPad">
+          <p class="bgHint" style="margin-top:0">Opacity, scale, density, softness and contrast work the same in either mode below — only how you pick base/texture colour changes.</p>
+          <div class="grid2" style="margin-bottom:9px"><button id="bgGreyModeBtn" class="small active">grey mode</button><button id="bgColourModeBtn" class="small">colour mode</button></div>
+          <div id="bgGreyColourBox">
           <div class="bgControlsRow"><label>base</label><input id="bgBaseColor" type="color"><output></output></div>
           <div class="bgControlsRow"><label>texture</label><input id="bgTexColor" type="color"><output></output></div>
+          </div>
+          <div id="bgColourModeSlot" class="hidden"></div>
           <div class="bgControlsRow"><label>opacity</label><input id="bgOpacity" type="range" min="0" max="100"><output id="bgOpacityVal"></output></div>
           <div class="bgControlsRow"><label>scale</label><input id="bgScale" type="range" min="10" max="160"><output id="bgScaleVal"></output></div>
           <div class="bgControlsRow"><label>density</label><input id="bgDensity" type="range" min="0" max="100"><output id="bgDensityVal"></output></div>
@@ -1708,7 +1709,6 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
           <div id="bgSelectedInspector" class="bgSelectedControls"><div class="bgSelectedEmpty">No blob selected yet. Tap a splash, doodle or mark in edit mode.</div></div>
         </div></div>
         <pre id="bgRecipeText" class="bgRecipeTextGone"></pre>
-        </div>
       </aside>
     </div>
     <footer class="bgFilm"><div class="bgFilmHead"><b>🎞️ saved backgrounds</b><span id="bgStatus" class="saveStatus"></span></div><div id="bgFilmstrip" class="bgFilmstrip"></div></footer>
@@ -2007,7 +2007,7 @@ function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q(
  if(q('bgColourModeBtn'))q('bgColourModeBtn').onclick=()=>bgShowMode('colour');
 }
 function bgShowMode(mode){
- const grey=q('bgGreyModeBox'),colourSlot=q('bgColourModeSlot'),greyBtn=q('bgGreyModeBtn'),colourBtn=q('bgColourModeBtn');
+ const grey=q('bgGreyColourBox'),colourSlot=q('bgColourModeSlot'),greyBtn=q('bgGreyModeBtn'),colourBtn=q('bgColourModeBtn');
  if(!grey||!colourSlot)return;
  const isColour=mode==='colour';
  grey.classList.toggle('hidden',isColour);
