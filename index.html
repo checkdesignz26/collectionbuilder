@@ -883,7 +883,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
      #bgColourModeSlot is open, so there is exactly one copy and no state to sync. -->
 <div class="box" id="cmPanel" style="display:none">
   <h2>colour mode</h2><div class="body">
-    <p class="hint">Recolours the classic pattern and background here from one hero colour. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
+    <p class="hint">In Classics Studio this recolours the selected layer only — pick a different layer to give it its own colour. In Background Studio it recolours the background. Placeholders stay uncoloured — they're motif slots, not part of the palette. Requires a saved template (save one first if the filmstrip is empty).</p>
     <div class="range"><label>hero</label><input id="cmHero" type="color" value="#9b6bff"></div>
     <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
       <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option>
@@ -1489,9 +1489,9 @@ function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.
  let r=ww;
  let x=((l.x ?? l.pos ?? 50)/100)*cell;
  let y=((l.y ?? l.rotate ?? 50)/100)*cell;
- [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill(); if(idx===st.__selectedIndex){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.strokeStyle='#ff8ed6';ctx.lineWidth=Math.max(3,cell/140);ctx.stroke();ctx.restore();}}));
+ [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill(); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.stroke();});}));
 }
-else if(l.kind==='check'){if(l.direction==='horizontal'){[-cell,0,cell].forEach(dy=>ctx.fillRect(0,pos+dy-ww/2,cell,ww));}else{[-cell,0,cell].forEach(dx=>ctx.fillRect(pos+dx-ww/2,0,ww,cell));}}
+else if(l.kind==='check'){if(l.direction==='horizontal'){[-cell,0,cell].forEach(dy=>{ctx.fillRect(0,pos+dy-ww/2,cell,ww); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(0,pos+dy-ww/2,cell,ww));});}else{[-cell,0,cell].forEach(dx=>{ctx.fillRect(pos+dx-ww/2,0,ww,cell); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(pos+dx-ww/2,0,ww,cell));});}}
 else if(l.kind==='diamond'){
  let size=ww*2.2;
  // v59: if a diamond has x/y it is a single editable blueprint diamond,
@@ -1499,10 +1499,10 @@ else if(l.kind==='diamond'){
  if(l.x!=null || l.y!=null){
   let x=((l.x ?? l.pos ?? 50)/100)*cell;
   let y=((l.y ?? l.rotate ?? 50)/100)*cell;
-  [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.save();ctx.translate(x+dx,y+dy);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size);ctx.restore();}));
+  [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.save();ctx.translate(x+dx,y+dy);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(-size/2,-size/2,size,size));ctx.restore();}));
  }else{
   let step=Math.max(size,pxFromSlider((l.width||40)+(l.gap||30),cell));
-  for(let y=pos-step;y<cell+step;y+=step){for(let x=pos-step;x<cell+step;x+=step){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size);ctx.restore();}}
+  for(let y=pos-step;y<cell+step;y+=step){for(let x=pos-step;x<cell+step;x+=step){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(-size/2,-size/2,size,size));ctx.restore();}}
  }
 }
 else{
@@ -1515,10 +1515,11 @@ else{
   ctx.save();
   ctx.translate(cell/2,cell/2);
   ctx.rotate(baseAngle + extra);
-  [-cell,0,cell].forEach(dx=>{ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6);});
+  [-cell,0,cell].forEach(dx=>{ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(offset+dx-ww/2,-cell*3,ww,cell*6));});
   ctx.restore();
 }
 ctx.restore();});ctx.restore();}
+function tsStrokeSelected(ctx,cell,drawFn){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.strokeStyle='#ff8ed6';ctx.lineWidth=Math.max(3,cell/140);drawFn();ctx.restore();}
 function drawTile(ctx,x,y,w,st){ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.rect(0,0,w,w);ctx.clip();ctx.clearRect(0,0,w,w);let scale=(st.scale||100)/100;let cell=Math.max(40,w*scale);for(let yy=-cell;yy<w+cell;yy+=cell){for(let xx=-cell;xx<w+cell;xx+=cell){drawOneCell(ctx,cell,st,xx,yy);}}ctx.restore();}
 function renderPreview(canvas,size,st,mode,guides){let ctx=canvas.getContext('2d');ctx.clearRect(0,0,size,size);ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);let n=mode==='single'?1:3, tile=size/n;for(let r=0;r<n;r++)for(let c=0;c<n;c++){let ox=(mode==='brick'&&r%2)?tile/2:0;drawTile(ctx,c*tile-tile+ox,r*tile,tile,st);drawTile(ctx,c*tile+ox,r*tile,tile,st);if(guides&&n>1){ctx.strokeStyle='rgba(20,20,35,.22)';ctx.lineWidth=1;ctx.strokeRect(c*tile,r*tile,tile,tile);}}}
 let tsSaving=false;
@@ -1551,11 +1552,15 @@ window.tsApplySnapshot=function(snap){tsAppliedState=snap?copy(snap):null;tsAppl
 window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);return c.toDataURL('image/png');};
 function tsHexLuma(hex){const {r,g,b}=hexToRgb(hex);return (0.299*r+0.587*g+0.114*b)/255;}
 function tsRoleForColour(hex){const l=tsHexLuma(hex);return l<0.35?'hero':(l>0.85?'white':'secondary');}
-function tsRecolourLayers(layers,roles){(layers||[]).forEach(l=>{if(l.origColor===undefined)l.origColor=l.color;const role=tsRoleForColour(l.origColor||l.color||'#111111');if(roles[role])l.color=roles[role];});}
+function tsRecolourLayers(layers,roles,onlyIndex){(layers||[]).forEach((l,i)=>{if(onlyIndex!=null&&i!==onlyIndex)return;if(l.origColor===undefined)l.origColor=l.color;const role=tsRoleForColour(l.origColor||l.color||'#111111');if(roles[role])l.color=roles[role];});}
 function tsGreyLayers(layers){(layers||[]).forEach(l=>{if(l.origColor)l.color=l.origColor;});}
 window.tsSetRoleColours=function(roles){
- if(state)tsRecolourLayers(state.layers,roles);
- if(tsAppliedState)tsRecolourLayers(tsAppliedState.state.layers,roles);
+ // Only recolour the layer selected in Classics Studio — with several layers sharing the
+ // same original tone (e.g. three black stripes), recolouring everything at once meant you
+ // could never give individual stripes different colours from here.
+ const idx=(typeof selected==='number')?selected:null;
+ if(state)tsRecolourLayers(state.layers,roles,idx);
+ if(tsAppliedState)tsRecolourLayers(tsAppliedState.state.layers,roles,idx);
  tsAppliedDataUrl=null;
  try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}
  if(typeof renderAll==='function')renderAll(false);
