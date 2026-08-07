@@ -1376,12 +1376,17 @@ function checksDefault(){return {type:'checks',bg:true,bgColor:'#ffffff',bgOpaci
  {kind:'square',name:'black square',color:'#111111',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function plaidDefault(){
- // v70: plaid/madras as a 4x4 grid of paintable squares, same square kind as checks/gingham,
+ // v71: plaid/madras as a 4x4 grid of paintable squares, same square kind as checks/gingham,
  // instead of crossing bands. Each row and column carries a "band colour" (thick dark / thin
  // grey accent / light band, mimicking a woven tartan's stripe sequence); a cell takes
  // whichever of its row/column band is more dominant, giving a real criss-cross instead of
  // a plus-sign. Still just square layers underneath, so every square is individually
  // selectable and recolourable exactly like checks.
+ // Each square is sized a little larger than its 25% cell so it physically overlaps its
+ // neighbours, with blend:'multiply' - a square reads at full colour where it's alone
+ // (multiply against the white tile background leaves it unchanged) but the overlap strip
+ // where two squares' spillover crosses multiplies into a third, slightly darker tone. That's
+ // the actual woven-crossing look, not just a flat printed grid.
  const bandColours=['#111111','#f4ede1','#777777','#f4ede1'];
  const dominance={'#111111':0,'#777777':1,'#f4ede1':2};
  const layers=[];
@@ -1390,7 +1395,7 @@ function plaidDefault(){
    const rc=bandColours[r], cc=bandColours[c];
    const colour=(dominance[rc]<=dominance[cc])?rc:cc;
    const x=12.5+c*25, y=12.5+r*25;
-   layers.push({kind:'square',name:'plaid square',color:colour,x,y,pos:x,width:25,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true});
+   layers.push({kind:'square',name:'plaid square',color:colour,x,y,pos:x,width:30,gap:0,opacity:100,blend:'multiply',direction:'single',rotate:0,visible:true});
   }
  }
  return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers};
