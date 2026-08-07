@@ -811,9 +811,10 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
         <button onclick="setPreset('halfdrop',true)">half drop</button>
         <button onclick="setPreset('halfbrick',true)">half brick</button>
         <button onclick="setPreset('halfdropflip',true)">half drop flip</button>
-        <button onclick="setPreset('diamond',true)">diamond</button>
+        <button onclick="setPreset('diamond',true)">diamond repeat</button>
         <button onclick="setPreset('tossed',true)">tossed</button>
-        <button onclick="setPreset('stripe',true)">stripe layout</button>
+        <button onclick="setPreset('ogee',true)">ogee</button>
+        <button onclick="setPreset('hexagon',true)">hexagon</button>
         <button onclick="setPreset('polka',true)">polka layout</button>
         <button onclick="setPreset('gingham',true)">gingham</button>
         <button onclick="setPreset('plaid',true)">plaid</button>
@@ -986,9 +987,10 @@ const presets={
  halfdrop:{name:'half drop',bricks:[p('arrowOval',50,20,24,15,'hero'),p('oval',20,50,20,13,'secondary'),p('oval',80,50,20,13,'secondary'),p('circle',50,80,10,10,'filler')]},
  halfbrick:{name:'half brick',bricks:[p('arrowOval',22,28,23,15,'hero'),p('arrowOval',78,28,23,15,'hero'),p('oval',50,62,20,13,'secondary'),p('circle',20,85,9,9,'filler'),p('circle',80,85,9,9,'filler')]},
  halfdropflip:{name:'half drop flip',bricks:[p('arrowOval',50,20,24,15,'hero',0,'→'),p('arrowOval',20,55,20,13,'secondary',-25,'→'),p('arrowOval',80,55,20,13,'secondary',25,'→'),p('diamond',50,82,12,12,'filler')]},
- diamond:{name:'diamond',bricks:[p('diamond',50,16,16,16,'hero'),p('diamond',22,50,15,15,'secondary'),p('diamond',78,50,15,15,'secondary'),p('diamond',50,84,12,12,'filler')]},
+ diamond:{name:'diamond repeat',bricks:[p('oval',50,0,22,16,'hero'),p('oval',50,100,22,16,'hero'),p('oval',0,50,16,22,'secondary'),p('oval',100,50,16,22,'secondary'),p('circle',50,50,12,12,'filler')]},
  tossed:{name:'tossed',bricks:[p('arrowOval',30,24,22,14,'hero',-20,'→'),p('oval',72,30,18,12,'secondary',35,'→'),p('diamond',38,68,13,13,'filler',15),p('circle',78,78,10,10,'accent')]},
- stripe:{name:'stripe',bricks:[]},
+ ogee:{name:'ogee',bricks:[p('oval',50,50,34,50,'hero'),p('oval',0,0,34,50,'secondary'),p('oval',100,0,34,50,'secondary'),p('oval',0,100,34,50,'secondary'),p('oval',100,100,34,50,'secondary'),p('circle',50,50,12,12,'accent')]},
+ hexagon:{name:'hexagon',bricks:[p('hexagon',0,25,52,46,'hero'),p('hexagon',50,25,52,46,'hero'),p('hexagon',100,25,52,46,'hero'),p('hexagon',25,75,52,46,'secondary'),p('hexagon',75,75,52,46,'secondary')]},
  polka:{name:'polka',bricks:[p('circle',20,20,10,10,'black'),p('circle',70,20,10,10,'black'),p('circle',45,50,10,10,'black'),p('circle',20,80,10,10,'black'),p('circle',70,80,10,10,'black')]},
  gingham:{name:'gingham',bricks:[p('gingham',50,50,100,100,'grey')]},
  plaid:{name:'plaid',bricks:[p('stripeRow',50,25,100,8,'black'),p('stripeRow',50,70,100,8,'grey'),p('stripeRow',25,50,8,100,'black',90),p('stripeRow',70,50,8,100,'grey',90)]},
@@ -996,7 +998,7 @@ const presets={
  scallop:{name:'scallop',bricks:[p('scallopRow',50,35,100,18,'black'),p('scallopRow',50,70,100,18,'grey')]}
 };
 function p(type,x,y,w,h,role='hero',rot=0,flow=''){return {id:'b'+Math.random().toString(36).slice(2),type,x,y,w,h,role,rot,flow};}
-const skeletonOrder=['grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','stripe','polka','gingham','plaid','chevron','scallop'];
+const skeletonOrder=['grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','ogee','hexagon','polka','gingham','plaid','chevron','scallop'];
 function copyBricks(arr){return JSON.parse(JSON.stringify(arr)).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
 function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;}}
 function sourceBricksFor(key){return blueprintStore[key]?copyBricks(blueprintStore[key]):copyBricks(presets[key].bricks);}
