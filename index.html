@@ -1599,29 +1599,25 @@ function checksDefault(){return {type:'checks',bg:true,bgColor:'#ffffff',bgOpaci
  {kind:'square',name:'black square',color:'#111111',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function plaidDefault(){
- // v71: plaid/madras as a 4x4 grid of paintable squares, same square kind as checks/gingham,
- // instead of crossing bands. Each row and column carries a "band colour" (thick dark / thin
- // grey accent / light band, mimicking a woven tartan's stripe sequence); a cell takes
- // whichever of its row/column band is more dominant, giving a real criss-cross instead of
- // a plus-sign. Still just square layers underneath, so every square is individually
- // selectable and recolourable exactly like checks.
- // Each square is sized a little larger than its 25% cell so it physically overlaps its
- // neighbours, with blend:'multiply' - a square reads at full colour where it's alone
- // (multiply against the white tile background leaves it unchanged) but the overlap strip
- // where two squares' spillover crosses multiplies into a third, slightly darker tone. That's
- // the actual woven-crossing look, not just a flat printed grid.
- const bandColours=['#111111','#f4ede1','#777777','#f4ede1'];
- const dominance={'#111111':0,'#777777':1,'#f4ede1':2};
- const layers=[];
- for(let r=0;r<4;r++){
-  for(let c=0;c<4;c++){
-   const rc=bandColours[r], cc=bandColours[c];
-   const colour=(dominance[rc]<=dominance[cc])?rc:cc;
-   const x=12.5+c*25, y=12.5+r*25;
-   layers.push({kind:'square',name:'plaid square',color:colour,x,y,pos:x,width:30,gap:0,opacity:100,blend:'multiply',direction:'single',rotate:0,visible:true});
-  }
- }
- return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers};
+ // v72: madras/plaid rebuilt as irregular-width crossing stripe layers - the uniform grid of
+ // squares read as a flat printed checkerboard, not woven madras. Real madras (see: Liz Ness's
+ // "Make a Madras Plaid Pattern in Procreate") is built from a handful of UNEVEN-width stripe
+ // passes per direction - three colour "dimensions", each contributing an irregular vertical
+ // and horizontal stripe at its own width/position - multiplied together where they cross.
+ // Same kind:'stripe' layers Stripes Studio already uses, so every stripe is individually
+ // selectable/draggable/recolourable and the Global Stripe Controls (distribute, group
+ // opacity/blend, duplicate sequence, "make plaid 90°") all work here for free.
+ // blend:'multiply' + opacity:100 means a stripe reads at its own true colour wherever it's
+ // alone (multiply against the white tile background leaves it unchanged) and only multiplies
+ // into a third, richer tone where two stripes actually cross.
+ return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
+  {kind:'stripe',name:'rust stripe',color:'#b8593d',pos:15,width:26,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
+  {kind:'stripe',name:'rust stripe',color:'#b8593d',pos:70,width:18,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true},
+  {kind:'stripe',name:'teal stripe',color:'#2f7d78',pos:55,width:16,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
+  {kind:'stripe',name:'teal stripe',color:'#2f7d78',pos:20,width:24,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true},
+  {kind:'stripe',name:'gold stripe',color:'#d9a441',pos:82,width:20,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
+  {kind:'stripe',name:'gold stripe',color:'#d9a441',pos:48,width:14,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true}
+ ]};
 }
 function argyleDefault(){return {type:'argyle',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
  // v61 blueprint: centred editable argyle skeleton, not a finished repeat.
