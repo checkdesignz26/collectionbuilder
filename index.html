@@ -824,12 +824,13 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div></div>
 
     <div class="box"><h2>textures</h2><div class="body">
-      <p class="hint">Open the shared Classics Studio for stripes, dots, checks, plaid and argyle. Background Studio is separate now.</p>
+      <p class="hint">Open the shared Classics Studio for stripes, dots, checks, plaid, madras and argyle. Background Studio is separate now.</p>
       <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()">background studio</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
       <div class="grid2">
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('dots')">dots</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('checks')">checks</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('plaid')">plaid</button>
+        <button onclick="window.openTextureStudioType&&window.openTextureStudioType('madras')">madras</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('argyle')">argyle</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('gingham')">gingham</button>
       </div>
@@ -1480,7 +1481,8 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
           <button class="active" data-type="stripes"><span>▥</span>Stripes</button>
           <button data-type="dots"><span>⠿</span>Dots</button>
           <button data-type="checks"><span>▦</span>Checks</button>
-          <button data-type="plaid"><span>▤</span>Plaid / Madras</button>
+          <button data-type="plaid"><span>▤</span>Plaid</button>
+          <button data-type="madras"><span>▤</span>Madras</button>
           <button data-type="diagplaid"><span>▧</span>Diagonal Plaid</button>
           <button data-type="argyle"><span>◇</span>Argyle</button>
           <button data-type="gingham"><span>▦</span>Gingham</button>
@@ -1599,22 +1601,29 @@ function checksDefault(){return {type:'checks',bg:true,bgColor:'#ffffff',bgOpaci
  {kind:'square',name:'black square',color:'#111111',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function plaidDefault(){
- // v72: madras/plaid rebuilt as irregular-width crossing stripe layers - the uniform grid of
- // squares read as a flat printed checkerboard, not woven madras. Real madras (see: Liz Ness's
- // "Make a Madras Plaid Pattern in Procreate") is built from a handful of UNEVEN-width stripe
- // passes per direction - three colour "dimensions", each contributing an irregular vertical
- // and horizontal stripe at its own width/position - multiplied together where they cross.
- // Same kind:'stripe' layers Stripes Studio already uses, so every stripe is individually
- // selectable/draggable/recolourable and the Global Stripe Controls (distribute, group
- // opacity/blend, duplicate sequence, "make plaid 90°") all work here for free.
- // blend:'multiply' + opacity:100 means a stripe reads at its own true colour wherever it's
- // alone (multiply against the white tile background leaves it unchanged) and only multiplies
- // into a third, richer tone where two stripes actually cross.
- // Template/grey-mode default uses neutral 25/50/75% greys (not colours) for the three
- // "dimensions" - same placeholder convention as the rest of the blueprint system, so the
- // structure reads as motif slots rather than a finished colourway. Colour mode still recolours
- // them freely (these are ordinary stripe layers, nothing special about the starting hex).
+ // v73: "Plaid" is now the regular/even tartan-sett sibling of "Madras" (madrasDefault, below) -
+ // evenly spaced, equal-width stripes symmetric in both directions (thick centre band flanked by
+ // two thinner ones, same rhythm repeated the other way), instead of madras's irregular spacing.
+ // Same kind:'stripe' layers as Stripes Studio/Madras, so everything (selection, Global Stripe
+ // Controls, distribute, "make plaid 90°") works identically; blend:'multiply' so a lone stripe
+ // reads at its true colour and only blends into a third tone where it crosses another.
+ // Neutral 25/50/75% greys for the template default, same placeholder convention as elsewhere.
  return {type:'plaid',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
+  {kind:'stripe',name:'dark grey stripe',color:'#404040',pos:25,width:14,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
+  {kind:'stripe',name:'mid grey stripe',color:'#808080',pos:50,width:20,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
+  {kind:'stripe',name:'light grey stripe',color:'#bfbfbf',pos:75,width:14,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
+  {kind:'stripe',name:'dark grey stripe',color:'#404040',pos:25,width:14,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true},
+  {kind:'stripe',name:'mid grey stripe',color:'#808080',pos:50,width:20,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true},
+  {kind:'stripe',name:'light grey stripe',color:'#bfbfbf',pos:75,width:14,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true}
+ ]};
+}
+function madrasDefault(){
+ // Irregular-width crossing stripe layers - real madras (see: Liz Ness's "Make a Madras Plaid
+ // Pattern in Procreate") is built from a handful of UNEVEN-width stripe passes per direction -
+ // three colour "dimensions", each contributing an irregular vertical and horizontal stripe at
+ // its own width/position - multiplied together where they cross. Unlike plaidDefault (above),
+ // nothing here is evenly spaced or equal width - that irregularity is the point.
+ return {type:'madras',bg:true,bgColor:'#ffffff',bgOpacity:100,scale:100,layers:[
   {kind:'stripe',name:'dark grey stripe',color:'#404040',pos:15,width:26,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
   {kind:'stripe',name:'dark grey stripe',color:'#404040',pos:70,width:18,gap:0,opacity:100,blend:'multiply',direction:'horizontal',rotate:0,visible:true},
   {kind:'stripe',name:'mid grey stripe',color:'#808080',pos:55,width:16,gap:0,opacity:100,blend:'multiply',direction:'vertical',rotate:0,visible:true},
@@ -1647,7 +1656,7 @@ function ginghamDefault(){return {type:'gingham',bg:true,bgColor:'#ffffff',bgOpa
  {kind:'square',name:'grey square',color:'#777777',x:25,y:75,pos:25,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true},
  {kind:'square',name:'white square',color:'#ffffff',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
-function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
+function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='madras'?madrasDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
 function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');}
 function openType(type){state=defaultFor(type||'stripes');selected=0;previewMode='single';tsUndoStack=[];tsRedoStack=[];setSeg();document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));open();}
 function close(){document.body.style.overflow='';$('textureStudioOverlay').classList.remove('open');}
@@ -2814,7 +2823,7 @@ window.bgSetRoleColours=function(base,tex){if(!bgRecipe||!bgRecipe.enabled)retur
 <script id="v50-classics-fixes-script">
 (function(){
 function $(id){return document.getElementById(id)}
-function mapClassicName(txt){txt=(txt||'').toLowerCase();if(txt.includes('argyle'))return 'argyle';if(txt.includes('plaid')||txt.includes('madras'))return 'plaid';if(txt.includes('gingham'))return 'gingham';if(txt.includes('check'))return 'checks';if(txt.includes('dot')||txt.includes('polka'))return 'dots';if(txt.includes('stripe'))return 'stripes';return null}
+function mapClassicName(txt){txt=(txt||'').toLowerCase();if(txt.includes('argyle'))return 'argyle';if(txt.includes('madras'))return 'madras';if(txt.includes('plaid'))return 'plaid';if(txt.includes('gingham'))return 'gingham';if(txt.includes('check'))return 'checks';if(txt.includes('dot')||txt.includes('polka'))return 'dots';if(txt.includes('stripe'))return 'stripes';return null}
 function wireTemplateCards(){document.querySelectorAll('.skelCard').forEach(card=>{let label=card.innerText||card.textContent||'';let type=mapClassicName(label);if(!type)return;card.dataset.classicType=type;card.addEventListener('click',function(e){if(window.openTextureStudioType){e.preventDefault();e.stopPropagation();window.openTextureStudioType(type);}},true);});}
 function showNativePicker(el){try{ if(el && el.showPicker) el.showPicker(); }catch(e){}}
 function wireColourInputs(){['tsBgColor','tsCustomColor','bgBaseColor','bgTexColor'].forEach(id=>{let el=$(id);if(el&&!el.dataset.v50picker){el.dataset.v50picker='1';el.addEventListener('click',()=>showNativePicker(el));el.addEventListener('touchend',()=>showNativePicker(el),{passive:true});}});let stopList=$('bgStopList');if(stopList&&!stopList.dataset.v50picker){stopList.dataset.v50picker='1';stopList.addEventListener('click',e=>{let input=e.target.closest('input[type=color]'); if(input)showNativePicker(input);});stopList.addEventListener('touchend',e=>{let input=e.target.closest('input[type=color]'); if(input)showNativePicker(input);},{passive:true});}}
