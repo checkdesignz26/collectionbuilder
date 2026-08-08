@@ -898,8 +898,8 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
         <div class="tsRow compact"><label>Hue</label><input id="cmAdjustHue" type="range" min="0" max="360" value="0"><span id="cmAdjustHueVal" class="tsMiniValue">0°</span></div>
         <div class="tsRow compact"><label>Saturation</label><input id="cmAdjustSat" type="range" min="0" max="100" value="0"><span id="cmAdjustSatVal" class="tsMiniValue">0%</span></div>
         <div class="tsRow compact"><label>Brightness</label><input id="cmAdjustBri" type="range" min="0" max="100" value="0"><span id="cmAdjustBriVal" class="tsMiniValue">0%</span></div>
-        <p class="tsHint" style="margin:6px 0 0">Never touches the mood palette or the other swatches - applies only where you send it.</p>
-        <div class="grid2" style="margin-top:7px"><button id="cmAdjustApplyLayer" class="small primary">apply to selected layer</button><button id="cmAdjustApplyHero" class="small">set as hero</button></div>
+        <p class="tsHint" style="margin:6px 0 0">Applies to the selected layer immediately - nudge the sliders and it keeps updating live. Never touches the mood palette or the other swatches.</p>
+        <div class="grid2" style="margin-top:7px"><button id="cmAdjustApplyLayer" class="small primary">re-apply to selected layer</button><button id="cmAdjustApplyHero" class="small">set as hero</button></div>
       </div>
       <button id="cmApplyExtracted" class="full primary" style="display:none;margin-top:7px">use extracted palette</button>
     </div></div>
@@ -1290,7 +1290,7 @@ function cmRenderExtractedSwatches(){
   d.style.background=hex;
   d.style.cursor='pointer';
   d.title=hex+' — tap to fine-tune';
-  d.onclick=()=>cmOpenAdjust(hex);
+  d.onclick=()=>{cmSwatchClick(hex);cmOpenAdjust(hex);};
   box.appendChild(d);
  });
 }
@@ -1457,7 +1457,7 @@ document.getElementById('cmImageCount').addEventListener('input',()=>{
 document.getElementById('cmImageModeHero').onclick=()=>cmSetImageMode('adjust');
 document.getElementById('cmImageModePalette').onclick=()=>cmSetImageMode('palette');
 document.getElementById('cmApplyExtracted').onclick=cmApplyExtractedPalette;
-['cmAdjustHue','cmAdjustSat','cmAdjustBri'].forEach(id=>document.getElementById(id).addEventListener('input',cmSyncAdjustUI));
+['cmAdjustHue','cmAdjustSat','cmAdjustBri'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{cmSyncAdjustUI();cmSwatchClick(cmAdjustHex);}));
 document.getElementById('cmAdjustApplyLayer').onclick=()=>cmSwatchClick(cmAdjustHex);
 document.getElementById('cmAdjustApplyHero').onclick=()=>{
  document.getElementById('cmHero').value=cmAdjustHex;
