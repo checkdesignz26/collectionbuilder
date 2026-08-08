@@ -876,6 +876,8 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <div class="range"><label>width</label><input id="wRange" type="range" min="4" max="100" value="24"></div>
       <div class="range"><label>height</label><input id="hRange" type="range" min="4" max="100" value="16"></div>
       <div class="range"><label>rotate</label><input id="rRange" type="range" min="-180" max="180" value="0"></div>
+      <p class="footerNote">Width/height/rotate follow the scope above (same shape by default) within this layout. Turn this on to also carry the change to every other layout's matching shape.</p>
+      <button id="styleAllLayoutsBtn" class="full">apply to all layouts: off</button>
       <div class="grid2"><button id="arrowsBtn">toggle arrows</button><button id="deleteBtn">delete</button></div>
     </div></div>
     <div class="box"><h2>playground helpers</h2><div class="body">
@@ -1080,7 +1082,7 @@ function saveTemplateToFilmstrip(){
  },0);
 }
 function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];return [[-1,-1], [0,-1], [1,-1],[-1,0],[0,0,'center'],[1,0],[-1,1],[0,1],[1,1]];}
 function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
@@ -1227,7 +1229,14 @@ function renderMotifTray(){
 // reassigning it every time.
 let motifShapes={};
 function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(motifShapes[b.type])b.motifUrl=motifShapes[b.type];else if(b.motifUrl)delete b.motifUrl;});}
-function applyMotifShapesToCopy(list){const copy=(list||[]).map(b=>({...b}));applyMotifShapesToBricks(copy);return copy;}
+// Same idea as motifShapes, for width/height/rotate: doesn't touch presets/blueprintStore
+// directly (those stay the untouched source of truth), just gets re-applied to whatever bricks
+// are currently loaded, on every layout switch and thumbnail preview - same non-destructive
+// pattern as motifShapes for the same reason (never permanently corrupt a stored blueprint).
+let shapeStyles={};
+function applyShapeStylesToBricks(list){(list||[]).forEach(b=>{const s=shapeStyles[b.type];if(!s)return;if(s.w!=null)b.w=s.w;if(s.h!=null)b.h=s.h;if(s.rot!=null)b.rot=s.rot;});}
+let styleAllLayouts=false;
+function applyMotifShapesToCopy(list){const copy=(list||[]).map(b=>({...b}));applyMotifShapesToBricks(copy);applyShapeStylesToBricks(copy);return copy;}
 function placeMotifOnSelected(){
  const b=selectedBrick();
  const m=motifTray.find(x=>x.id===activeMotifId);
@@ -1264,7 +1273,15 @@ function miniHTML(key){ if(key==='stripe')return '<div style="height:100%;backgr
 function addBrick(type){let role=activeColor;let w=20,h=14;if(type==='circle'){w=h=12}else if(type==='square'||type==='diamond'||type==='triangle'||type==='hexagon'||type==='star'||type==='heart'){w=h=15}else if(type.includes('Row')){w=90;h=10;role='black'}else if(type==='gingham'||type==='chevron'){w=100;h=100;role='grey'} if(type==='rectRow'){type='rect';w=85;h=9;role='grey'} role=defaultRoleForType(type); const b=p(type,50,50,w,h,role,0,type==='arrowOval'?'↗':'');bricks.push(b);selected=b.id;render();syncControls();}
 function selectedBrick(){return bricks.find(b=>b.id===selected)}
 function syncControls(set=true){const b=selectedBrick();if(!b)return; if(set){xRange.value=b.x;yRange.value=b.y;wRange.value=b.w;hRange.value=b.h;rRange.value=b.rot}}
-['x','y','w','h','r'].forEach(k=>{const rg=document.getElementById(k+'Range');rg.addEventListener('pointerdown',pushHistory);rg.addEventListener('input',e=>{const b=selectedBrick();if(!b)return;b[k==='r'?'rot':k]=+e.target.value;render();});});
+// x/y (position) stays single-brick: dragging every same-shape brick to one identical spot would
+// just collapse the layout, and dedicated bulk actions (left/right/centre/make row/make column
+// etc, all scope-aware already) already cover intentional bulk repositioning.
+['x','y'].forEach(k=>{const rg=document.getElementById(k+'Range');rg.addEventListener('pointerdown',pushHistory);rg.addEventListener('input',e=>{const b=selectedBrick();if(!b)return;b[k]=+e.target.value;render();});});
+// width/height/rotate instead follow the same scope (same shape/same colour/all bricks) the
+// alignment buttons above already use - matching how "same size" already works, just live as you
+// drag instead of a one-off click - and optionally (styleAllLayouts) carry the same value to
+// every other layout's matching shape too.
+['w','h','r'].forEach(k=>{const rg=document.getElementById(k+'Range');rg.addEventListener('pointerdown',pushHistory);rg.addEventListener('input',e=>{const b=selectedBrick();if(!b)return;const prop=k==='r'?'rot':k;const val=+e.target.value;scopedBricks().forEach(x=>{x[prop]=val;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type][prop]=val;}render();renderGrid();});});
 document.querySelectorAll('[data-add]').forEach(btn=>btn.onclick=()=>{pushHistory();addBrick(btn.dataset.add);});
 document.getElementById('motifUploadBtn').onclick=()=>document.getElementById('motifFile').click();
 document.getElementById('motifFile').addEventListener('change',handleMotifUpload);
@@ -1276,6 +1293,7 @@ document.getElementById('edgeBtn').onclick=()=>{edgeClones=!edgeClones;edgeBtn.c
 let alignScope='type';
 function setScope(scope){alignScope=scope;[scopeType,scopeRole,scopeAll].forEach(b=>b.classList.remove('active'));({type:scopeType,role:scopeRole,all:scopeAll}[scope]).classList.add('active');}
 scopeType.onclick=()=>setScope('type');scopeRole.onclick=()=>setScope('role');scopeAll.onclick=()=>setScope('all');
+document.getElementById('styleAllLayoutsBtn').onclick=()=>{styleAllLayouts=!styleAllLayouts;const btn=document.getElementById('styleAllLayoutsBtn');btn.textContent='apply to all layouts: '+(styleAllLayouts?'on':'off');btn.classList.toggle('active',styleAllLayouts);};
 function scopedBricks(){const b=selectedBrick();if(!b)return[]; if(alignScope==='all')return bricks; if(alignScope==='role')return bricks.filter(x=>x.role===b.role); return bricks.filter(x=>x.type===b.type);}
 function edgeX(b,side){return side==='left'?b.x-b.w/2:side==='right'?b.x+b.w/2:b.x}
 function edgeY(b,side){return side==='top'?b.y-b.h/2:side==='bottom'?b.y+b.h/2:b.y}
