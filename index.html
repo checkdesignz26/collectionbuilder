@@ -805,7 +805,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div></div>
 
     <div class="box"><h2>motifs</h2><div class="body">
-      <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder sharing that one's role (hero, secondary, etc.) for the real motif - not just the one you tapped. Switching layouts carries the same motifs over to whichever placeholders share those roles there, so you can flip through layouts to preview the placement.</p>
+      <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Switching layouts carries the same motifs over to whichever placeholders share those shapes there, so you can flip through layouts to preview the placement.</p>
       <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
       <button class="full" id="motifUploadBtn">upload motifs</button>
       <div class="swatches" id="motifTray"><span class="footerNote">no motifs uploaded yet</span></div>
@@ -1080,7 +1080,7 @@ function saveTemplateToFilmstrip(){
  },0);
 }
 function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);applyMotifRolesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];return [[-1,-1], [0,-1], [1,-1],[-1,0],[0,0,'center'],[1,0],[-1,1],[0,1],[1,1]];}
 function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
@@ -1176,30 +1176,32 @@ function renderMotifTray(){
   box.appendChild(d);
  });
 }
-// Motifs are assigned per ROLE (hero/secondary/accent/filler/etc.), the same grouping colour
-// mode already uses - not per individual brick. Placing a motif with a brick selected applies it
-// to every brick sharing that brick's role in the current layout (a layout typically has more
-// than one brick per role, e.g. grid's two hero ovals), and motifRoles remembers the assignment
-// so switching to a completely different layout re-applies the same motifs to whichever bricks
-// have matching roles there - the whole point being able to flip through layouts and see how an
-// already-chosen motif set would look in each one, without reassigning it every time.
-let motifRoles={};
-function applyMotifRolesToBricks(list){(list||[]).forEach(b=>{if(motifRoles[b.role])b.motifUrl=motifRoles[b.role];else if(b.motifUrl)delete b.motifUrl;});}
+// Motifs are assigned per SHAPE (b.type - oval, circle, arrowOval, etc.), the same "same shape"
+// scope the control room's alignment buttons already use - not per individual brick and not per
+// colour-mode role (a layout's placeholders sharing one shape often span multiple roles, e.g.
+// grid's 4 ovals are 2 hero + 2 secondary, and all 4 should fill together). Placing a motif with
+// a brick selected applies it to every brick of that same shape in the current layout, and
+// motifShapes remembers the assignment so switching to a completely different layout re-applies
+// the same motifs to whichever bricks share those shapes there - the whole point being able to
+// flip through layouts and see how an already-chosen motif set would look in each one, without
+// reassigning it every time.
+let motifShapes={};
+function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(motifShapes[b.type])b.motifUrl=motifShapes[b.type];else if(b.motifUrl)delete b.motifUrl;});}
 function placeMotifOnSelected(){
  const b=selectedBrick();
  const m=motifTray.find(x=>x.id===activeMotifId);
  if(!b||!m)return;
  pushHistory();
- motifRoles[b.role]=m.dataUrl;
- bricks.forEach(x=>{if(x.role===b.role)x.motifUrl=m.dataUrl;});
+ motifShapes[b.type]=m.dataUrl;
+ bricks.forEach(x=>{if(x.type===b.type)x.motifUrl=m.dataUrl;});
  render();
 }
 function clearMotifFromSelected(){
  const b=selectedBrick();
- if(!b||!motifRoles[b.role])return;
+ if(!b||!motifShapes[b.type])return;
  pushHistory();
- delete motifRoles[b.role];
- bricks.forEach(x=>{if(x.role===b.role)delete x.motifUrl;});
+ delete motifShapes[b.type];
+ bricks.forEach(x=>{if(x.type===b.type)delete x.motifUrl;});
  render();
 }
 function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');const onMove=ev=>{const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/3:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp)};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');const onMove=ev=>{const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/3:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;b.w=Math.max(3,Math.min(120,ow+dx));b.h=Math.max(3,Math.min(120,oh+dy));render();syncControls(false);};const onUp=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp)};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
