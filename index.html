@@ -1282,22 +1282,26 @@ function cmRenderExtractedSwatches(){
  const box=document.getElementById('cmImageSwatches');if(!box)return;
  box.innerHTML='';
  if(!cmExtractedColours.length){box.innerHTML='<span class="footerNote">upload an image to pull its colours</span>';return;}
+ // Every extracted swatch is always tappable, in either mode - "use all as palette" only adds
+ // the bulk "use extracted palette" button below, it never disables picking one colour by hand.
  cmExtractedColours.forEach(hex=>{
   const d=document.createElement('div');
   d.className='sw';
   d.style.background=hex;
-  d.style.cursor=cmImageMode==='adjust'?'pointer':'default';
-  d.title=hex+(cmImageMode==='adjust'?' — tap to fine-tune':'');
-  if(cmImageMode==='adjust')d.onclick=()=>cmOpenAdjust(hex);
+  d.style.cursor='pointer';
+  d.title=hex+' — tap to fine-tune';
+  d.onclick=()=>cmOpenAdjust(hex);
   box.appendChild(d);
  });
 }
+// The mode toggle only controls whether the bulk "use extracted palette" button is offered -
+// tapping an individual swatch to fine-tune it works identically in either mode (see
+// cmRenderExtractedSwatches).
 function cmSetImageMode(mode){
  cmImageMode=mode;
  document.getElementById('cmImageModeHero').classList.toggle('active',mode==='adjust');
  document.getElementById('cmImageModePalette').classList.toggle('active',mode==='palette');
  document.getElementById('cmApplyExtracted').style.display=(mode==='palette'&&cmExtractedColours.length)?'block':'none';
- if(mode!=='adjust')document.getElementById('cmImageAdjustBox').style.display='none';
  cmRenderExtractedSwatches();
 }
 // Tapping an extracted swatch (in "tap to adjust" mode) never touches the mood palette or the
