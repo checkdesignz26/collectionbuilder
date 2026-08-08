@@ -815,6 +815,9 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       </div>
       <p class="footerNote" style="margin-top:9px">Redrawing real motif PNGs on every drag frame is what makes dragging feel laggy once several are placed. Switch to placeholders while you rearrange, then flip back to check the real preview - nothing placed is lost either way.</p>
       <button id="motifDisplayModeBtn" class="full">showing: motifs</button>
+      <p class="footerNote" style="margin-top:9px">Shapes with a motif assigned right now (tap one to clear just that shape) - a shape stays assigned across every layout until you clear it here, even ones you selected a while ago.</p>
+      <div class="swatches" id="assignedShapesList"><span class="footerNote">none yet</span></div>
+      <button id="clearAllMotifsBtn" class="full" style="margin-top:7px">clear all motif assignments</button>
     </div></div>
 
     <div class="box"><h2>layouts</h2><div class="body">
@@ -1255,6 +1258,7 @@ function placeMotifOnSelected(){
  bricks.forEach(x=>{if(x.type===b.type)x.motifUrl=m.dataUrl;});
  render();
  renderGrid();
+ renderAssignedShapes();
 }
 function clearMotifFromSelected(){
  const b=selectedBrick();
@@ -1264,6 +1268,33 @@ function clearMotifFromSelected(){
  bricks.forEach(x=>{if(x.type===b.type)delete x.motifUrl;});
  render();
  renderGrid();
+ renderAssignedShapes();
+}
+// A shape's motif assignment (motifShapes) outlives the layout it was made on and the brick you
+// selected to make it - it's easy to forget a shape got assigned a motif several layouts/minutes
+// ago and have it silently reappear wherever that shape shows up. This lists every shape
+// currently assigned, independent of what's selected or which layout is open, so it can be
+// cleared precisely instead of hunting down one instance of that shape to select first.
+function renderAssignedShapes(){
+ const box=document.getElementById('assignedShapesList');if(!box)return;
+ const types=Object.keys(motifShapes);
+ if(!types.length){box.innerHTML='<span class="footerNote">none yet</span>';return;}
+ box.innerHTML='';
+ types.forEach(type=>{
+  const d=document.createElement('div');
+  d.className='motifThumb';
+  d.style.backgroundImage=`url(${motifShapes[type]})`;
+  d.title=type+' — tap to clear';
+  d.onclick=()=>{
+   pushHistory();
+   delete motifShapes[type];
+   bricks.forEach(x=>{if(x.type===type)delete x.motifUrl;});
+   render();
+   renderGrid();
+   renderAssignedShapes();
+  };
+  box.appendChild(d);
+ });
 }
 function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');const onMove=ev=>{const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/3:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp)};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
 // width/height sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and
@@ -1311,6 +1342,16 @@ document.getElementById('motifFile').addEventListener('change',handleMotifUpload
 document.getElementById('placeMotifBtn').onclick=placeMotifOnSelected;
 document.getElementById('clearMotifBtn').onclick=clearMotifFromSelected;
 document.getElementById('motifDisplayModeBtn').onclick=()=>{showMotifs=!showMotifs;const btn=document.getElementById('motifDisplayModeBtn');btn.textContent='showing: '+(showMotifs?'motifs':'placeholders');btn.classList.toggle('active',!showMotifs);render();renderGrid();};
+document.getElementById('clearAllMotifsBtn').onclick=()=>{
+ if(!Object.keys(motifShapes).length)return;
+ pushHistory();
+ motifShapes={};
+ bricks.forEach(x=>{if(x.motifUrl)delete x.motifUrl;});
+ render();
+ renderGrid();
+ renderAssignedShapes();
+};
+renderAssignedShapes();
 renderMotifTray();
 document.getElementById('repeatBtn').onclick=()=>{mode='repeat';repeatBtn.classList.add('active');singleBtn.classList.remove('active');render();};document.getElementById('singleBtn').onclick=()=>{mode='single';singleBtn.classList.add('active');repeatBtn.classList.remove('active');render();};
 document.getElementById('edgeBtn').onclick=()=>{edgeClones=!edgeClones;edgeBtn.classList.toggle('active',edgeClones);render();};document.getElementById('deleteBtn').onclick=()=>{pushHistory();bricks=bricks.filter(b=>b.id!==selected);selected=bricks[0]?.id||null;render();syncControls();};document.getElementById('arrowsBtn').onclick=()=>{const b=selectedBrick();if(b){pushHistory();const flows=['','↑','→','↓','←','↗','↘','↙','↖','↻','↔','↕'];const i=flows.indexOf(b.flow||'');b.flow=flows[(i+1)%flows.length];render();}};document.getElementById('dup').onclick=()=>{const b=selectedBrick();if(!b)return;pushHistory();const n={...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:b.x+6,y:b.y+6};bricks.push(n);selected=n.id;render();syncControls();};
