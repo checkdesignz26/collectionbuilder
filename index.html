@@ -788,6 +788,8 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 .livePreviewHeader{display:flex;align-items:center;gap:8px;margin:16px auto 0;max-width:880px}
 .livePreviewHeader .livePreviewBadge{margin-left:0}
 .livePreviewHeader .footerNote{margin-top:0}
+.filmCheck{position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:6px;background:rgba(20,10,24,.78);border:1px solid rgba(255,255,255,.45);display:grid;place-items:center;font-size:13px;color:#fff;z-index:2}
+.filmCheck.checked{background:linear-gradient(90deg,var(--purple),var(--pink));border-color:#fff}
 
 </style>
 </head>
@@ -1198,6 +1200,59 @@ function injectPngDPI(arrayBuffer,dpi){
  out.set(bytes.subarray(ihdrEnd),ihdrEnd+chunk.length);
  return out.buffer;
 }
+// Shared by every export context (main canvas, Classics Studio, Background Studio,
+// and their filmstrip batch-ZIP downloads) so the DPI-tagging/download/naming logic
+// only exists once.
+async function canvasToDpiPngBytes(canvas,dpi){
+ const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+ if(!blob)throw new Error('canvas.toBlob returned null');
+ return new Uint8Array(injectPngDPI(await blob.arrayBuffer(),dpi));
+}
+function triggerBlobDownload(blob,filename){
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download=filename;
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+function slugName(s){return (String(s||'pattern').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase())||'pattern';}
+// Minimal ZIP writer (STORED/uncompressed entries) - PNGs are already internally
+// compressed so DEFLATE would barely help, and skipping it avoids needing a whole
+// compression implementation just to bundle a handful of exported PNGs together.
+function makeZip(files){
+ const encoder=new TextEncoder();
+ const localParts=[],centralParts=[];
+ let offset=0;
+ const now=new Date();
+ const dosTime=((now.getHours()&0x1F)<<11)|((now.getMinutes()&0x3F)<<5)|((now.getSeconds()>>1)&0x1F);
+ const dosDate=(((now.getFullYear()-1980)&0x7F)<<9)|(((now.getMonth()+1)&0xF)<<5)|(now.getDate()&0x1F);
+ files.forEach(f=>{
+  const nameBytes=encoder.encode(f.name),data=f.data,crc=crc32(data);
+  const local=new Uint8Array(30+nameBytes.length),lv=new DataView(local.buffer);
+  lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0,true);lv.setUint16(8,0,true);
+  lv.setUint16(10,dosTime,true);lv.setUint16(12,dosDate,true);lv.setUint32(14,crc,true);
+  lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);
+  lv.setUint16(26,nameBytes.length,true);lv.setUint16(28,0,true);
+  local.set(nameBytes,30);
+  localParts.push(local,data);
+  const central=new Uint8Array(46+nameBytes.length),cv=new DataView(central.buffer);
+  cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);cv.setUint16(8,0,true);cv.setUint16(10,0,true);
+  cv.setUint16(12,dosTime,true);cv.setUint16(14,dosDate,true);cv.setUint32(16,crc,true);
+  cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);
+  cv.setUint16(28,nameBytes.length,true);cv.setUint16(30,0,true);cv.setUint16(32,0,true);cv.setUint16(34,0,true);cv.setUint16(36,0,true);
+  cv.setUint32(38,0,true);cv.setUint32(42,offset,true);
+  central.set(nameBytes,46);
+  centralParts.push(central);
+  offset+=local.length+data.length;
+ });
+ const centralStart=offset;
+ const centralSize=centralParts.reduce((n,c)=>n+c.length,0);
+ const eocd=new Uint8Array(22),ev=new DataView(eocd.buffer);
+ ev.setUint32(0,0x06054b50,true);ev.setUint16(4,0,true);ev.setUint16(6,0,true);
+ ev.setUint16(8,files.length,true);ev.setUint16(10,files.length,true);
+ ev.setUint32(12,centralSize,true);ev.setUint32(16,centralStart,true);ev.setUint16(20,0,true);
+ return new Blob([...localParts,...centralParts,eocd],{type:'application/zip'});
+}
 window.exportPatternPNG=async function(pxSize,dpi){
  const dims=tileCanvasDims(pxSize);
  const scale=pxSize/STAGE;
@@ -1208,16 +1263,9 @@ window.exportPatternPNG=async function(pxSize,dpi){
  const ctx=canvas.getContext('2d');
  ctx.fillStyle='#fff';ctx.fillRect(0,0,dims.w,dims.h);
  ctx.drawImage(img,0,0,dims.w,dims.h);
- const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
- if(!blob)throw new Error('canvas.toBlob returned null');
- const withDpi=injectPngDPI(await blob.arrayBuffer(),dpi);
- const finalBlob=new Blob([withDpi],{type:'image/png'});
- const name=(presets[current]?.name||(savedTemplates.find(t=>t.key===current)||{}).name||current||'pattern').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
- const a=document.createElement('a');
- a.href=URL.createObjectURL(finalBlob);
- a.download=`${name||'pattern'}-${dims.w}x${dims.h}-${dpi}dpi.png`;
- document.body.appendChild(a);a.click();a.remove();
- setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+ const bytes=await canvasToDpiPngBytes(canvas,dpi);
+ const name=slugName(presets[current]?.name||(savedTemplates.find(t=>t.key===current)||{}).name||current);
+ triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${name}-${dims.w}x${dims.h}-${dpi}dpi.png`);
  return {width:dims.w,height:dims.h};
 };
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';c.innerHTML=`<button class="filmDelete tsFilmDelete" title="delete">×</button><div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}loadSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
@@ -1889,10 +1937,10 @@ cmRenderSwatches(DEFAULT_COLORS);
 window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();if(!restoreAutosave())setPreset('grid');
 </script>
 
-<div id="downloadOverlay" class="bgStudioOverlay" aria-hidden="true">
+<div id="downloadOverlay" class="bgStudioOverlay" style="z-index:20000" aria-hidden="true">
   <div class="bgStudioModal" style="grid-template-rows:auto auto;height:auto;width:min(520px,calc(100vw - 16px))">
     <div class="bgStudioHeader">
-      <div><h2>download pattern</h2><p>export the current tile as a print-ready PNG</p></div>
+      <div><h2 id="dlTitle">download pattern</h2><p>export as a print-ready PNG</p></div>
       <button id="dlClose" class="small bgClose">×</button>
     </div>
     <div style="padding:16px 18px;display:grid;gap:12px">
@@ -1908,16 +1956,28 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
 </div>
 <script>
 (function(){
- function openDl(){const o=document.getElementById('downloadOverlay');o.classList.add('open');o.setAttribute('aria-hidden','false');updateShapeNote();}
+ // Generic single-PNG download panel, reused by the main canvas, Classics Studio
+ // and Background Studio: each caller supplies its own export function (given
+ // width+dpi, returns a Promise) and a note-generator (re-run whenever the size
+ // field changes, since half-drop/half-brick's rectangle dimensions depend on it).
+ let activeExportFn=null, activeNoteFn=null;
+ window.openDownloadPanel=function(title,exportFn,noteFn){
+  activeExportFn=exportFn;activeNoteFn=noteFn;
+  document.getElementById('dlTitle').textContent=title||'download pattern';
+  updateShapeNote();
+  const o=document.getElementById('downloadOverlay');o.classList.add('open');o.setAttribute('aria-hidden','false');
+ };
  function closeDl(){const o=document.getElementById('downloadOverlay');o.classList.remove('open');o.setAttribute('aria-hidden','true');}
  function updateShapeNote(){
   const note=document.getElementById('dlShapeNote');
   const w=Math.max(200,Math.min(12000,+document.getElementById('dlWidth').value||3600));
-  if(current==='halfdrop'||current==='halfdropflip'){note.textContent=`Half-drop can't tile correctly as a plain square, so this exports a ${w*2}×${w}px rectangle (2 tiles wide, stagger baked in) that tiles edge-to-edge in any software.`;}
-  else if(current==='halfbrick'){note.textContent=`Half-brick can't tile correctly as a plain square, so this exports a ${w}×${w*2}px rectangle (2 tiles tall, stagger baked in) that tiles edge-to-edge in any software.`;}
-  else{note.textContent=`Exports a single ${w}×${w}px seamless tile.`;}
+  note.textContent=activeNoteFn?activeNoteFn(w):`Exports a single ${w}×${w}px seamless tile.`;
  }
- document.getElementById('openDownload').onclick=openDl;
+ document.getElementById('openDownload').onclick=()=>window.openDownloadPanel('download pattern',window.exportPatternPNG,w=>{
+  if(current==='halfdrop'||current==='halfdropflip')return `Half-drop can't tile correctly as a plain square, so this exports a ${w*2}×${w}px rectangle (2 tiles wide, stagger baked in) that tiles edge-to-edge in any software.`;
+  if(current==='halfbrick')return `Half-brick can't tile correctly as a plain square, so this exports a ${w}×${w*2}px rectangle (2 tiles tall, stagger baked in) that tiles edge-to-edge in any software.`;
+  return `Exports a single ${w}×${w}px seamless tile.`;
+ });
  document.getElementById('dlClose').onclick=closeDl;
  document.getElementById('downloadOverlay').addEventListener('click',e=>{if(e.target.id==='downloadOverlay')closeDl();});
  document.getElementById('dlWidth').addEventListener('input',updateShapeNote);
@@ -1926,7 +1986,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
   const w=Math.max(200,Math.min(12000,+document.getElementById('dlWidth').value||3600));
   const dpi=Math.max(72,Math.min(1200,+document.getElementById('dlDpi').value||300));
   btn.disabled=true;status.textContent='rendering…';
-  try{await window.exportPatternPNG(w,dpi);status.textContent='downloaded ✓';}
+  try{await activeExportFn(w,dpi);status.textContent='downloaded ✓';}
   catch(e){console.error('export failed',e);status.textContent='export failed — see console';}
   btn.disabled=false;
   setTimeout(()=>{status.textContent='';},2500);
@@ -1938,7 +1998,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
   <div class="tsModal">
     <div class="tsHeader">
       <div><h2>classics studio</h2><p>shared studio for stripes, dots, checks, plaid, argyle · still inside PKM</p></div>
-      <div class="topActions"><button id="tsApplyToPKM" class="small primary">apply to template</button><button id="tsSave" class="small">save classic</button><button id="tsUndo" class="small">↶ undo</button><button id="tsRedo" class="small">↷ redo</button><span id="tsStatus" class="saveStatus"></span><button id="tsReset" class="small">reset classic</button><button id="tsClose" class="tsClose">×</button></div>
+      <div class="topActions"><button id="tsApplyToPKM" class="small primary">apply to template</button><button id="tsSave" class="small">save classic</button><button id="tsDownload" class="small">download PNG</button><button id="tsUndo" class="small">↶ undo</button><button id="tsRedo" class="small">↷ redo</button><span id="tsStatus" class="saveStatus"></span><button id="tsReset" class="small">reset classic</button><button id="tsClose" class="tsClose">×</button></div>
     </div>
     <div class="tsBody">
       <aside class="tsPanel">
@@ -2012,7 +2072,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
     </div>
-    <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint">tap to load · all classic pattern types live together</span></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
+    <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint" id="tsFilmHint">tap to load · all classic pattern types live together</span><button id="tsSelectMode" class="small">select</button><button id="tsDownloadSelected" class="small primary hidden">download selected (zip)</button></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
   </div>
 </div>
 
@@ -2285,6 +2345,9 @@ function wire(){
  if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal'); if($('tsApplyGroupStyle'))$('tsApplyGroupStyle').onclick=applyGroupStyle; if($('tsCopyToHorizontal'))$('tsCopyToHorizontal').onclick=()=>duplicateSequenceTo('horizontal'); if($('tsCopyToDiag1'))$('tsCopyToDiag1').onclick=()=>duplicateSequenceTo('diag1'); if($('tsCopyToDiag2'))$('tsCopyToDiag2').onclick=()=>duplicateSequenceTo('diag2'); if($('tsDuplicateSequence'))$('tsDuplicateSequence').onclick=()=>duplicateSequence(false); if($('tsPlaidAction'))$('tsPlaidAction').onclick=()=>duplicateSequence(true);
  $('tsReset').onclick=()=>{tsPushHistory();state=defaultFor(state.type);selected=0;renderAll();};$('tsSave').onclick=saveTexture; if($('tsUndo'))$('tsUndo').onclick=tsUndo; if($('tsRedo'))$('tsRedo').onclick=tsRedo; const ov=$('textureStudioOverlay'); let tsTap=null; ov.addEventListener('touchend',e=>{if(!ov.classList.contains('open'))return; if(e.changedTouches.length===2||e.touches.length===2){e.preventDefault();tsUndo();} if(e.changedTouches.length===3||e.touches.length===3){e.preventDefault();tsRedo();}}, {passive:false});
  if($('tsApplyToPKM'))$('tsApplyToPKM').onclick=applyToPKM;
+ if($('tsDownload'))$('tsDownload').onclick=()=>window.openDownloadPanel('download classic pattern',async(w,dpi)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,state,'single',false);const bytes=await canvasToDpiPngBytes(canvas,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(state.type||'classic')}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current single tile as a seamless ${w}×${w}px PNG.`);
+ if($('tsSelectMode'))$('tsSelectMode').onclick=tsToggleSelectMode;
+ if($('tsDownloadSelected'))$('tsDownloadSelected').onclick=tsDownloadSelectedZip;
  if($('tsGreyModeBtn'))$('tsGreyModeBtn').onclick=()=>tsShowMode('grey');
  if($('tsColourModeBtn'))$('tsColourModeBtn').onclick=()=>tsShowMode('colour');
 }
@@ -2368,7 +2431,27 @@ function saveTexture(){
    setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
  },0);
 }
-function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';card.innerHTML=`<button class="tsFilmDelete" title="delete">×</button><canvas width="180" height="180"></canvas><span>${s.name}</span>`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} state=copy(s.state);selected=0;renderAll();};card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+let tsSelectMode=false,tsSelectedIdx=new Set();
+function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${s.name}</span>`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+function tsUpdateSelectUI(){const btn=$('tsDownloadSelected');if(!btn)return;btn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!tsSelectedIdx.size;}
+function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
+async function tsDownloadSelectedZip(){
+ if(!tsSelectedIdx.size)return;
+ const count=tsSelectedIdx.size;
+ window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
+  const files=[],used=new Set();
+  for(const i of tsSelectedIdx){
+   const s=saved[i];if(!s)continue;
+   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;
+   renderPreview(canvas,w,s.state,'single',false);
+   const bytes=await canvasToDpiPngBytes(canvas,dpi);
+   let base=slugName(s.name),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
+   files.push({name:`${name}.png`,data:bytes});
+  }
+  if(!files.length)throw new Error('nothing selected');
+  triggerBlobDownload(makeZip(files),`classics-${files.length}-patterns.zip`);
+ },w=>`Exports ${count} selected pattern${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`);
+}
 /* v66 template-mode bridge: Classics Studio is a self-contained canvas editor with no
    link to the live template. "apply to template" snapshots the edited pattern into
    tsAppliedState, which is what actually shows on the main stage / travels with a
@@ -2508,7 +2591,7 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
         <pre id="bgRecipeText" class="bgRecipeTextGone"></pre>
       </aside>
     </div>
-    <footer class="bgFilm"><div class="bgFilmHead"><b>🎞️ saved backgrounds</b><span id="bgStatus" class="saveStatus"></span></div><div id="bgFilmstrip" class="bgFilmstrip"></div></footer>
+    <footer class="bgFilm"><div class="bgFilmHead"><b>🎞️ saved backgrounds</b><span id="bgStatus" class="saveStatus"></span><button id="bgSelectMode" class="small">select</button><button id="bgDownloadSelected" class="small primary hidden">download selected (zip)</button></div><div id="bgFilmstrip" class="bgFilmstrip"></div></footer>
   </div>
 </div>
 
@@ -2779,7 +2862,38 @@ function buildBgUI(){
  list.querySelectorAll('.bgBrushBtn').forEach((btn,i)=>{let type=btn.dataset.bgtype,cn=btn.querySelector('canvas'); if(cn){cn.width=W;cn.height=H; drawBackgroundToCanvas(cn,bgDemoRecipe(type,1400+i*97));}});
  syncBgUI();
 }
-function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';card.innerHTML=`<button class="bgFilmDelete">×</button><canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));renderBgFilm();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
+let bgSelectMode=false,bgSelectedIdx=new Set();
+function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));renderBgFilm();return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
+function bgUpdateSelectUI(){const btn=q('bgDownloadSelected');if(!btn)return;btn.textContent=bgSelectedIdx.size?`download ${bgSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!bgSelectedIdx.size;}
+function bgToggleSelectMode(){bgSelectMode=!bgSelectMode;bgSelectedIdx.clear();const btn=q('bgSelectMode');btn.textContent=bgSelectMode?'done':'select';btn.classList.toggle('active',bgSelectMode);q('bgDownloadSelected').classList.toggle('hidden',!bgSelectMode);bgUpdateSelectUI();renderBgFilm();}
+// drawBackgroundToCanvas always draws within a fixed 720x720 internal canvas
+// regardless of the target canvas size, so a high-res export renders at that
+// native resolution first, then scales up - fine detail on very grainy/high-
+// density recipes will read a little softer than a native render, but stays a
+// faithful match to what Background Studio's own preview already shows.
+async function renderBackgroundPNGBytes(rec,w,dpi){
+ const small=document.createElement('canvas');small.width=720;small.height=720;
+ drawBackgroundToCanvas(small,rec);
+ const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;
+ const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+ ctx.drawImage(small,0,0,720,720,0,0,w,w);
+ return await canvasToDpiPngBytes(canvas,dpi);
+}
+async function bgDownloadSelectedZip(){
+ if(!bgSelectedIdx.size)return;
+ const count=bgSelectedIdx.size;
+ window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
+  const files=[],used=new Set();
+  for(const i of bgSelectedIdx){
+   const rec=bgSaved[i];if(!rec)continue;
+   const bytes=await renderBackgroundPNGBytes(rec,w,dpi);
+   let base=slugName(rec.name||'background'),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
+   files.push({name:`${name}.png`,data:bytes});
+  }
+  if(!files.length)throw new Error('nothing selected');
+  triggerBlobDownload(makeZip(files),`backgrounds-${files.length}.zip`);
+ },w=>`Exports ${count} selected background${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`);
+}
 function applyBgToPKM(){bgRecipe.enabled=true;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){} if(typeof render==='function')render(); if(typeof renderGrid==='function')renderGrid();}
 function clearBg(){bgRecipe.enabled=false;bgDataUrl='';try{localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){} if(typeof render==='function')render();}
 function openBg(){q('backgroundStudioOverlay').classList.add('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','false');buildBgUI();renderBgFilm();if(window.mountColourMode){window.mountColourMode('bgColourModeSlot');}bgShowMode('colour');if(bgRecipe.type==='watercolour')window.cmSetBgTarget?.('tex');}
@@ -2817,7 +2931,9 @@ function wireBgEditTools(){
  wireBgCanvas(); updateBgEditUI();
 }
 
-function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>{let a=document.createElement('a');a.download='pkm-background-seamless.png';a.href=recipeToUrl(bgRecipe);a.click();};q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};
+function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName((bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
+ if(q('bgSelectMode'))q('bgSelectMode').onclick=bgToggleSelectMode;
+ if(q('bgDownloadSelected'))q('bgDownloadSelected').onclick=bgDownloadSelectedZip;q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};
  if(q('bgGreyModeBtn'))q('bgGreyModeBtn').onclick=()=>bgShowMode('grey');
  if(q('bgColourModeBtn'))q('bgColourModeBtn').onclick=()=>bgShowMode('colour');
 }
