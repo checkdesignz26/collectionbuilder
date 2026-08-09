@@ -783,6 +783,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   max-height:calc(100% - 12px)!important;
   aspect-ratio:1 / 1!important;
 }
+.livePreviewBadge{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(155,107,255,.2);border:1px solid rgba(155,107,255,.45);color:#d5c4ff;font-weight:950;font-size:10px;text-transform:uppercase;letter-spacing:.03em;margin-left:6px;vertical-align:middle}
 
 </style>
 </head>
@@ -820,7 +821,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <button id="clearAllMotifsBtn" class="full" style="margin-top:7px">clear all motif assignments</button>
     </div></div>
 
-    <div class="box"><h2>repeat layouts</h2><div class="body">
+    <div class="box"><h2>repeat layouts <span class="livePreviewBadge">Live Preview</span></h2><div class="body">
       <p class="hint">All normal repeat layouts are back here. Pick one without opening Background Studio. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
       <div class="grid2">
         <button onclick="setPreset('grid',true)">grid</button>
@@ -859,7 +860,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   </aside>
   <section class="workspace">
     <div class="previewWrap">
-      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active">3×3 repeat</button><button id="singleBtn">single tile</button></div></div>
+      <div class="previewTop"><div><b id="currentName">grid</b> <span class="livePreviewBadge">Live Preview</span><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active">3×3 repeat</button><button id="singleBtn">single tile</button></div></div>
       <div class="stageOuter"><div id="stage" class="repeatStage repeat"></div></div>
       <div class="skeletonGrid" id="skeletonGrid"></div>
       <div class="filmstripBlock">
