@@ -795,7 +795,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>magic collection builder</h1><p>v62 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill">v60 seamless classics</span><button id="openTextureStudio" class="small primary">classics studio</button><button id="openBackgroundStudio" class="small primary">background studio</button><button id="undoBtn" class="small">undo</button><button id="redoBtn" class="small">redo</button><button id="saveBtn" class="small">save template</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small">reset template</button></div>
+  <div class="topActions"><span class="pill">v60 seamless classics</span><button id="openTextureStudio" class="small primary">classics studio</button><button id="openBackgroundStudio" class="small primary">background studio</button><button id="openDownload" class="small primary">download</button><button id="undoBtn" class="small">undo</button><button id="redoBtn" class="small">redo</button><button id="saveBtn" class="small">save template</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small">reset template</button></div>
 </header>
 <main>
   <aside class="side left">
@@ -1113,6 +1113,113 @@ function restoreAutosave(){
 }
 let saveBusy=false;
 function flashSaveStatus(msg,ok=true){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},1200);}
+
+// --- Pattern export -------------------------------------------------------
+// A plain square tile only reproduces a straight/grid-style repeat when placed
+// edge-to-edge. Half-drop and half-brick repeats stagger alternating columns/rows
+// by half a tile - export those as the true tileable rapport (2 tiles wide or
+// tall, with the stagger baked in) instead of a square, so any software can
+// place the exported PNG edge-to-edge with no special "half-drop" support needed.
+function tileCanvasDims(pxSize){
+ if(current==='halfdrop'||current==='halfdropflip')return{w:pxSize*2,h:pxSize};
+ if(current==='halfbrick')return{w:pxSize,h:pxSize*2};
+ return{w:pxSize,h:pxSize};
+}
+// Mirrors render()'s own brick/background/texture layering exactly (background and
+// classic-pattern layers come along for free since they're injected via the same
+// renderTextureTiles() the live canvas already uses) - built detached from the
+// document so exporting never disturbs what's on screen, at whatever pixel scale
+// the export needs rather than the on-screen canvas's actual display size.
+function buildExportContainer(pxW,pxH,scale){
+ const container=document.createElement('div');
+ container.style.cssText=`position:relative;width:${pxW}px;height:${pxH}px;overflow:hidden;background:#fff;`;
+ const origin=0;
+ renderTextureTiles(container,scale,origin);
+ const drawList=[];
+ bricks.forEach(b=>{drawList.push({b,tx:0,ty:0});if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty});}));}});
+ drawList.forEach(({b,tx,ty})=>{
+  const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;
+  const el=document.createElement('div');
+  el.className='brick';
+  el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';
+  el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';
+  el.style.width=(bw*10*scale)+'px';
+  el.style.height=(bh*10*scale)+'px';
+  el.style.color=colorForBrick(b);
+  el.style.transform=`rotate(${b.rot}deg)`;
+  el.innerHTML=brickHTML(b);
+  container.appendChild(el);
+ });
+ return container;
+}
+function collectPageCSS(){return [...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');}
+// Rasterising via an inline SVG <foreignObject> reuses the app's real CSS (every
+// shape's clip-path, motif image, background/texture layer) exactly as drawn on
+// screen, instead of hand-reimplementing every brick shape in canvas drawing calls.
+function svgDataUrlFor(container,pxW,pxH){
+ const css=collectPageCSS();
+ // foreignObject content must be well-formed XML - .outerHTML serialises void
+ // elements like <img> without a self-closing slash (valid HTML, invalid XML),
+ // which silently fails the whole SVG parse. XMLSerializer gets this right.
+ const containerXML=new XMLSerializer().serializeToString(container);
+ const xml=`<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${pxW}px;height:${pxH}px"><style>${css}</style>${containerXML}</div></foreignObject></svg>`;
+ return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
+}
+function crc32(bytes){
+ let table=crc32._t;
+ if(!table){table=crc32._t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);table[n]=c;}}
+ let crc=0xFFFFFFFF;
+ for(let i=0;i<bytes.length;i++)crc=table[(crc^bytes[i])&0xFF]^(crc>>>8);
+ return (crc^0xFFFFFFFF)>>>0;
+}
+// canvas.toBlob('image/png') never writes a pixel-density chunk, so every viewer
+// assumes 72/96 DPI regardless of pixel dimensions - for a print-ready export the
+// file's own metadata needs to say 300 DPI, which means inserting a real pHYs
+// chunk into the PNG bytes ourselves (right after IHDR, the conventional spot).
+function injectPngDPI(arrayBuffer,dpi){
+ const bytes=new Uint8Array(arrayBuffer);
+ const pxPerMeter=Math.round((dpi||300)*39.3701);
+ const typeAndData=new Uint8Array(13);
+ const tdView=new DataView(typeAndData.buffer);
+ typeAndData.set([0x70,0x48,0x59,0x73],0); // 'pHYs'
+ tdView.setUint32(4,pxPerMeter,false);
+ tdView.setUint32(8,pxPerMeter,false);
+ typeAndData[12]=1; // unit specifier: 1 = metre
+ const crc=crc32(typeAndData);
+ const chunk=new Uint8Array(4+13+4);
+ const chunkView=new DataView(chunk.buffer);
+ chunkView.setUint32(0,9,false); // chunk length field = data length only (9), excludes the 4-byte type
+ chunk.set(typeAndData,4);
+ chunkView.setUint32(4+13,crc,false);
+ const ihdrEnd=8+(4+4+13+4); // 8-byte PNG signature + IHDR's own length/type/data/crc
+ const out=new Uint8Array(bytes.length+chunk.length);
+ out.set(bytes.subarray(0,ihdrEnd),0);
+ out.set(chunk,ihdrEnd);
+ out.set(bytes.subarray(ihdrEnd),ihdrEnd+chunk.length);
+ return out.buffer;
+}
+window.exportPatternPNG=async function(pxSize,dpi){
+ const dims=tileCanvasDims(pxSize);
+ const scale=pxSize/STAGE;
+ const container=buildExportContainer(dims.w,dims.h,scale);
+ const img=new Image();
+ await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('SVG render failed'));img.src=svgDataUrlFor(container,dims.w,dims.h);});
+ const canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
+ const ctx=canvas.getContext('2d');
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,dims.w,dims.h);
+ ctx.drawImage(img,0,0,dims.w,dims.h);
+ const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+ if(!blob)throw new Error('canvas.toBlob returned null');
+ const withDpi=injectPngDPI(await blob.arrayBuffer(),dpi);
+ const finalBlob=new Blob([withDpi],{type:'image/png'});
+ const name=(presets[current]?.name||(savedTemplates.find(t=>t.key===current)||{}).name||current||'pattern').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(finalBlob);
+ a.download=`${name||'pattern'}-${dims.w}x${dims.h}-${dpi}dpi.png`;
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+ return {width:dims.w,height:dims.h};
+};
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';c.innerHTML=`<button class="filmDelete tsFilmDelete" title="delete">×</button><div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}loadSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;if(!confirm('Delete "'+t.name+'" from the filmstrip?'))return;const wasCurrent=current===t.key;savedTemplates.splice(i,1);persistSavedTemplates();if(wasCurrent){setPreset(t.base&&presets[t.base]?t.base:'grid');}else{renderFilmstrip();}}
 function saveTemplateToFilmstrip(){
@@ -1780,6 +1887,51 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 cmRenderSwatches(DEFAULT_COLORS);
 
 window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();if(!restoreAutosave())setPreset('grid');
+</script>
+
+<div id="downloadOverlay" class="bgStudioOverlay" aria-hidden="true">
+  <div class="bgStudioModal" style="grid-template-rows:auto auto;height:auto;width:min(520px,calc(100vw - 16px))">
+    <div class="bgStudioHeader">
+      <div><h2>download pattern</h2><p>export the current tile as a print-ready PNG</p></div>
+      <button id="dlClose" class="small bgClose">×</button>
+    </div>
+    <div style="padding:16px 18px;display:grid;gap:12px">
+      <div class="range" style="grid-template-columns:1fr 1fr">
+        <div><label style="display:block;font-size:12px;color:var(--muted);font-weight:850;margin-bottom:4px">tile size (px)</label><input id="dlWidth" type="number" min="200" max="12000" step="1" value="3600" style="width:100%"></div>
+        <div><label style="display:block;font-size:12px;color:var(--muted);font-weight:850;margin-bottom:4px">DPI</label><input id="dlDpi" type="number" min="72" max="1200" step="1" value="300" style="width:100%"></div>
+      </div>
+      <p class="footerNote" id="dlShapeNote"></p>
+      <button id="dlDownloadBtn" class="small primary">download PNG</button>
+      <p class="footerNote" id="dlStatus"></p>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+ function openDl(){const o=document.getElementById('downloadOverlay');o.classList.add('open');o.setAttribute('aria-hidden','false');updateShapeNote();}
+ function closeDl(){const o=document.getElementById('downloadOverlay');o.classList.remove('open');o.setAttribute('aria-hidden','true');}
+ function updateShapeNote(){
+  const note=document.getElementById('dlShapeNote');
+  const w=Math.max(200,Math.min(12000,+document.getElementById('dlWidth').value||3600));
+  if(current==='halfdrop'||current==='halfdropflip'){note.textContent=`Half-drop can't tile correctly as a plain square, so this exports a ${w*2}×${w}px rectangle (2 tiles wide, stagger baked in) that tiles edge-to-edge in any software.`;}
+  else if(current==='halfbrick'){note.textContent=`Half-brick can't tile correctly as a plain square, so this exports a ${w}×${w*2}px rectangle (2 tiles tall, stagger baked in) that tiles edge-to-edge in any software.`;}
+  else{note.textContent=`Exports a single ${w}×${w}px seamless tile.`;}
+ }
+ document.getElementById('openDownload').onclick=openDl;
+ document.getElementById('dlClose').onclick=closeDl;
+ document.getElementById('downloadOverlay').addEventListener('click',e=>{if(e.target.id==='downloadOverlay')closeDl();});
+ document.getElementById('dlWidth').addEventListener('input',updateShapeNote);
+ document.getElementById('dlDownloadBtn').onclick=async ()=>{
+  const btn=document.getElementById('dlDownloadBtn'),status=document.getElementById('dlStatus');
+  const w=Math.max(200,Math.min(12000,+document.getElementById('dlWidth').value||3600));
+  const dpi=Math.max(72,Math.min(1200,+document.getElementById('dlDpi').value||300));
+  btn.disabled=true;status.textContent='rendering…';
+  try{await window.exportPatternPNG(w,dpi);status.textContent='downloaded ✓';}
+  catch(e){console.error('export failed',e);status.textContent='export failed — see console';}
+  btn.disabled=false;
+  setTimeout(()=>{status.textContent='';},2500);
+ };
+})();
 </script>
 
 <div id="textureStudioOverlay" class="tsOverlay" aria-hidden="true">
