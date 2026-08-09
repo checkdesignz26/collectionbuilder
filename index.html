@@ -1083,6 +1083,34 @@ function undo(){if(!history.length)return;redoStack.push(capture());restore(hist
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
 function loadSavedTemplates(){try{savedTemplates=JSON.parse(localStorage.getItem('pkmSavedSkeletonsV13')||'[]');}catch(e){savedTemplates=[];}}
 function persistSavedTemplates(){localStorage.setItem('pkmSavedSkeletonsV13',JSON.stringify(savedTemplates));}
+// Autosave: the normal workflow here is redeploy-and-reload on an iPad, which used to throw
+// away whatever wasn't explicitly "saved as a template". This snapshots the full working state
+// (not just bricks - motifShapes/shapeStyles too, since those drive every other Live Preview
+// thumbnail) to localStorage, debounced so a drag doesn't write on every pointermove frame.
+const AUTOSAVE_KEY='pkmAutosaveV1';
+let autosaveTimer=null;
+function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
+function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{try{localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(autosaveSnapshot()));}catch(e){console.warn('autosave failed',e);}},900);}
+function restoreAutosave(){
+ let raw;try{raw=localStorage.getItem(AUTOSAVE_KEY);}catch(e){return false;}
+ if(!raw)return false;
+ let data;try{data=JSON.parse(raw);}catch(e){return false;}
+ if(!data||!Array.isArray(data.bricks)||!data.bricks.length)return false;
+ current=data.current||'grid';currentTemplateBase=data.currentTemplateBase||null;
+ blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};
+ bricks=data.bricks;texture=data.texture?copyTexture(data.texture):blankTexture();
+ motifShapes=data.motifShapes||{};shapeStyles=data.shapeStyles||{};styleAllLayouts=!!data.styleAllLayouts;showMotifs=data.showMotifs!==false;
+ renderTextureUI();
+ if(window.bgApplySnapshot)window.bgApplySnapshot(data.background||null);
+ if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic||null);
+ const motifBtn=document.getElementById('motifDisplayModeBtn');if(motifBtn){motifBtn.textContent='showing: '+(showMotifs?'motifs':'placeholders');motifBtn.classList.toggle('active',!showMotifs);}
+ const styleBtn=document.getElementById('styleAllLayoutsBtn');if(styleBtn){styleBtn.textContent='apply to all layouts: '+(styleAllLayouts?'on':'off');styleBtn.classList.toggle('active',styleAllLayouts);}
+ selected=bricks[0]?.id||null;
+ document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;
+ renderGrid();renderFilmstrip();render();syncControls();
+ flashSaveStatus('restored last session ✓');
+ return true;
+}
 let saveBusy=false;
 function flashSaveStatus(msg,ok=true){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},1200);}
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';c.innerHTML=`<button class="filmDelete tsFilmDelete" title="delete">×</button><div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}loadSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
@@ -1348,7 +1376,7 @@ function flowSymbol(b){if(isStructureBrick(b))return ''; if(typeof b.flow==='str
 // it, so edge-straddling motifs/placeholders looked cut off there even though the real canvas
 // shows them seamless. Same edgeClones toggle governs both now.
 function liveMiniHTML(list,ps=getPatternScale(texture)){const sf=ps/100;const offsets=edgeClones?[-100,0,100]:[0];const out=[];(list||[]).forEach(b=>{const col=colorForBrick(b);const bw=b.w*sf,bh=b.h*sf;offsets.forEach(ox=>offsets.forEach(oy=>{const x=b.x+ox,y=b.y+oy;if(b.motifUrl&&showMotifs){out.push(`<div class="miniBrick" style="left:${x-bw/2}%;top:${y-bh/2}%;width:${bw}%;height:${bh}%;transform:rotate(${b.rot}deg)"><img class="miniMotifImg" src="${b.motifUrl}"></div>`);return;}if(['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type)){let bg='transparent';if(b.type==='stripeRow')bg='repeating-linear-gradient(90deg,currentColor 0 5px,transparent 5px 10px)';if(b.type==='polkaRow')bg='radial-gradient(circle,currentColor 0 2px,transparent 3px)';if(b.type==='gingham')bg='linear-gradient(90deg,rgba(0,0,0,.4) 50%,transparent 50%),linear-gradient(rgba(0,0,0,.4) 50%,transparent 50%)';if(b.type==='chevron')bg='linear-gradient(135deg,currentColor 25%,transparent 25%) 0 0/12px 12px,linear-gradient(225deg,currentColor 25%,transparent 25%) 0 0/12px 12px';out.push(`<div class="miniBrick" style="left:${x-bw/2}%;top:${y-bh/2}%;width:${bw}%;height:${bh}%;color:${col};transform:rotate(${b.rot}deg);background:${bg};background-size:12px 12px;border:${b.type==='stripeRow'||b.type==='polkaRow'||b.type==='gingham'||b.type==='chevron'?'0':'1px solid currentColor'}"></div>`);return;}out.push(`<div class="miniBrick" style="left:${x-bw/2}%;top:${y-bh/2}%;width:${bw}%;height:${bh}%;color:${col};transform:rotate(${b.rot}deg)"><div class="miniShape ${miniClass(b.type)}">${flowSymbol(b)?`<span class="miniArrow">${flowSymbol(b)}</span>`:''}</div></div>`);}));});return out.join('');}
-const baseRender=render; render=function(){baseRender();updateLiveMini();};
+const baseRender=render; render=function(){baseRender();updateLiveMini();scheduleAutosave();};
 function miniHTML(key){ if(key==='stripe')return '<div style="height:100%;background:repeating-linear-gradient(0deg,#111 0 8px,#777 8px 16px,#fff 16px 24px)"></div>'; if(key==='gingham')return '<div style="height:100%;background:linear-gradient(90deg,rgba(0,0,0,.5) 50%,transparent 50%),linear-gradient(rgba(0,0,0,.5) 50%,transparent 50%);background-size:18px 18px"></div>'; if(key==='chevron')return '<div style="height:100%;background:linear-gradient(135deg,#111 25%,transparent 25%) 0 0/24px 24px,linear-gradient(225deg,#111 25%,transparent 25%) 0 0/24px 24px"></div>'; if(key==='scallop')return '<div style="height:100%;background:radial-gradient(circle at 14px 100%,transparent 0 13px,#111 14px 16px,transparent 17px);background-size:28px 58px"></div>'; if(key==='plaid')return '<div style="height:100%;background:repeating-linear-gradient(0deg,transparent 0 18px,#111 18px 22px),repeating-linear-gradient(90deg,transparent 0 18px,#777 18px 22px)"></div>'; let dots={grid:[[22,22],[68,22],[22,68],[68,68]],halfdrop:[[50,16],[24,50],[76,50],[50,82]],halfbrick:[[22,24],[76,24],[50,62],[22,84],[76,84]],halfdropflip:[[50,16],[24,55],[76,55],[50,82]],diamond:[[50,14],[24,50],[76,50],[50,84]],tossed:[[30,24],[72,30],[38,68],[78,78]],polka:[[20,20],[70,20],[45,50],[20,80],[70,80]]}[key]||[];return dots.map((d,i)=>`<div class="miniDot" style="left:${d[0]}%;top:${d[1]}%;transform:translate(-50%,-50%);${key==='diamond'?'border-radius:2px;transform:translate(-50%,-50%) rotate(45deg);':''}"></div>`).join('');}
 function addBrick(type){let role=activeColor;let w=20,h=14;if(type==='circle'){w=h=12}else if(type==='square'||type==='diamond'||type==='triangle'||type==='hexagon'||type==='star'||type==='heart'){w=h=15}else if(type.includes('Row')){w=90;h=10;role='black'}else if(type==='gingham'||type==='chevron'){w=100;h=100;role='grey'} if(type==='rectRow'){type='rect';w=85;h=9;role='grey'} role=defaultRoleForType(type); const b=p(type,50,50,w,h,role,0,type==='arrowOval'?'↗':'');bricks.push(b);selected=b.id;render();syncControls();}
 function selectedBrick(){return bricks.find(b=>b.id===selected)}
@@ -1751,7 +1779,7 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 };
 cmRenderSwatches(DEFAULT_COLORS);
 
-window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();setPreset('grid');
+window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();if(!restoreAutosave())setPreset('grid');
 </script>
 
 <div id="textureStudioOverlay" class="tsOverlay" aria-hidden="true">
