@@ -795,7 +795,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 <main>
   <aside class="side left">
     <div class="box"><h2>placeholders</h2><div class="body">
-      <p class="hint">Add outline placeholders to the selected layout skeleton. Classic pattern tools live in Classics Studio now.</p>
+      <p class="hint">Add outline placeholders to the selected repeat layout. Classic pattern tools live in Classics Studio now.</p>
       <div class="grid2">
         <button data-add="oval">⬭ oval</button><button data-add="circle">○ circle</button>
         <button data-add="rect">▭ rectangle</button><button data-add="square">□ square</button>
@@ -805,7 +805,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div></div>
 
     <div class="box"><h2>motifs</h2><div class="body">
-      <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Switching layouts carries the same motifs over to whichever placeholders share those shapes there, so you can flip through layouts to preview the placement.</p>
+      <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Live Preview carries the same motifs over to whichever placeholders share those shapes in every other repeat layout, so you can flip through them to compare the placement.</p>
       <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
       <button class="full" id="motifUploadBtn">upload motifs</button>
       <div class="swatches" id="motifTray"><span class="footerNote">no motifs uploaded yet</span></div>
@@ -820,8 +820,8 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <button id="clearAllMotifsBtn" class="full" style="margin-top:7px">clear all motif assignments</button>
     </div></div>
 
-    <div class="box"><h2>layouts</h2><div class="body">
-      <p class="hint">All normal pattern skeletons are back here. Pick a layout without opening Background Studio.</p>
+    <div class="box"><h2>repeat layouts</h2><div class="body">
+      <p class="hint">All normal repeat layouts are back here. Pick one without opening Background Studio. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
       <div class="grid2">
         <button onclick="setPreset('grid',true)">grid</button>
         <button onclick="setPreset('halfdrop',true)">half drop</button>
@@ -859,7 +859,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   </aside>
   <section class="workspace">
     <div class="previewWrap">
-      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected skeleton + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active">3×3 repeat</button><button id="singleBtn">single tile</button></div></div>
+      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active">3×3 repeat</button><button id="singleBtn">single tile</button></div></div>
       <div class="stageOuter"><div id="stage" class="repeatStage repeat"></div></div>
       <div class="skeletonGrid" id="skeletonGrid"></div>
       <div class="filmstripBlock">
@@ -881,7 +881,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <div class="range"><label>width</label><input id="wRange" type="range" min="4" max="100" value="24"></div>
       <div class="range"><label>height</label><input id="hRange" type="range" min="4" max="100" value="16"></div>
       <div class="range"><label>rotate</label><input id="rRange" type="range" min="-180" max="180" value="0"></div>
-      <p class="footerNote">Width/height/rotate follow the scope above (same shape by default) within this layout. Turn this on to also carry the change to every other layout's matching shape.</p>
+      <p class="footerNote">Width/height/rotate follow the scope above (same shape by default) within this layout. Turn this on to have Live Preview also carry the change to every other repeat layout's matching shape.</p>
       <button id="styleAllLayoutsBtn" class="full">apply to all layouts: off</button>
       <div class="grid2"><button id="arrowsBtn">toggle arrows</button><button id="deleteBtn">delete</button></div>
     </div></div>
@@ -1081,7 +1081,7 @@ function saveTemplateToFilmstrip(){
  flashSaveStatus('saving…');
  saveCurrentBlueprint();
  const count=savedTemplates.length+1;
- const name=(presets[current]?.name||'skeleton')+' '+count;
+ const name=(presets[current]?.name||'layout')+' '+count;
  const key='saved_'+Date.now();
  savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,colourways:[],activeColourwayId:null});
  renderFilmstrip();
