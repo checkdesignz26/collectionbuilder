@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Magic Builder v64 — Greyscale Background Studio Brush Previews</title>
+<title>Magic Builder — Greyscale Background Studio Brush Previews</title>
 <style>
 :root{--bg:#171020;--panel:#241b31;--panel2:#302541;--line:rgba(255,235,250,.16);--text:#fff8fb;--muted:#d8cede;--pink:#ff8ed6;--purple:#9b6bff;--blue:#6bb7ff;--green:#73d48c;--orange:#ffb45f;--grey:#8d8796;}
 *{box-sizing:border-box} html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at 10% 0%,rgba(155,107,255,.22),transparent 30%),radial-gradient(circle at 92% 8%,rgba(255,142,214,.14),transparent 30%),linear-gradient(135deg,#1c1026,#121729);color:var(--text)}
 button,input,select{font:inherit} button,select,input{border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.045));color:var(--text);border-radius:12px;padding:8px 10px;font-weight:850;box-shadow:none} button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}.saveStatus{font-size:12px;color:#73d48c;font-weight:900;min-width:80px;display:inline-block} button.active{outline:2px solid rgba(255,142,214,.9);background:linear-gradient(90deg,rgba(155,107,255,.35),rgba(255,142,214,.24))}.primary{border:0!important;background:linear-gradient(90deg,var(--purple),var(--pink))!important}.small{font-size:12px;padding:6px 8px;border-radius:10px}.app{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr)}
 header{min-height:86px;display:grid;grid-template-columns:360px 1fr;align-items:center;gap:16px;padding:16px 20px;background:linear-gradient(180deg,rgba(38,29,50,.98),rgba(23,19,35,.96));border-bottom:1px solid var(--line);box-shadow:0 15px 35px rgba(0,0,0,.26)}.brand{display:flex;gap:13px;align-items:center}.logo{width:46px;height:46px;border-radius:14px;border:1px solid var(--line);display:grid;place-items:center;background:rgba(255,255,255,.055);font-size:28px}.brand h1{margin:0;font-size:25px;line-height:1;text-transform:lowercase}.brand p{margin:5px 0 0;color:var(--muted);font-size:12px;font-weight:760}.topActions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap}.pill{font-size:12px;color:#ffe4f7;border:1px solid rgba(255,142,214,.25);background:rgba(255,142,214,.08);border-radius:999px;padding:7px 10px;font-weight:900}
-main{display:grid;grid-template-columns:300px minmax(0,1fr) 330px;min-height:0}.side{min-height:0;overflow:auto;padding:12px;background:linear-gradient(180deg,rgba(39,31,54,.94),rgba(25,21,38,.96));border-right:1px solid var(--line)}.side.right{border-right:0;border-left:1px solid var(--line)}.box{border:1px solid rgba(255,235,250,.10);background:rgba(255,255,255,.035);border-radius:16px;margin-bottom:12px;overflow:hidden}.box h2{margin:0;padding:10px 12px;font-size:14px;text-transform:lowercase;border-bottom:1px solid rgba(255,235,250,.09);background:rgba(255,255,255,.04)}.body{padding:11px}.hint{font-size:12px;line-height:1.35;color:var(--muted);margin:0 0 9px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.full{width:100%;margin:4px 0}.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.sw{height:34px;border-radius:10px;border:2px solid rgba(255,255,255,.25);cursor:pointer}.sw.active{outline:3px solid var(--pink)}.motifThumb{height:48px;border-radius:10px;border:2px solid rgba(255,255,255,.25);cursor:pointer;position:relative;background-size:cover;background-position:center;background-color:#fff}.motifThumb.active{outline:3px solid var(--pink)}.motifThumb .motifDel{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;background:#1a1420;border:1px solid rgba(255,255,255,.4);color:#fff;font-size:11px;line-height:16px;text-align:center;cursor:pointer}.brick .motifImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;display:block}
+main{display:grid;grid-template-columns:300px minmax(0,1fr) 330px;min-height:0}.side{min-height:0;overflow:auto;padding:12px;background:linear-gradient(180deg,rgba(39,31,54,.94),rgba(25,21,38,.96));border-right:1px solid var(--line)}.side.right{border-right:0;border-left:1px solid var(--line)}.box{border:1px solid rgba(255,235,250,.10);background:rgba(255,255,255,.035);border-radius:16px;margin-bottom:12px;overflow:hidden}.box h2{margin:0;padding:10px 12px;font-size:14px;text-transform:lowercase;border-bottom:1px solid rgba(255,235,250,.09);background:rgba(255,255,255,.04)}.body{padding:11px}.hint{font-size:12px;line-height:1.35;color:var(--muted);margin:0 0 9px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.full{width:100%;margin:4px 0}.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.sw{height:34px;border-radius:10px;border:2px solid rgba(255,255,255,.25);cursor:pointer;position:relative;transition:transform .12s ease,box-shadow .12s ease,outline .12s ease}.sw.active{outline:3px solid var(--pink)}.sw.selected{outline:3px solid #fff;box-shadow:0 0 0 5px rgba(255,142,214,.95),0 0 18px rgba(255,142,214,.45);transform:scale(1.06);z-index:2}.sw.selected::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:18px;font-weight:1000;text-shadow:0 1px 3px rgba(0,0,0,.55);}.motifThumb{height:48px;border-radius:10px;border:2px solid rgba(255,255,255,.25);cursor:pointer;position:relative;background-size:cover;background-position:center;background-color:#fff}.motifThumb.active{outline:3px solid var(--pink)}.motifThumb .motifDel{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;background:#1a1420;border:1px solid rgba(255,255,255,.4);color:#fff;font-size:11px;line-height:16px;text-align:center;cursor:pointer}.brick .motifImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;display:block}
 .workspace{min-height:0;overflow:auto;padding:18px 20px 110px;background:linear-gradient(90deg,rgba(255,232,248,.025) 1px,transparent 1px),linear-gradient(rgba(255,232,248,.025) 1px,transparent 1px),linear-gradient(135deg,#21152b,#151a2d);background-size:36px 36px,36px 36px,auto}.previewWrap{max-width:880px;margin:0 auto}.previewTop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}.seg{display:flex;gap:5px;padding:5px;border:1px solid rgba(255,235,250,.13);background:rgba(255,255,255,.04);border-radius:14px}.seg button{font-size:12px;padding:7px 10px}.stageOuter{background:rgba(9,8,16,.42);border:1px solid rgba(255,235,250,.12);border-radius:22px;padding:14px;box-shadow:0 25px 60px rgba(0,0,0,.25)}.repeatStage{position:relative;margin:auto;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 14px 35px rgba(0,0,0,.35);touch-action:none}.repeatStage.repeat{width:min(100%,720px);aspect-ratio:1}.repeatStage.single{width:min(100%,520px);aspect-ratio:1}.tileGuide{position:absolute;border:1px dashed rgba(30,30,40,.23);pointer-events:none}.tileGuide.center{border:2px solid rgba(155,107,255,.45);box-shadow:0 0 0 1px rgba(255,255,255,.3) inset}.brick{position:absolute;display:grid;place-items:center;touch-action:none;user-select:none;transform-origin:center center}.brick.selected{outline:2px solid rgba(255,142,214,.98);outline-offset:3px}.brick .shape{width:100%;height:100%;display:grid;place-items:center;background:transparent}.outline{border:4px solid currentColor;background:transparent!important}.oval{border-radius:50%}.circle{border-radius:50%}.rect{border-radius:12px}.square{border-radius:8px}.diamond{transform:rotate(45deg);border-radius:8px}.diamond .inner{transform:rotate(-45deg)}.triangle,.hexagon,.ogeeLens{border:0!important;position:relative;background:transparent!important}.triangle:before,.hexagon:before,.ogeeLens:before,.triangle:after,.hexagon:after,.ogeeLens:after{content:"";position:absolute;inset:0;clip-path:var(--clip);background:currentColor}.triangle:after,.hexagon:after,.ogeeLens:after{inset:5px;background:#fff}.triangle{--clip:polygon(50% 3%,96% 92%,4% 92%)}.hexagon{--clip:polygon(25% 5%,75% 5%,98% 50%,75% 95%,25% 95%,2% 50%)}.ogeeLens{--clip:polygon(50% 2%,64% 10%,76% 22%,84% 36%,87% 50%,84% 64%,76% 78%,64% 90%,50% 98%,36% 90%,24% 78%,16% 64%,13% 50%,16% 36%,24% 22%,36% 10%)}.triangle .flowArrow,.hexagon .flowArrow,.ogeeLens .flowArrow{z-index:2}.heart{clip-path:path('M50 88 C20 62 5 48 8 28 C12 5 38 4 50 23 C62 4 88 5 92 28 C95 48 80 62 50 88 Z');background:currentColor}.star{clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 55%,79% 90%,50% 68%,21% 90%,32% 55%,4% 35%,39% 35%);background:currentColor}.flowArrow{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(8px,1.45vw,15px);font-weight:900;line-height:1;color:currentColor;opacity:.52;pointer-events:none;text-shadow:0 1px 0 rgba(255,255,255,.72)}.diamond .flowArrow{transform:rotate(-45deg)}.rowStripe{background:repeating-linear-gradient(90deg,#111 0 14px,#777 14px 28px,#fff 28px 42px)!important;border:0!important}.scallopRow{background:radial-gradient(circle at 20px 100%,transparent 0 20px,#111 21px 24px,transparent 25px),linear-gradient(#111,#111);background-size:40px 100%,100% 4px;background-repeat:repeat-x,no-repeat;background-position:0 0,0 50%;border:0!important}.bowRow{font-size:28px;letter-spacing:14px;white-space:nowrap;overflow:hidden;color:#111}.laceRow{background:radial-gradient(circle,#111 0 3px,transparent 4px),linear-gradient(90deg,transparent 0 10px,#111 10px 12px,transparent 12px 22px);background-size:22px 22px,22px 100%;border-top:3px solid #111;border-bottom:3px solid #111}.polkaRow{background:radial-gradient(circle,#111 0 7px,transparent 8px);background-size:40px 40px}.gingham{background:linear-gradient(90deg,rgba(0,0,0,.42) 50%,transparent 50%),linear-gradient(rgba(0,0,0,.42) 50%,transparent 50%);background-size:36px 36px}.chevron{background:linear-gradient(135deg,#111 25%,transparent 25%) 0 0/36px 36px,linear-gradient(225deg,#111 25%,transparent 25%) 0 0/36px 36px}.clone{opacity:1;pointer-events:none}.selected.clone{outline:0}.handle{position:absolute;right:-8px;bottom:-8px;width:18px;height:18px;border-radius:6px;background:linear-gradient(90deg,var(--purple),var(--pink));border:2px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35);touch-action:none;z-index:5}.skeletonGrid{display:grid;grid-template-columns:repeat(6,minmax(82px,1fr));gap:10px;margin:16px auto 0;max-width:880px}.skelCard{border-radius:16px;border:1px solid rgba(255,235,250,.12);background:rgba(255,255,255,.045);padding:8px;cursor:pointer}.skelCard.active{outline:3px solid rgba(255,142,214,.75);background:rgba(255,142,214,.08)}.mini{width:100%;aspect-ratio:1;background:#fff;border-radius:10px;overflow:hidden;position:relative;margin-bottom:7px}.skelCard span{display:block;font-size:12px;font-weight:950;text-align:center;color:#ffe9fb}.miniDot{position:absolute;border:2px solid #111;border-radius:50%;width:16px;height:16px}.miniBrick{position:absolute;display:grid;place-items:center;transform-origin:center}.miniShape{width:100%;height:100%;border:2px solid currentColor;background:transparent;display:grid;place-items:center}.miniOval,.miniCircle{border-radius:50%}.miniRect{border-radius:5px}.miniSquare{border-radius:4px}.miniDiamond{transform:rotate(45deg);border-radius:3px}.miniTriangle{clip-path:polygon(50% 3%,96% 92%,4% 92%);background:currentColor;border:0}.miniHexagon{clip-path:polygon(25% 5%,75% 5%,98% 50%,75% 95%,25% 95%,2% 50%);background:currentColor;border:0}.miniOgeeLens{clip-path:polygon(50% 2%,64% 10%,76% 22%,84% 36%,87% 50%,84% 64%,76% 78%,64% 90%,50% 98%,36% 90%,24% 78%,16% 64%,13% 50%,16% 36%,24% 22%,36% 10%);background:currentColor;border:0}.miniStar{clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 55%,79% 90%,50% 68%,21% 90%,32% 55%,4% 35%,39% 35%);background:currentColor;border:0}.miniHeart{clip-path:path('M50 88 C20 62 5 48 8 28 C12 5 38 4 50 23 C62 4 88 5 92 28 C95 48 80 62 50 88 Z');background:currentColor;border:0}.miniMotifImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}.miniArrow{font-size:7px;font-weight:900;color:currentColor;line-height:1;text-shadow:0 1px 0 rgba(255,255,255,.7);opacity:.55}.miniDiamond .miniArrow{transform:rotate(-45deg)}.filmstripBlock{max-width:880px;margin:12px auto 0;border:1px solid rgba(255,235,250,.12);background:rgba(255,255,255,.035);border-radius:18px;padding:10px}.filmstripHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.filmstripHead b{font-size:13px;text-transform:lowercase}.filmstrip{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch}.filmCard{flex:0 0 94px;border-radius:15px;border:1px solid rgba(255,235,250,.14);background:rgba(255,255,255,.045);padding:7px;cursor:pointer}.filmCard.active{outline:3px solid rgba(255,142,214,.75);background:rgba(255,142,214,.08)}.filmCard span{display:block;font-size:11px;font-weight:900;text-align:center;color:#ffe9fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.emptyFilm{font-size:12px;color:var(--muted);padding:12px}.scopeRow{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}.scopeRow button.active{outline:2px solid rgba(115,212,140,.85)}.range{display:grid;grid-template-columns:84px 1fr;gap:8px;align-items:center;margin:8px 0}.range label{font-size:12px;color:var(--muted);font-weight:850} input[type=range]{width:100%}.footerNote{font-size:11px;color:rgba(255,248,252,.72);line-height:1.35;margin-top:8px}
 .launchBadge{display:block;margin-top:5px;text-align:center;font-style:normal;font-size:10px;color:#ffb7e5;font-weight:950;text-transform:uppercase;letter-spacing:.04em}
 .tsFilmDelete{position:absolute;right:4px;top:4px;width:22px;height:22px;border-radius:999px;padding:0;display:grid;place-items:center;font-size:13px;line-height:1;background:rgba(20,10,24,.78)!important;border:1px solid rgba(255,255,255,.35)!important}.tsFilmCard{position:relative}.tsGlobalGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.tsGlobalGrid button{font-size:12px;padding:7px 8px}.tsScaleName{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#ffb7e5;font-weight:950}.tsStatus.busy{color:#ffb45f!important}.tsStatus.ok{color:#73d48c!important}.tsStatus.bad{color:#ff8ed6!important}
@@ -247,7 +247,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 
 
 /* --- v34 Background Studio move-in + control-room fix --- */
-.bgBabyLayer{position:absolute;pointer-events:none;overflow:hidden;z-index:0;background-size:100% 100%;background-repeat:no-repeat}.classicBabyLayer{position:absolute;pointer-events:none;overflow:hidden;z-index:0;background-size:100% 100%;background-repeat:no-repeat}.textureTile{z-index:1}.tileGuide{z-index:2}.brick{z-index:3}.brick.selected{z-index:4}.bgStudioOverlay{position:fixed;inset:0;z-index:10020;background:rgba(5,7,15,.74);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:10px;touch-action:none}.bgStudioOverlay.open{display:flex}.bgStudioModal{width:min(1420px,calc(100vw - 16px));height:min(940px,calc(100dvh - 16px));border:1px solid rgba(255,235,250,.18);background:linear-gradient(135deg,#111727,#10192a);border-radius:22px;box-shadow:0 30px 90px rgba(0,0,0,.58);display:grid;grid-template-rows:auto minmax(0,1fr) 126px;overflow:hidden}.bgStudioHeader{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 13px;border-bottom:1px solid rgba(255,235,250,.14);background:linear-gradient(180deg,rgba(27,25,42,.98),rgba(16,20,34,.96))}.bgStudioHeader h2{font-size:21px;margin:0;text-transform:lowercase}.bgStudioHeader p{font-size:12px;color:var(--muted);font-weight:800;margin:2px 0 0}.bgStudioBody{min-height:0;display:grid;grid-template-columns:240px minmax(420px,1fr) 315px;background:linear-gradient(90deg,rgba(255,232,248,.025) 1px,transparent 1px),linear-gradient(rgba(255,232,248,.025) 1px,transparent 1px),linear-gradient(135deg,#171827,#11192a);background-size:36px 36px,36px 36px,auto}.bgStudioPanel{min-height:0;overflow-y:auto;overflow-x:hidden;padding:10px;border-right:1px solid rgba(255,235,250,.14);background:linear-gradient(180deg,rgba(25,31,48,.94),rgba(15,20,35,.96))}.bgStudioPanel.right{border-right:0;border-left:1px solid rgba(255,235,250,.14)}.bgBox{border:1px solid rgba(255,235,250,.11);background:rgba(255,255,255,.035);border-radius:16px;margin-bottom:10px;overflow:hidden}.bgBox h3{margin:0;padding:9px 11px;font-size:12px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid rgba(255,235,250,.08);background:rgba(255,255,255,.035)}.bgPad{padding:10px}.bgTypeBtn{width:100%;text-align:left;display:flex;gap:8px;align-items:center;margin:6px 0;padding:9px 10px;border-radius:12px}.bgTypeBtn.active{outline:2px solid rgba(255,142,214,.86);background:rgba(255,142,214,.10)}.bgPreviewPanel{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px;padding:12px 14px}.bgPreviewTop{display:flex;align-items:center;justify-content:space-between;gap:8px}.bgCanvasWrap{min-height:0;display:grid;place-items:center;border:1px solid rgba(255,235,250,.12);background:rgba(4,6,12,.36);border-radius:22px;padding:12px;box-shadow:0 22px 50px rgba(0,0,0,.28)}#bgPreviewCanvas{width:min(100%,560px);height:auto;max-height:calc(100dvh - 300px);aspect-ratio:1;border-radius:10px;background:white;box-shadow:0 12px 35px rgba(0,0,0,.35)}.bgControlsRow{display:grid;grid-template-columns:96px 1fr 42px;gap:8px;align-items:center;margin:8px 0}.bgControlsRow label{font-size:12px;color:var(--muted);font-weight:900}.bgControlsRow output{font-size:11px;color:#ffe4f7;font-weight:950;text-align:right}.bgColourGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.bgSw{height:34px;border-radius:10px;border:2px solid rgba(255,255,255,.24);cursor:pointer}.bgSw.active{outline:3px solid var(--pink)}.bgGradModes{display:grid;grid-template-columns:1fr 1fr;gap:7px}.bgGradModes button.active{outline:2px solid rgba(115,212,140,.9)}.bgFilm{border-top:1px solid rgba(255,235,250,.14);background:linear-gradient(180deg,rgba(20,24,38,.96),rgba(13,18,31,.98));padding:9px 13px;overflow:hidden}.bgFilmHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.bgFilmHead b{text-transform:uppercase;font-size:13px}.bgFilmstrip{display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:6px}.bgFilmCard{position:relative;flex:0 0 92px;border:1px solid rgba(255,235,250,.14);background:rgba(255,255,255,.04);border-radius:14px;padding:6px;cursor:pointer}.bgFilmCard.active{outline:3px solid var(--pink)}.bgFilmCard canvas{width:100%;aspect-ratio:1;border-radius:9px;background:#fff;display:block}.bgFilmCard span{display:block;font-size:10px;text-align:center;font-weight:900;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bgFilmDelete{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:999px;padding:0;display:grid;place-items:center;font-size:13px;line-height:1;background:rgba(20,10,24,.78)!important;border:1px solid rgba(255,255,255,.35)!important}.bgHint{font-size:12px;color:var(--muted);line-height:1.35;margin:0 0 8px}.bgHex{width:100%;margin-top:8px}.bgClose{font-size:22px;padding:7px 12px;border-radius:13px}.bgTiny{font-size:11px;color:var(--muted);line-height:1.3;margin-top:8px}.tsPreviewPanel{grid-template-rows:auto auto minmax(0,1fr)!important;overflow:hidden!important}.tsBelow{position:relative!important;z-index:5!important;grid-row:2!important;margin:0!important;transform:none!important;max-height:none!important}.tsCanvasWrap{grid-row:3!important;position:relative!important;z-index:1!important;overflow:hidden!important}.tsPanel.right,.tsLayersPanel{position:relative!important;z-index:6!important}.tsRow input[type=range],.bgControlsRow input[type=range]{touch-action:none!important}
+.bgBabyLayer{position:absolute;pointer-events:none;overflow:hidden;z-index:0;background-size:100% 100%;background-repeat:no-repeat}.classicBabyLayer{position:absolute;pointer-events:none;overflow:hidden;z-index:0;background-size:100% 100%;background-repeat:no-repeat}.textureTile{z-index:1}.tileGuide{z-index:2}.brick{z-index:3}.brick.selected{z-index:4}.bgStudioOverlay{position:fixed;inset:0;z-index:10020;background:rgba(5,7,15,.74);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:10px;touch-action:none}.bgStudioOverlay.open{display:flex}.bgStudioModal{width:min(1420px,calc(100vw - 16px));height:min(940px,calc(100dvh - 16px));border:1px solid rgba(255,235,250,.18);background:linear-gradient(135deg,#111727,#10192a);border-radius:22px;box-shadow:0 30px 90px rgba(0,0,0,.58);display:grid;grid-template-rows:auto minmax(0,1fr) 126px;overflow:hidden}.bgStudioHeader{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 13px;border-bottom:1px solid rgba(255,235,250,.14);background:linear-gradient(180deg,rgba(27,25,42,.98),rgba(16,20,34,.96))}.bgStudioHeader h2{font-size:21px;margin:0;text-transform:lowercase}.bgStudioHeader p{font-size:12px;color:var(--muted);font-weight:800;margin:2px 0 0}.bgStudioBody{min-height:0;display:grid;grid-template-columns:240px minmax(420px,1fr) 315px;background:linear-gradient(90deg,rgba(255,232,248,.025) 1px,transparent 1px),linear-gradient(rgba(255,232,248,.025) 1px,transparent 1px),linear-gradient(135deg,#171827,#11192a);background-size:36px 36px,36px 36px,auto}.bgStudioPanel{min-height:0;overflow-y:auto;overflow-x:hidden;padding:10px;border-right:1px solid rgba(255,235,250,.14);background:linear-gradient(180deg,rgba(25,31,48,.94),rgba(15,20,35,.96))}.bgStudioPanel.right{border-right:0;border-left:1px solid rgba(255,235,250,.14)}.bgBox{border:1px solid rgba(255,235,250,.11);background:rgba(255,255,255,.035);border-radius:16px;margin-bottom:10px;overflow:hidden}.bgBox h3{margin:0;padding:9px 11px;font-size:12px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid rgba(255,235,250,.08);background:rgba(255,255,255,.035)}.bgPad{padding:10px}.bgTypeBtn{width:100%;text-align:left;display:flex;gap:8px;align-items:center;margin:6px 0;padding:9px 10px;border-radius:12px}.bgTypeBtn.active{outline:2px solid rgba(255,142,214,.86);background:rgba(255,142,214,.10)}.bgPreviewPanel{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px;padding:12px 14px}.bgPreviewTop{display:flex;align-items:center;justify-content:space-between;gap:8px}.bgCanvasWrap{min-height:0;display:grid;place-items:center;border:1px solid rgba(255,235,250,.12);background:rgba(4,6,12,.36);border-radius:22px;padding:12px;box-shadow:0 22px 50px rgba(0,0,0,.28)}#bgPreviewCanvas{width:min(100%,560px);height:auto;max-height:calc(100dvh - 300px);aspect-ratio:1;border-radius:10px;background:white;box-shadow:0 12px 35px rgba(0,0,0,.35)}.bgControlsRow{display:grid;grid-template-columns:96px 1fr 42px;gap:8px;align-items:center;margin:8px 0}.bgControlsRow label{font-size:12px;color:var(--muted);font-weight:900}.bgControlsRow output{font-size:11px;color:#ffe4f7;font-weight:950;text-align:right}.bgGradModes{display:grid;grid-template-columns:1fr 1fr;gap:7px}.bgGradModes button.active{outline:2px solid rgba(115,212,140,.9)}.bgFilm{border-top:1px solid rgba(255,235,250,.14);background:linear-gradient(180deg,rgba(20,24,38,.96),rgba(13,18,31,.98));padding:9px 13px;overflow:hidden}.bgFilmHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.bgFilmHead b{text-transform:uppercase;font-size:13px}.bgFilmstrip{display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:6px}.bgFilmCard{position:relative;flex:0 0 92px;border:1px solid rgba(255,235,250,.14);background:rgba(255,255,255,.04);border-radius:14px;padding:6px;cursor:pointer}.bgFilmCard.active{outline:3px solid var(--pink)}.bgFilmCard canvas{width:100%;aspect-ratio:1;border-radius:9px;background:#fff;display:block}.bgFilmCard span{display:block;font-size:10px;text-align:center;font-weight:900;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bgFilmDelete{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:999px;padding:0;display:grid;place-items:center;font-size:13px;line-height:1;background:rgba(20,10,24,.78)!important;border:1px solid rgba(255,255,255,.35)!important}.bgHint{font-size:12px;color:var(--muted);line-height:1.35;margin:0 0 8px}.bgClose{font-size:22px;padding:7px 12px;border-radius:13px}.bgTiny{font-size:11px;color:var(--muted);line-height:1.3;margin-top:8px}.tsPreviewPanel{grid-template-rows:auto auto minmax(0,1fr)!important;overflow:hidden!important}.tsBelow{position:relative!important;z-index:5!important;grid-row:2!important;margin:0!important;transform:none!important;max-height:none!important}.tsCanvasWrap{grid-row:3!important;position:relative!important;z-index:1!important;overflow:hidden!important}.tsPanel.right,.tsLayersPanel{position:relative!important;z-index:6!important}.tsRow input[type=range],.bgControlsRow input[type=range]{touch-action:none!important}
 @media(max-width:950px){.bgStudioBody{grid-template-columns:190px minmax(300px,1fr) 255px}.bgStudioModal{width:100%;height:98dvh;border-radius:16px}.bgStudioHeader h2{font-size:18px}.bgStudioHeader p{display:none}#bgPreviewCanvas{width:min(100%,430px)}}
 
 
@@ -934,12 +934,18 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     <div class="range"><label>richness</label><input id="cmRichness" type="range" min="0" max="100" value="40"></div>
     <div class="range"><label>extra swatches</label><input id="cmVariationCount" type="range" min="0" max="24" value="8"></div>
     <div class="swatches" id="cmSwatches"></div>
-    <div class="miniControl"><label>bg base</label><select id="cmBgBase" class="selectTiny">
-      <option value="white">white</option><option value="tint">tint</option><option value="grey">grey</option><option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="accent2">accent 2</option><option value="deep">deep</option><option value="black">black</option>
-    </select></div>
-    <div class="miniControl"><label>bg mark</label><select id="cmBgTex" class="selectTiny">
-      <option value="hero">hero</option><option value="secondary">secondary</option><option value="filler">filler</option><option value="accent">accent</option><option value="accent2">accent 2</option><option value="deep">deep</option><option value="black">black</option><option value="grey">grey</option><option value="tint">tint</option><option value="white">white</option>
-    </select></div>
+    <div class="tsBox" style="margin-top:9px"><h3>background colours</h3><div class="tsPad">
+      <p class="tsHint" style="margin-top:0">Choose what you want to colour, then tap a Mrs Palette swatch.</p>
+      <div class="grid2" style="margin-bottom:7px">
+        <button id="cmTargetBase" class="small active">background</button>
+        <button id="cmTargetTex" class="small">texture</button>
+      </div>
+      <div class="grid2">
+        <div class="tsColourReadout"><span id="cmBaseChip" class="tsColourChip"></span><span id="cmBaseHex">#F2F2F2</span></div>
+        <div class="tsColourReadout"><span id="cmTexChip" class="tsColourChip"></span><span id="cmTexHex">#555555</span></div>
+      </div>
+      <p class="tsHint" style="margin:6px 0 0">The selected colour is applied live to the preview. No colour roles to remember.</p>
+    </div></div>
     <div class="grid2" style="margin-top:7px"><button id="cmApplyLive" class="small">preview</button><button id="cmResetGrey" class="small">reset to grey</button></div>
     <div class="tsCustomAdd" style="margin-top:9px"><input id="cmColourwayName" placeholder="colourway name" class="selectTiny"><button id="cmSaveColourway" class="small primary">save colourway</button></div>
     <span id="cmStatus" class="saveStatus"></span>
@@ -1434,6 +1440,44 @@ function cmGetPalette(){const hero=document.getElementById('cmHero').value;const
 // hero/vibe/richness just regenerates the swatches to choose from (plus keeps live-updating
 // the background, which is global rather than per-layer) — it never silently recolours a
 // classic pattern layer on its own.
+function cmBgTarget(){return document.getElementById('cmTargetTex')?.classList.contains('active')?'tex':'base';}
+function cmSetBgTarget(target){
+ const baseBtn=document.getElementById('cmTargetBase'),texBtn=document.getElementById('cmTargetTex');
+ if(!baseBtn||!texBtn)return;
+ const isTex=target==='tex';
+ baseBtn.classList.toggle('active',!isTex);texBtn.classList.toggle('active',isTex);
+ cmSyncBgColourUI();
+}
+function cmNormaliseHex(hex){return (hex||'').trim().toLowerCase();}
+function cmMarkSelectedSwatch(hex){
+ const wanted=cmNormaliseHex(hex);
+ document.querySelectorAll('#cmSwatches .sw,#cmImageSwatches .sw').forEach(d=>d.classList.toggle('selected',cmNormaliseHex(d.dataset.hex||d.style.background)===wanted));
+}
+function cmMixWithWhite(hex,amount){
+ const rgb=hexToRgbMB(hex); const t=Math.max(0,Math.min(1,amount));
+ return rgbToHexMB(rgb.r+(255-rgb.r)*t,rgb.g+(255-rgb.g)*t,rgb.b+(255-rgb.b)*t);
+}
+function cmPrepareWatercolour(hex){
+ const bgOpen=document.getElementById('backgroundStudioOverlay')?.classList.contains('open');
+ if(!bgOpen||!window.bgGetWorkingSnapshot||!window.bgSetRoleColours)return;
+ const snap=window.bgGetWorkingSnapshot()||{};
+ // One colour tap should produce a usable wash: pale paper underneath, coloured pigment on top.
+ const pale=cmMixWithWhite(hex,.88);
+ window.bgSetRoleColours(pale,hex);
+ if(window.bgGetWorkingSnapshot){
+   const rec=window.bgGetWorkingSnapshot();
+   // Keep these in the comfortable watercolour range so designers do not have to hunt through sliders.
+   if(rec&&rec.type==='watercolour'&&window.bgSetWatercolourTuning)window.bgSetWatercolourTuning();
+ }
+}
+function cmSyncBgColourUI(){
+ const snap=window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null);
+ const base=snap?.base||'#f2f2f2', tex=snap?.tex||'#555555';
+ const bc=document.getElementById('cmBaseChip'),tc=document.getElementById('cmTexChip');
+ const bh=document.getElementById('cmBaseHex'),th=document.getElementById('cmTexHex');
+ if(bc)bc.style.background=base;if(tc)tc.style.background=tex;if(bh)bh.textContent=base.toUpperCase();if(th)th.textContent=tex.toUpperCase();
+ cmMarkSelectedSwatch(cmBgTarget()==='base'?base:tex);
+}
 function cmSwatchClick(hex){
  const tsOpen=document.getElementById('textureStudioOverlay')?.classList.contains('open');
  const bgOpen=document.getElementById('backgroundStudioOverlay')?.classList.contains('open');
@@ -1441,11 +1485,18 @@ function cmSwatchClick(hex){
   const applied=window.tsApplyColourToSelected(hex);
   cmFlashStatus(applied?'layer coloured ✓':'select a layer first',applied);
  }else if(bgOpen&&window.bgSetRoleColours){
-  const snap=window.bgGetSnapshot?window.bgGetSnapshot():null;
-  window.bgSetRoleColours(snap?snap.base:'#ffffff',hex);
+  const snap=window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null);
+  const base=snap?.base||'#f2f2f2', tex=snap?.tex||'#555555';
+  if(cmBgTarget()==='base') window.bgSetRoleColours(hex,tex);
+  else {
+   if(snap?.type==='watercolour') cmPrepareWatercolour(hex);
+   else window.bgSetRoleColours(base,hex);
+  }
+  cmMarkSelectedSwatch(hex);
+  cmSyncBgColourUI();
  }
 }
-function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.style.background=col;d.title=name+' — tap to apply';d.style.cursor='pointer';d.onclick=()=>cmSwatchClick(col);box.appendChild(d);});}
+function cmRenderSwatches(roles){const box=document.getElementById('cmSwatches');if(!box)return;box.innerHTML='';Object.entries(roles).forEach(([name,col])=>{const d=document.createElement('div');d.className='sw';d.dataset.hex=col;d.style.background=col;d.title=name+' — tap to apply';d.style.cursor='pointer';d.onclick=()=>cmSwatchClick(col);box.appendChild(d);});cmSyncBgColourUI();}
 
 // Pulls ~n dominant colours out of an uploaded photo: downsample onto a canvas, bucket pixels
 // into coarse RGB cells (so near-identical shades count as one colour), rank buckets by how many
@@ -1515,6 +1566,7 @@ function cmRenderExtractedSwatches(){
  cmExtractedColours.forEach(hex=>{
   const d=document.createElement('div');
   d.className='sw';
+  d.dataset.hex=hex;
   d.style.background=hex;
   d.style.cursor='pointer';
   d.title=hex+' — tap to fine-tune';
@@ -1571,17 +1623,14 @@ function cmApplyExtractedPalette(){
  ['hero','secondary','accent','accent2','filler'].forEach((role,i)=>{if(cmExtractedColours[i])roles[role]=cmExtractedColours[i];});
  document.getElementById('cmHero').value=cmExtractedColours[0];
  cmRenderSwatches(roles);
- const baseRole=document.getElementById('cmBgBase').value;
- const texRole=document.getElementById('cmBgTex').value;
- if(window.bgSetRoleColours)window.bgSetRoleColours(roles[baseRole]||roles.white,roles[texRole]||roles.hero);
+ cmSyncBgColourUI();
  if(window.tsSetRoleColours)window.tsSetRoleColours(roles);
  render();
  cmFlashStatus('image palette applied ✓');
 }
 // Extra tappable shades beyond the 10 named roles - a fan of hues around the (already
 // hero-harmonized) sat/val, purely for exploration. Never touches hero/secondary/accent/etc.
-// by name, so nothing else that depends on those exact keys (bg base/mark, layer role-cycling,
-// saved colourways) is affected by how many of these are showing.
+// as optional exploration colours; they are applied only to the currently selected target.
 function cmGenerateVariations(heroHex,mood,richness,count){
  if(!count)return [];
  const curve=MOOD_CURVES[mood]||MOOD_CURVES.summer;
@@ -1612,6 +1661,7 @@ function cmAppendVariationSwatches(pal){
  cmGenerateVariations(hero,mood,richness,count).forEach(hex=>{
   const d=document.createElement('div');
   d.className='sw';
+  d.dataset.hex=hex;
   d.style.background=hex;
   d.title=hex+' — tap to apply';
   d.style.cursor='pointer';
@@ -1619,10 +1669,10 @@ function cmAppendVariationSwatches(pal){
   box.appendChild(d);
  });
 }
-function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);cmAppendVariationSwatches(pal);const baseRole=document.getElementById('cmBgBase').value;const texRole=document.getElementById('cmBgTex').value;if(window.bgSetRoleColours)window.bgSetRoleColours(pal.roles[baseRole]||pal.roles.white,pal.roles[texRole]||pal.roles.hero);render();return pal;}
+function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);cmAppendVariationSwatches(pal);cmSyncBgColourUI();render();return pal;}
 function cmPreviewAll(){const pal=cmApplyLive();if(window.tsSetRoleColours)window.tsSetRoleColours(pal.roles);return pal;}
-function cmResetGrey(){if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');if(window.tsResetToGrey)window.tsResetToGrey();render();cmRenderSwatches(DEFAULT_COLORS);}
-function cmResetPanelControls(){cmRenderSwatches(DEFAULT_COLORS);document.getElementById('cmHero').value='#9b6bff';document.getElementById('cmMood').value='summer';document.getElementById('cmRichness').value=40;document.getElementById('cmVariationCount').value=8;document.getElementById('cmBgBase').value='white';document.getElementById('cmBgTex').value='hero';}
+function cmResetGrey(){if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');if(window.tsResetToGrey)window.tsResetToGrey();render();cmRenderSwatches(DEFAULT_COLORS);cmSyncBgColourUI();}
+function cmResetPanelControls(){cmRenderSwatches(DEFAULT_COLORS);document.getElementById('cmHero').value='#9b6bff';document.getElementById('cmMood').value='summer';document.getElementById('cmRichness').value=40;document.getElementById('cmVariationCount').value=8;cmSyncBgColourUI();}
 function currentSavedTemplateIndex(){return savedTemplates.findIndex(t=>t.key===current);}
 let cmStatusTimer=null;
 function cmFlashStatus(msg,ok=true){const s=document.getElementById('cmStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(cmStatusTimer);cmStatusTimer=setTimeout(()=>{s.textContent='';},1400);}
@@ -1633,7 +1683,7 @@ function cmSaveColourway(){
  const pal=cmApplyLive();
  const nameInput=document.getElementById('cmColourwayName');
  const name=(nameInput.value||'').trim()||('colourway '+((t.colourways||[]).length+1));
- const cw={id:'cw_'+Date.now(),name,heroColour:document.getElementById('cmHero').value,mood:document.getElementById('cmMood').value,richness:+document.getElementById('cmRichness').value,roles:{...pal.roles},bg:{base:document.getElementById('cmBgBase').value,tex:document.getElementById('cmBgTex').value}};
+ const cw={id:'cw_'+Date.now(),name,heroColour:document.getElementById('cmHero').value,mood:document.getElementById('cmMood').value,richness:+document.getElementById('cmRichness').value,roles:{...pal.roles},bg:(()=>{const snap=window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null);return {base:snap?.base||pal.roles.white,tex:snap?.tex||pal.roles.hero};})()};
  t.colourways=t.colourways||[];
  t.colourways.push(cw);
  t.activeColourwayId=cw.id;
@@ -1644,13 +1694,12 @@ function cmSaveColourway(){
  cmFlashStatus('saved ✓');
 }
 function cmApplyColourway(cw){
- if(window.bgSetRoleColours)window.bgSetRoleColours(cw.roles[cw.bg.base]||cw.roles.white,cw.roles[cw.bg.tex]||cw.roles.hero);
+ if(window.bgSetRoleColours)window.bgSetRoleColours(cw.bg?.base||cw.roles.white,cw.bg?.tex||cw.roles.hero);cmSyncBgColourUI();
  if(window.tsSetRoleColours)window.tsSetRoleColours(cw.roles);
  document.getElementById('cmHero').value=cw.heroColour;
  document.getElementById('cmMood').value=cw.mood;
  document.getElementById('cmRichness').value=cw.richness;
- document.getElementById('cmBgBase').value=cw.bg.base;
- document.getElementById('cmBgTex').value=cw.bg.tex;
+ cmSyncBgColourUI();
  cmRenderSwatches(cw.roles);
  render();
 }
@@ -1671,7 +1720,9 @@ function renderColourwayFilmstrip(){
  });
  strip.scrollLeft=strip.scrollWidth;
 }
-['cmHero','cmMood','cmRichness','cmVariationCount','cmBgBase','cmBgTex'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',cmApplyLive);});
+['cmHero','cmMood','cmRichness','cmVariationCount'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',cmApplyLive);});
+const cmTargetBase=document.getElementById('cmTargetBase'),cmTargetTex=document.getElementById('cmTargetTex');
+if(cmTargetBase&&cmTargetTex){cmTargetBase.onclick=()=>cmSetBgTarget('base');cmTargetTex.onclick=()=>cmSetBgTarget('tex');}
 document.getElementById('cmApplyLive').onclick=cmPreviewAll;
 document.getElementById('cmResetGrey').onclick=cmResetGrey;
 document.getElementById('cmSaveColourway').onclick=cmSaveColourway;
@@ -2221,7 +2272,7 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
     <div class="bgStudioBody">
       <section class="bgStudioPanel">
         <div class="bgBox"><h3>background type</h3><div class="bgPad" id="bgTypeList"></div></div>
-        <div class="bgBox"><h3>quick colours</h3><div class="bgPad"><div class="bgColourGrid" id="bgPalette"></div><input id="bgHex" class="bgHex" type="text" placeholder="#f8d8e7"></div></div>
+        
         <div class="bgBox"><h3>gradient modes</h3><div class="bgPad"><p class="bgHint">These are tile-safe: the edges meet when repeated.</p><div class="bgGradModes"><button data-bggrad="wave">wave</button><button data-bggrad="cloud">cloud</button><button data-bggrad="radial">centre glow</button><button data-bggrad="corner">corner mirror</button></div></div></div>
       </section>
       <section class="bgPreviewPanel">
@@ -2230,7 +2281,7 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
       </section>
       <aside class="bgStudioPanel right">
         <div class="bgBox"><h3>recipe controls</h3><div class="bgPad">
-          <p class="bgHint" style="margin-top:0">Opacity, scale, density, softness and contrast work the same in either mode below — only how you pick base/texture colour changes.</p>
+          <p class="bgHint" style="margin-top:0">Opacity, scale, density, softness and contrast work the same in either mode below — colour comes from the integrated colour mode / Mrs Palette, with grey mode kept as a manual fallback.</p>
           <div class="grid2" style="margin-bottom:9px"><button id="bgGreyModeBtn" class="small active">grey mode</button><button id="bgColourModeBtn" class="small">colour mode</button></div>
           <div id="bgGreyColourBox">
           <div class="bgControlsRow"><label>base</label><input id="bgBaseColor" type="color"><output></output></div>
@@ -2280,7 +2331,6 @@ window.addEventListener('load',()=>{try{document.getElementById('textureStudioOv
 (function(){
 const W=720,H=720;
 const bgTypes=[['solid','Solid Colour'],['gradient','Seamless Gradient'],['paper','Paper Grain'],['linen','Linen Weave'],['speckles','Speckles'],['watercolour','Watercolour Wash'],['chalk','Chalkboard'],['vintage','Vintage Fade'],['splatter','Ink Splatter'],['sprinkles','Sprinkles'],['doodles','Doodles'],['scribbles','Scribbles'],['crosshatch','Cross Hatch']];
-const bgPalettes=['#f8d8e7','#fff1d6','#c7f0ee','#dfe8c8','#0b1b35','#c88955','#f4b9ca','#d8c9ff','#eff0ea','#8fa57a'];
 function bgDemoRecipe(type,seed){
  const base={type,grad:'cloud',base:'#f2f2f2',tex:'#555555',opacity:58,scale:82,density:42,softness:62,contrast:46,seed:seed||12345,enabled:false,name:'Greyscale '+((bgTypes.find(t=>t[0]===type)||['','Background'])[1]),objects:[],editable:false};
  const presets={
@@ -2289,7 +2339,7 @@ function bgDemoRecipe(type,seed){
   paper:{base:'#f2f2f2',tex:'#555555',opacity:62,density:48,scale:70,softness:64,contrast:50},
   linen:{base:'#f2f2f2',tex:'#555555',opacity:68,density:35,scale:54,softness:48,contrast:52},
   speckles:{base:'#f2f2f2',tex:'#3f3f3f',opacity:72,density:58,scale:56,softness:35,contrast:58},
-  watercolour:{base:'#f2f2f2',tex:'#5f5f5f',opacity:76,density:50,scale:128,softness:88,contrast:48},
+  watercolour:{base:'#f2f2f2',tex:'#666666',opacity:84,density:52,scale:180,softness:72,contrast:52},
   chalk:{base:'#333333',tex:'#dedede',opacity:72,density:46,scale:88,softness:76,contrast:45},
   vintage:{base:'#eeeeee',tex:'#5a5a5a',opacity:58,density:42,scale:82,softness:66,contrast:50},
   splatter:{base:'#f2f2f2',tex:'#2f2f2f',opacity:76,density:54,scale:70,softness:45,contrast:62},
@@ -2371,63 +2421,77 @@ function drawPaper(ctx,rec){
 }
 function drawSpeckles(ctx,rec){noiseLayer(ctx,60+rec.density*11, rec.scale/30, rec.opacity/105,rec,{minR:.3,boost:1.15,seedOffset:44})}
 function drawWatercolour(ctx,rec){
- // v63: real seamless wash renderer. Each soft wash is drawn on a torus:
- // every blob that can touch an edge is redrawn with its OWN shifted gradient,
- // so the left/right and top/bottom edges match in the 3x3 repeat preview.
- let R=rng((rec.seed||1)+6363);
- const strength=Math.max(0,Math.min(1,(rec.opacity||45)/100));
- const soft=Math.max(.45,Math.min(1,(rec.softness||65)/100));
- const scale=Math.max(70,rec.scale||110);
- const dens=Math.max(8,rec.density||30);
- const wash=rec.tex||'#9b6bff';
- ctx.save();
- ctx.globalCompositeOperation='multiply';
- function blob(cx,cy,r,a,edge=false){
-   const bumps=18;
-   for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
-     let x=cx+ox,y=cy+oy;
-     let g=ctx.createRadialGradient(x,y,0,x,y,r);
-     g.addColorStop(0,rgba(wash,a*.30));
-     g.addColorStop(.38+soft*.20,rgba(wash,a*.15));
-     g.addColorStop(.78,rgba(wash,a*.045));
-     g.addColorStop(1,rgba(wash,0));
-     ctx.fillStyle=g;
-     ctx.beginPath();
-     for(let i=0;i<bumps;i++){
-       let t=i/bumps*Math.PI*2;
-       // deterministic soft organic edge; no harsh ink-splatter points
-       let rr=r*(.82+Math.sin(t*3+(cx+cy)*.017)*.045+Math.sin(t*5+rec.seed*.01)*.035);
-       if(i===0)ctx.moveTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr); else ctx.lineTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
-     }
-     ctx.closePath();ctx.fill();
-     if(edge){
-       // pigment pooling at the very feathered rim, still soft and tile-safe
-       ctx.strokeStyle=rgba(wash,a*.055);ctx.lineWidth=Math.max(1.2,r*.018);ctx.stroke();
-     }
-   }}
- }
- // very large washes first: cloud instead of black splatter
- for(let i=0;i<6+dens/10;i++){
-   blob(R()*W,R()*H,scale*(1.35+R()*2.15),strength*(.05+R()*.08),true);
- }
- // smaller transparent blooms for watercolour variation
- for(let i=0;i<10+dens/5;i++){
-   blob(R()*W,R()*H,scale*(.45+R()*1.05),strength*(.035+R()*.065),false);
- }
- ctx.globalCompositeOperation='screen';
- // subtle lifted-water cloudy gaps using the base colour, not white holes
- for(let i=0;i<5+dens/14;i++){
-   let cx=R()*W,cy=R()*H,r=scale*(.65+R()*1.4);
-   for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
-     let x=cx+ox,y=cy+oy,g=ctx.createRadialGradient(x,y,0,x,y,r);
-     g.addColorStop(0,rgba(rec.base||'#fff',strength*.055));g.addColorStop(.7,rgba(rec.base||'#fff',strength*.025));g.addColorStop(1,rgba(rec.base||'#fff',0));
-     ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
-   }}
- }
- ctx.restore();
- // paper grain on top, deliberately low contrast so it reads as wash not speckles
- drawPaper(ctx,{...rec,opacity:Math.min(22,Math.max(7,(rec.opacity||45)*.28)),density:18,scale:Math.max(35,(rec.scale||90)*.55),contrast:25});
+  // v68: unmistakable soft watercolour wash.
+  // Broad overlapping pigment pools with enough tonal variation to read
+  // clearly in the greyscale thumbnail and the main preview.
+  let R=rng((rec.seed||1)+6363);
+  const strength=Math.max(0,Math.min(1,(rec.opacity==null?82:rec.opacity)/100));
+  const soft=Math.max(.30,Math.min(1,(rec.softness==null?72:rec.softness)/100));
+  const scale=Math.max(120,rec.scale||180);
+  const dens=Math.max(10,rec.density||42);
+  const wash=rec.tex||'#666666';
+  ctx.save();
+  ctx.globalCompositeOperation='multiply';
+
+  function blob(cx,cy,r,a,edge=false){
+    const bumps=26;
+    for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
+      const x=cx+ox,y=cy+oy;
+      const g=ctx.createRadialGradient(x,y,0,x,y,r);
+      // Strong central pigment, soft diluted middle, feathered edge.
+      g.addColorStop(0,rgba(wash,a*(.72+.10*soft)));
+      g.addColorStop(.22,rgba(wash,a*(.52+.08*soft)));
+      g.addColorStop(.50,rgba(wash,a*(.28+.06*soft)));
+      g.addColorStop(.76,rgba(wash,a*.10));
+      g.addColorStop(1,rgba(wash,0));
+      ctx.fillStyle=g;
+      ctx.beginPath();
+      for(let i=0;i<bumps;i++){
+        const t=i/bumps*Math.PI*2;
+        const rr=r*(.80+Math.sin(t*3+(cx+cy)*.013)*.075+Math.sin(t*7+(rec.seed||1)*.017)*.035);
+        if(i===0)ctx.moveTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
+        else ctx.lineTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
+      }
+      ctx.closePath();ctx.fill();
+      if(edge){
+        ctx.strokeStyle=rgba(wash,a*.16);
+        ctx.lineWidth=Math.max(1.5,r*.012);
+        ctx.stroke();
+      }
+    }}
+  }
+
+  // Large pools cover the tile so the preview never looks blank.
+  const largeCount=10+Math.round(dens/14);
+  for(let i=0;i<largeCount;i++){
+    blob(R()*W,R()*H,scale*(2.0+R()*2.8),strength*(.28+R()*.14),i%3===0);
+  }
+
+  // Medium blooms create the characteristic layered wash variation.
+  const mediumCount=14+Math.round(dens/4);
+  for(let i=0;i<mediumCount;i++){
+    blob(R()*W,R()*H,scale*(.75+R()*1.5),strength*(.12+R()*.08),false);
+  }
+
+  // A few very pale lifted areas keep it painterly rather than a flat fill.
+  ctx.globalCompositeOperation='screen';
+  for(let i=0;i<6+Math.round(dens/15);i++){
+    const cx=R()*W,cy=R()*H,r=scale*(1.0+R()*1.6);
+    for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
+      const x=cx+ox,y=cy+oy;
+      const g=ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0,rgba(rec.base||'#f2f2f2',.13));
+      g.addColorStop(.65,rgba(rec.base||'#f2f2f2',.045));
+      g.addColorStop(1,rgba(rec.base||'#f2f2f2',0));
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    }}
+  }
+  ctx.restore();
+
+  // Extremely subtle paper tooth — the wash remains the star of the show.
+  drawPaper(ctx,{...rec,opacity:Math.min(12,Math.max(4,(rec.opacity||45)*.12)),density:12,scale:Math.max(35,(rec.scale||120)*.45),contrast:22});
 }
+
 function drawLinen(ctx,rec){
  // Linen should be woven threads, not paper speckles. No dot layer here.
  ctx.save();ctx.globalCompositeOperation='source-over';
@@ -2515,18 +2579,17 @@ function recipeToUrl(rec=bgRecipe){let cn=document.createElement('canvas');cn.wi
 function renderBgPreview(){let can=q('bgPreviewCanvas'); if(!can)return; drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
  q('bgPreviewName').textContent=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
 function updateRepeatBox(){let box=q('bgRepeatBox'),can=q('bgPreviewCanvas'); if(!box||!can)return; if(bgView==='single'){box.classList.add('hidden');can.classList.remove('hidden');return;} can.classList.add('hidden');box.classList.remove('hidden');box.style.display='grid';box.style.gridTemplateColumns='repeat(3,1fr)';box.style.gap='0';box.innerHTML='';for(let i=0;i<9;i++){let cn=document.createElement('canvas');cn.width=180;cn.height=180;cn.style.width='150px';cn.style.height='150px';cn.style.borderRadius='0';cn.getContext('2d').drawImage(can,0,0,180,180);box.appendChild(cn)}}
-function syncBgUI(){q('bgBaseColor').value=bgRecipe.base;q('bgTexColor').value=bgRecipe.tex;q('bgHex').value=bgRecipe.base;['Opacity','Scale','Density','Softness','Contrast'].forEach(k=>{let id='bg'+k;let val=q(id+'Val'),inp=q(id); if(inp){inp.value=bgRecipe[k.toLowerCase()]; if(val)val.textContent=inp.value;}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.classList.toggle('active',b.dataset.bggrad===bgRecipe.grad));document.querySelectorAll('.bgSw').forEach(b=>b.classList.toggle('active',b.dataset.colour===bgRecipe.base));document.querySelectorAll('.bgTypeBtn').forEach(b=>b.classList.toggle('active',b.dataset.bgtype===bgRecipe.type));renderBgPreview()}
+function syncBgUI(){q('bgBaseColor').value=bgRecipe.base;q('bgTexColor').value=bgRecipe.tex;['Opacity','Scale','Density','Softness','Contrast'].forEach(k=>{let id='bg'+k;let val=q(id+'Val'),inp=q(id); if(inp){inp.value=bgRecipe[k.toLowerCase()]; if(val)val.textContent=inp.value;}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.classList.toggle('active',b.dataset.bggrad===bgRecipe.grad));document.querySelectorAll('.bgTypeBtn').forEach(b=>b.classList.toggle('active',b.dataset.bgtype===bgRecipe.type));renderBgPreview()}
 function buildBgUI(){
  let list=q('bgTypeList'); if(!list)return;
  list.innerHTML=bgTypes.map(t=>`<button class="bgTypeBtn bgBrushBtn" data-bgtype="${t[0]}"><canvas width="96" height="96" aria-hidden="true"></canvas><span><b>${t[1]}</b><small>greyscale preview</small></span></button>`).join('');
  list.querySelectorAll('.bgBrushBtn').forEach((btn,i)=>{let type=btn.dataset.bgtype,cn=btn.querySelector('canvas'); if(cn){cn.width=W;cn.height=H; drawBackgroundToCanvas(cn,bgDemoRecipe(type,1400+i*97));}});
- let pal=q('bgPalette'); if(pal)pal.innerHTML=bgPalettes.map(c=>`<button class="bgSw" style="background:${c}" data-colour="${c}"></button>`).join('');
  syncBgUI();
 }
 function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';card.innerHTML=`<button class="bgFilmDelete">×</button><canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));renderBgFilm();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
 function applyBgToPKM(){bgRecipe.enabled=true;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){} if(typeof render==='function')render(); if(typeof renderGrid==='function')renderGrid();}
 function clearBg(){bgRecipe.enabled=false;bgDataUrl='';try{localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){} if(typeof render==='function')render();}
-function openBg(){q('backgroundStudioOverlay').classList.add('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','false');buildBgUI();renderBgFilm();if(window.mountColourMode)window.mountColourMode('bgColourModeSlot');}
+function openBg(){q('backgroundStudioOverlay').classList.add('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','false');buildBgUI();renderBgFilm();if(window.mountColourMode){window.mountColourMode('bgColourModeSlot');}bgShowMode('colour');if(bgRecipe.type==='watercolour')window.cmSetBgTarget?.('tex');}
 function closeBg(){q('backgroundStudioOverlay').classList.remove('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','true')}
 
 let bgEditOn=false, bgTool='select', bgSelectedIds=[], bgDrag=null;
@@ -2561,7 +2624,7 @@ function wireBgEditTools(){
  wireBgCanvas(); updateBgEditUI();
 }
 
-function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();});q('bgPalette')?.addEventListener('click',e=>{let b=e.target.closest('[data-colour]');if(!b)return;bgRecipe.base=b.dataset.colour;syncBgUI();});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgHex').onchange=e=>{let v=e.target.value.trim();if(/^#?[0-9a-f]{6}$/i.test(v)){bgRecipe.base=v.startsWith('#')?v:'#'+v;syncBgUI();}};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>{let a=document.createElement('a');a.download='pkm-background-seamless.png';a.href=recipeToUrl(bgRecipe);a.click();};q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};
+function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>{let a=document.createElement('a');a.download='pkm-background-seamless.png';a.href=recipeToUrl(bgRecipe);a.click();};q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};
  if(q('bgGreyModeBtn'))q('bgGreyModeBtn').onclick=()=>bgShowMode('grey');
  if(q('bgColourModeBtn'))q('bgColourModeBtn').onclick=()=>bgShowMode('colour');
 }
@@ -2648,6 +2711,9 @@ window.openBackgroundStudio=openBg; wireBg(); wireBgEditTools(); wireV40Controls
 /* v65 template-mode bridge: expose bgRecipe to the main builder script so a saved
    template can carry its background with it (bgRecipe is local to this IIFE). */
 window.bgGetSnapshot=function(){return (bgRecipe&&bgRecipe.enabled)?JSON.parse(JSON.stringify(bgRecipe)):null;};
+// Working snapshot for Colour Mode: draft backgrounds are not enabled yet, but their
+// current colours still matter. This prevents a palette tap from resetting the base to white.
+window.bgGetWorkingSnapshot=function(){return bgRecipe?JSON.parse(JSON.stringify(bgRecipe)):null;};
 window.bgApplySnapshot=function(rec){
  if(rec){bgRecipe=JSON.parse(JSON.stringify(rec));bgRecipe.enabled=true;bgRecipe.objects=bgRecipe.objects||[];}
  else{bgRecipe.enabled=false;}
@@ -2657,7 +2723,9 @@ window.bgApplySnapshot=function(rec){
  if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();
 };
 window.bgRecipeThumbUrl=function(rec){if(!rec)return'';let c=document.createElement('canvas');c.width=200;c.height=200;drawBackgroundToCanvas(c,rec);return c.toDataURL('image/png');};
-window.bgSetRoleColours=function(base,tex){if(!bgRecipe||!bgRecipe.enabled)return;bgRecipe.base=base;bgRecipe.tex=tex;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(typeof render==='function')render();if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
+window.bgSetRoleColours=function(base,tex){if(!bgRecipe)return;bgRecipe.base=base||bgRecipe.base||'#ffffff';bgRecipe.tex=tex||bgRecipe.tex||'#555555';bgDataUrl=recipeToUrl(bgRecipe);try{if(bgRecipe.enabled)localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();if(typeof render==='function'&&bgRecipe.enabled)render();};
+window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercolour')return;bgRecipe.opacity=62;bgRecipe.scale=128;bgRecipe.density=46;bgRecipe.softness=90;bgRecipe.contrast=40;bgDataUrl=recipeToUrl(bgRecipe);if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
+window.bgGetWorkingSnapshot=function(){return bgRecipe?{base:bgRecipe.base,tex:bgRecipe.tex}:null;};
 })();
 </script>
 
@@ -3075,7 +3143,7 @@ setTimeout(init,500);setTimeout(init,1500);
 #backgroundStudioOverlay .bgStopRow input[type=color]{width:40px!important;height:40px!important;min-height:40px!important;border-radius:11px!important;border:2px solid rgba(255,255,255,.32)!important;background:transparent!important;padding:0!important;opacity:1!important;}
 #backgroundStudioOverlay .bgStopRow.active{outline:3px solid rgba(255,142,214,.88)!important;}
 #backgroundStudioOverlay .bgGradModes button.active{outline:2px solid rgba(255,142,214,.9)!important;background:rgba(255,142,214,.12)!important;}
-#backgroundStudioOverlay .bgColourGrid .bgSw.active{outline:3px solid rgba(255,142,214,.9)!important;}
+
 </style>
 <script id="v53-background-studio-fixes-script">
 (function(){
