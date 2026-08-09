@@ -783,7 +783,11 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   max-height:calc(100% - 12px)!important;
   aspect-ratio:1 / 1!important;
 }
+*/
 .livePreviewBadge{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(155,107,255,.2);border:1px solid rgba(155,107,255,.45);color:#d5c4ff;font-weight:950;font-size:10px;text-transform:uppercase;letter-spacing:.03em;margin-left:6px;vertical-align:middle}
+.livePreviewHeader{display:flex;align-items:center;gap:8px;margin:16px auto 0;max-width:880px}
+.livePreviewHeader .livePreviewBadge{margin-left:0}
+.livePreviewHeader .footerNote{margin-top:0}
 
 </style>
 </head>
@@ -860,8 +864,9 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
   </aside>
   <section class="workspace">
     <div class="previewWrap">
-      <div class="previewTop"><div><b id="currentName">grid</b> <span class="livePreviewBadge">Live Preview</span><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active">3×3 repeat</button><button id="singleBtn">single tile</button></div></div>
+      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active">3×3 repeat</button><button id="singleBtn">single tile</button></div></div>
       <div class="stageOuter"><div id="stage" class="repeatStage repeat"></div></div>
+      <div class="livePreviewHeader"><span class="livePreviewBadge">Live Preview</span><span class="footerNote">every thumbnail below stays in sync with your motifs and sizing as you edit</span></div>
       <div class="skeletonGrid" id="skeletonGrid"></div>
       <div class="filmstripBlock">
         <div class="filmstripHead"><b>🎞️ saved templates</b><span class="footerNote">save template drops a live preview here</span></div>
