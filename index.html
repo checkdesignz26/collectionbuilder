@@ -2724,8 +2724,7 @@ window.bgApplySnapshot=function(rec){
 };
 window.bgRecipeThumbUrl=function(rec){if(!rec)return'';let c=document.createElement('canvas');c.width=200;c.height=200;drawBackgroundToCanvas(c,rec);return c.toDataURL('image/png');};
 window.bgSetRoleColours=function(base,tex){if(!bgRecipe)return;bgRecipe.base=base||bgRecipe.base||'#ffffff';bgRecipe.tex=tex||bgRecipe.tex||'#555555';bgDataUrl=recipeToUrl(bgRecipe);try{if(bgRecipe.enabled)localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();if(typeof render==='function'&&bgRecipe.enabled)render();};
-window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercolour')return;bgRecipe.opacity=62;bgRecipe.scale=128;bgRecipe.density=46;bgRecipe.softness=90;bgRecipe.contrast=40;bgDataUrl=recipeToUrl(bgRecipe);if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
-window.bgGetWorkingSnapshot=function(){return bgRecipe?{base:bgRecipe.base,tex:bgRecipe.tex}:null;};
+window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercolour')return;bgRecipe.opacity=42;bgRecipe.scale=128;bgRecipe.density=30;bgRecipe.softness=90;bgRecipe.contrast=40;bgDataUrl=recipeToUrl(bgRecipe);if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
 })();
 </script>
 
