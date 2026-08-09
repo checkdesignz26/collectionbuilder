@@ -1105,7 +1105,7 @@ function saveTemplateToFilmstrip(){
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
-function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
+function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];return [[-1,-1], [0,-1], [1,-1],[-1,0],[0,0,'center'],[1,0],[-1,1],[0,1],[1,1]];}
 function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
@@ -1260,6 +1260,12 @@ function renderMotifTray(){
 // reassigning it every time.
 let motifShapes={};
 function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(motifShapes[b.type])b.motifUrl=motifShapes[b.type];else if(b.motifUrl)delete b.motifUrl;});}
+// motifShapes only lives in memory - a saved template's own bricks keep their motifUrl fine
+// (that's baked into the saved snapshot), but after a fresh page load motifShapes itself starts
+// empty, so every OTHER Live Preview thumbnail (which reads from motifShapes, not from this
+// template's bricks) has nothing to draw and shows placeholders instead of the motif. Reseed it
+// from whatever a loaded template actually has whenever bricks carrying motifs come in.
+function reseedMotifShapesFromBricks(list){(list||[]).forEach(b=>{if(b.motifUrl)motifShapes[b.type]=b.motifUrl;});}
 // Same idea as motifShapes, for width/height/rotate: doesn't touch presets/blueprintStore
 // directly (those stay the untouched source of truth), just gets re-applied to whatever bricks
 // are currently loaded, on every layout switch and thumbnail preview - same non-destructive
