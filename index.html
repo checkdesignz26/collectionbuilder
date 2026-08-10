@@ -790,6 +790,8 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 .livePreviewHeader .footerNote{margin-top:0}
 .filmCheck{position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:6px;background:rgba(20,10,24,.78);border:1px solid rgba(255,255,255,.45);display:grid;place-items:center;font-size:13px;color:#fff;z-index:2}
 .filmCheck.checked{background:linear-gradient(90deg,var(--purple),var(--pink));border-color:#fff}
+.filmUseAsBg{display:block;width:100%;margin-top:5px;font-size:10px;padding:5px 4px;border-radius:8px;background:rgba(155,107,255,.18)!important;border:1px solid rgba(155,107,255,.45)!important;color:#e9defe!important}
+.filmUseAsBg:active{background:rgba(155,107,255,.35)!important}
 
 </style>
 </head>
@@ -1083,8 +1085,30 @@ function restore(state){const data=JSON.parse(state);current=data.current;bluepr
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
 function undo(){if(!history.length)return;redoStack.push(capture());restore(history.pop());}
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
-function loadSavedTemplates(){try{savedTemplates=JSON.parse(localStorage.getItem('pkmSavedSkeletonsV13')||'[]');}catch(e){savedTemplates=[];}}
-function persistSavedTemplates(){localStorage.setItem('pkmSavedSkeletonsV13',JSON.stringify(savedTemplates));}
+// One shared localStorage blob backs every studio's saved-pattern list (saved
+// templates, saved classics, saved backgrounds) instead of three independent
+// keys, so "everything you've saved, anywhere" lives in one place - each studio
+// still owns its own array/shape (savedTemplates / saved / bgSaved), this only
+// unifies where it's persisted. window.__savedItemsBlob is read once at load
+// (falling back to the three old separate keys the first time, so nothing
+// already saved is lost - those old keys are left untouched as a safety net,
+// never written to again) and every save/delete anywhere calls
+// persistAllSavedItems() to write the current state of all three back out.
+const SAVED_ITEMS_KEY='pkmSavedItemsV1';
+function loadAllSavedItemsBlob(){
+ try{const blob=JSON.parse(localStorage.getItem(SAVED_ITEMS_KEY)||'null');if(blob)return blob;}catch(e){}
+ let templates=[],classics=[],backgrounds=[];
+ try{templates=JSON.parse(localStorage.getItem('pkmSavedSkeletonsV13')||'[]');}catch(e){}
+ try{classics=JSON.parse(localStorage.getItem('pkmTextureStudioV32')||'[]');}catch(e){}
+ try{backgrounds=JSON.parse(localStorage.getItem('pkmBackgroundStudioV34')||'[]');}catch(e){}
+ return {templates,classics,backgrounds};
+}
+window.__savedItemsBlob=loadAllSavedItemsBlob();
+function persistAllSavedItems(){
+ try{localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates:savedTemplates,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[])}));}catch(e){}
+}
+function loadSavedTemplates(){savedTemplates=window.__savedItemsBlob.templates||[];}
+function persistSavedTemplates(){persistAllSavedItems();}
 // Autosave: the normal workflow here is redeploy-and-reload on an iPad, which used to throw
 // away whatever wasn't explicitly "saved as a template". This snapshots the full working state
 // (not just bricks - motifShapes/shapeStyles too, since those drive every other Live Preview
@@ -1358,6 +1382,26 @@ function triggerBlobDownload(blob,filename){
  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
 function slugName(s){return (String(s||'pattern').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase())||'pattern';}
+// Shared by every studio's "select mode" filmstrip so the select+zip mechanics
+// (name-dedup, the download panel, bundling into one ZIP) only exist once -
+// each caller just supplies its own list, which indices are selected, how to
+// render one item to a canvas at a given size, and a label for the toast/names.
+async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
+ const count=selectedIdx.size;
+ if(!count)return;
+ window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
+  const files=[],used=new Set();
+  for(const i of selectedIdx){
+   const item=list[i];if(!item)continue;
+   const canvas=await renderItemToCanvas(item,w);
+   const bytes=await canvasToDpiPngBytes(canvas,dpi);
+   let base=slugName(item.name||label),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
+   files.push({name:`${name}.png`,data:bytes});
+  }
+  if(!files.length)throw new Error('nothing selected');
+  triggerBlobDownload(makeZip(files),`${label}-${files.length}.zip`);
+ },w=>`Exports ${count} selected ${label}${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`);
+}
 // Minimal ZIP writer (STORED/uncompressed entries) - PNGs are already internally
 // compressed so DEFLATE would barely help, and skipping it avoids needing a whole
 // compression implementation just to bundle a handful of exported PNGs together.
@@ -2321,7 +2365,13 @@ function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?che
 function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');}
 function openType(type){state=defaultFor(type||'stripes');selected=0;previewMode='single';tsUndoStack=[];tsRedoStack=[];setSeg();document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));open();}
 function close(){document.body.style.overflow='';$('textureStudioOverlay').classList.remove('open');}
-function init(){state=stripeDefaults();previewMode='single';try{saved=JSON.parse(localStorage.getItem('pkmTextureStudioV32')||'[]')}catch(e){saved=[]}renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
+function init(){state=stripeDefaults();previewMode='single';saved=(window.__savedItemsBlob&&window.__savedItemsBlob.classics)||[];renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
+window.tsGetSavedList=function(){return saved;};
+// One-tap apply for a saved classic's filmstrip card - sets the applied layer
+// directly from the saved item, same effect as applyToPKM() but without first
+// loading it into the editor's own `state` (which stays whatever you were
+// working on).
+window.tsApplySavedItem=function(item){if(!item)return;tsAppliedState=copy({type:item.state.type,state:item.state});(tsAppliedState.state.layers||[]).forEach(l=>{if(l.origColor===undefined)l.origColor=l.color;});tsAppliedDataUrl=null;try{localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}if(typeof render==='function')render();};
 function currentLayer(){return state.layers[selected];}
 function nearestColourName(hex){
  // Hue-based naming covers the full colour wheel the adaptive palette can generate — the old
@@ -2396,7 +2446,7 @@ function applyGroupStyle(){
 }
 function duplicateSequenceTo(targetDir){const sourceDir=selectedDirection();const original=(state.layers||[]).filter(l=>isStripeLike(l)&&l.direction===sourceDir); if(!original.length)return; tsPushHistory(); const baseCount=state.layers.length; const copies=original.map((l,i)=>{let n=copy(l); n.direction=targetDir||l.direction; n.name=(targetDir?(({horizontal:'horizontal ',vertical:'vertical ',diag1:'diagonal / ',diag2:'diagonal \\ '}[targetDir])||'copy '):'copy ')+(l.name||('stripe '+(i+1))); return n;}); state.layers.push(...copies); selected=baseCount; renderAll();}
 function duplicateSequence(makePlaid=false){if(makePlaid){duplicateSequenceTo(selectedDirection()==='horizontal'?'vertical':'horizontal');return;} duplicateSequenceTo(null);}
-function deleteSavedTexture(i){if(i<0||i>=saved.length)return; const label=saved[i]?.name||'texture'; if(!confirm('Delete '+label+' from the filmstrip?'))return; saved.splice(i,1); try{localStorage.setItem('pkmTextureStudioV32',JSON.stringify(saved));}catch(e){} renderFilmstrip(); setSaveStatus('deleted ✓','ok');}
+function deleteSavedTexture(i){if(i<0||i>=saved.length)return; const label=saved[i]?.name||'texture'; if(!confirm('Delete '+label+' from the filmstrip?'))return; saved.splice(i,1); try{persistAllSavedItems();}catch(e){} renderFilmstrip(); setSaveStatus('deleted ✓','ok');}
 
 function canvasPointToTile(ev){
  const canvas=$('tsPreview'), rect=canvas.getBoundingClientRect();
@@ -2562,31 +2612,17 @@ function saveTexture(){
  renderFilmstrip();
  const fs=$('tsFilmstrip'); if(fs)fs.scrollLeft=fs.scrollWidth;
  setTimeout(()=>{
-   try{localStorage.setItem('pkmTextureStudioV32',JSON.stringify(saved)); setSaveStatus('saved ✓','ok');}
+   try{persistAllSavedItems(); setSaveStatus('saved ✓','ok');}
    catch(e){setSaveStatus('save failed','bad'); console.warn('texture save failed',e);}
    setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
  },0);
 }
 let tsSelectMode=false,tsSelectedIdx=new Set();
-function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${s.name}</span>`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${s.name}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
 function tsUpdateSelectUI(){const btn=$('tsDownloadSelected');if(!btn)return;btn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!tsSelectedIdx.size;}
 function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
 async function tsDownloadSelectedZip(){
- if(!tsSelectedIdx.size)return;
- const count=tsSelectedIdx.size;
- window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
-  const files=[],used=new Set();
-  for(const i of tsSelectedIdx){
-   const s=saved[i];if(!s)continue;
-   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;
-   renderPreview(canvas,w,s.state,'single',false);
-   const bytes=await canvasToDpiPngBytes(canvas,dpi);
-   let base=slugName(s.name),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
-   files.push({name:`${name}.png`,data:bytes});
-  }
-  if(!files.length)throw new Error('nothing selected');
-  triggerBlobDownload(makeZip(files),`classics-${files.length}-patterns.zip`);
- },w=>`Exports ${count} selected pattern${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`);
+ await downloadSelectedAsZip(saved,tsSelectedIdx,async(item,w)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,item.state,'single',false);return canvas;},'classic pattern');
 }
 /* v66 template-mode bridge: Classics Studio is a self-contained canvas editor with no
    link to the live template. "apply to template" snapshots the edited pattern into
@@ -2666,7 +2702,14 @@ window.openTextureStudioType=openType;
 window.openTextureStudio=open;
 init();
 // v36: never auto-open Classics Studio on file load.
-window.addEventListener('load',()=>{try{document.getElementById('textureStudioOverlay')?.classList.remove('open');document.getElementById('backgroundStudioOverlay')?.classList.remove('open');document.body.style.overflow='';}catch(e){}});
+window.addEventListener('load',()=>{try{document.getElementById('textureStudioOverlay')?.classList.remove('open');document.getElementById('backgroundStudioOverlay')?.classList.remove('open');document.body.style.overflow='';}catch(e){}
+ // First run after the unified saved-items store landed: everything has now
+ // initialised from the old separate keys (see loadAllSavedItemsBlob), so write
+ // the merged result out under the new shared key right away rather than
+ // waiting for the next explicit save - otherwise a user who never saves
+ // anything new would silently keep re-migrating from the old keys forever.
+ try{if(!localStorage.getItem(SAVED_ITEMS_KEY)&&typeof persistAllSavedItems==='function')persistAllSavedItems();}catch(e){}
+});
 })();
 </script>
 
@@ -2761,7 +2804,12 @@ function bgDemoRecipe(type,seed){
  return {...base,...(presets[type]||{})};
 }
 let bgRecipe={type:'paper',grad:'four',base:'#f2f2f2',tex:'#555555',opacity:58,scale:75,density:42,softness:62,contrast:46,seed:12345,enabled:false,name:'Greyscale Paper Grain',objects:[],editable:false};
-let bgSaved=[]; try{bgSaved=JSON.parse(localStorage.getItem('pkmBackgroundStudioV34')||'[]');}catch(e){bgSaved=[];}
+let bgSaved=(window.__savedItemsBlob&&window.__savedItemsBlob.backgrounds)||[];
+window.bgGetSavedList=function(){return bgSaved;};
+// One-tap apply for a saved background's filmstrip card - applies it to the
+// current template directly (bgApplySnapshot), without touching whatever
+// recipe is currently loaded in the editor.
+window.bgApplySavedItem=function(rec){if(rec&&window.bgApplySnapshot)window.bgApplySnapshot(rec);};
 let bgView='single', bgShowGuides=false, bgDataUrl='';
 function q(id){return document.getElementById(id)}
 function rng(seed){let s=(seed||1)>>>0;return()=>((s=(s*1664525+1013904223)>>>0)/4294967296)}
@@ -3003,7 +3051,7 @@ function buildBgUI(){
  syncBgUI();
 }
 let bgSelectMode=false,bgSelectedIdx=new Set();
-function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));renderBgFilm();return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
+function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';const useHTML=bgSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>${useHTML}`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);persistAllSavedItems();renderBgFilm();return;}if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.bgApplySavedItem(rec);q('bgStatus').textContent='applied ✓';setTimeout(()=>q('bgStatus').textContent='',1200);return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
 function bgUpdateSelectUI(){const btn=q('bgDownloadSelected');if(!btn)return;btn.textContent=bgSelectedIdx.size?`download ${bgSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!bgSelectedIdx.size;}
 function bgToggleSelectMode(){bgSelectMode=!bgSelectMode;bgSelectedIdx.clear();const btn=q('bgSelectMode');btn.textContent=bgSelectMode?'done':'select';btn.classList.toggle('active',bgSelectMode);q('bgDownloadSelected').classList.toggle('hidden',!bgSelectMode);bgUpdateSelectUI();renderBgFilm();}
 // drawBackgroundToCanvas always draws within a fixed 720x720 internal canvas
@@ -3011,28 +3059,17 @@ function bgToggleSelectMode(){bgSelectMode=!bgSelectMode;bgSelectedIdx.clear();c
 // native resolution first, then scales up - fine detail on very grainy/high-
 // density recipes will read a little softer than a native render, but stays a
 // faithful match to what Background Studio's own preview already shows.
-async function renderBackgroundPNGBytes(rec,w,dpi){
+function renderBackgroundToCanvasSized(rec,w){
  const small=document.createElement('canvas');small.width=720;small.height=720;
  drawBackgroundToCanvas(small,rec);
  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;
  const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
  ctx.drawImage(small,0,0,720,720,0,0,w,w);
- return await canvasToDpiPngBytes(canvas,dpi);
+ return canvas;
 }
+async function renderBackgroundPNGBytes(rec,w,dpi){return await canvasToDpiPngBytes(renderBackgroundToCanvasSized(rec,w),dpi);}
 async function bgDownloadSelectedZip(){
- if(!bgSelectedIdx.size)return;
- const count=bgSelectedIdx.size;
- window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
-  const files=[],used=new Set();
-  for(const i of bgSelectedIdx){
-   const rec=bgSaved[i];if(!rec)continue;
-   const bytes=await renderBackgroundPNGBytes(rec,w,dpi);
-   let base=slugName(rec.name||'background'),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
-   files.push({name:`${name}.png`,data:bytes});
-  }
-  if(!files.length)throw new Error('nothing selected');
-  triggerBlobDownload(makeZip(files),`backgrounds-${files.length}.zip`);
- },w=>`Exports ${count} selected background${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`);
+ await downloadSelectedAsZip(bgSaved,bgSelectedIdx,async(item,w)=>renderBackgroundToCanvasSized(item,w),'background');
 }
 function applyBgToPKM(){bgRecipe.enabled=true;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){} if(typeof render==='function')render(); if(typeof renderGrid==='function')renderGrid();}
 function clearBg(){bgRecipe.enabled=false;bgDataUrl='';try{localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){} if(typeof render==='function')render();}
@@ -3071,7 +3108,7 @@ function wireBgEditTools(){
  wireBgCanvas(); updateBgEditUI();
 }
 
-function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});localStorage.setItem('pkmBackgroundStudioV34',JSON.stringify(bgSaved));q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName((bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
+function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName((bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
  if(q('bgSelectMode'))q('bgSelectMode').onclick=bgToggleSelectMode;
  if(q('bgDownloadSelected'))q('bgDownloadSelected').onclick=bgDownloadSelectedZip;q('bgSingle').onclick=()=>{bgView='single';q('bgSingle').classList.add('active');q('bgRepeat').classList.remove('active');renderBgPreview();};q('bgRepeat').onclick=()=>{bgView='repeat';q('bgRepeat').classList.add('active');q('bgSingle').classList.remove('active');renderBgPreview();};q('bgGuides').onclick=()=>{bgShowGuides=!bgShowGuides;q('bgGuides').classList.toggle('active',bgShowGuides);renderBgPreview();};
  if(q('bgGreyModeBtn'))q('bgGreyModeBtn').onclick=()=>bgShowMode('grey');
