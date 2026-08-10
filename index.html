@@ -1127,45 +1127,179 @@ function tileCanvasDims(pxSize){
  if(current==='halfbrick')return{w:pxSize,h:pxSize*2};
  return{w:pxSize,h:pxSize};
 }
-// Mirrors render()'s own brick/background/texture layering exactly (background and
-// classic-pattern layers come along for free since they're injected via the same
-// renderTextureTiles() the live canvas already uses) - built detached from the
-// document so exporting never disturbs what's on screen, at whatever pixel scale
-// the export needs rather than the on-screen canvas's actual display size.
-function buildExportContainer(pxW,pxH,scale){
- const container=document.createElement('div');
- container.style.cssText=`position:relative;width:${pxW}px;height:${pxH}px;overflow:hidden;background:#fff;`;
- const origin=0;
- renderTextureTiles(container,scale,origin);
+// --- Native canvas rendering for pattern export ---------------------------
+// Safari/WebKit has a long-standing limitation where it never rasterises SVG
+// <foreignObject> content when the SVG is used as a canvas.drawImage() source -
+// it doesn't error, it just draws nothing, which is what made every export come
+// out blank on iPad even though the same approach worked fine in Chromium
+// testing. Every layer below is drawn with direct canvas calls instead, hand-
+// matching brickHTML()'s CSS shapes rather than reusing the DOM/CSS at all.
+const _exportImageCache=new Map();
+function loadImageCached(src){
+ if(!src)return Promise.resolve(null);
+ if(_exportImageCache.has(src))return _exportImageCache.get(src);
+ const p=new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('image failed to load'));img.src=src;});
+ _exportImageCache.set(src,p);
+ return p;
+}
+function roundRectPath(ctx,x,y,w,h,r){
+ r=Math.max(0,Math.min(r,Math.min(w,h)/2));
+ ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function pctPoly(pairs,bw,bh){return pairs.map(([px,py])=>[px/100*bw-bw/2,py/100*bh-bh/2]);}
+function fillPolyPath(ctx,pts){ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill();}
+// Percentage-box coordinates lifted straight from each shape's CSS clip-path.
+const SHAPE_POLY_PCT={
+ triangle:[[50,3],[96,92],[4,92]],
+ hexagon:[[25,5],[75,5],[98,50],[75,95],[25,95],[2,50]],
+ ogeeLens:[[50,2],[64,10],[76,22],[84,36],[87,50],[84,64],[76,78],[64,90],[50,98],[36,90],[24,78],[16,64],[13,50],[16,36],[24,22],[36,10]],
+ star:[[50,2],[61,35],[96,35],[68,55],[79,90],[50,68],[21,90],[32,55],[4,35],[39,35]]
+};
+function drawHeartPath(ctx,bw,bh){
+ const pt=(px,py)=>[px/100*bw-bw/2,py/100*bh-bh/2];
+ const start=pt(50,88);ctx.beginPath();ctx.moveTo(start[0],start[1]);
+ const curve=(x1,y1,x2,y2,x,y)=>{const a=pt(x1,y1),b=pt(x2,y2),d=pt(x,y);ctx.bezierCurveTo(a[0],a[1],b[0],b[1],d[0],d[1]);};
+ curve(20,62,5,48,8,28);curve(12,5,38,4,50,23);curve(62,4,88,5,92,28);curve(95,48,80,62,50,88);
+ ctx.closePath();
+}
+// Draws one non-motif brick shape, centred at the canvas's current origin (the
+// caller has already translated/rotated). Mirrors brickHTML()'s CSS: plain
+// shapes are outlined (transparent fill, coloured border); triangle/hexagon/
+// ogeeLens use a coloured-shape-with-white-inset trick for their outline look
+// (matching their :before/:after CSS); star/heart are solid fills.
+function drawBrickShape(ctx,type,bwPx,bhPx,color){
+ const hw=bwPx/2,hh=bhPx/2;
+ const strokeW=Math.max(1,Math.min(bwPx,bhPx)*0.045);
+ ctx.save();
+ if(type==='diamond')ctx.rotate(Math.PI/4);
+ if(type==='star'||type==='heart'){
+  ctx.fillStyle=color;
+  if(type==='heart')drawHeartPath(ctx,bwPx,bhPx);else fillPolyPath(ctx,pctPoly(SHAPE_POLY_PCT.star,bwPx,bhPx));
+  ctx.fill();
+ }else if(SHAPE_POLY_PCT[type]){
+  const pts=SHAPE_POLY_PCT[type];
+  ctx.fillStyle=color;fillPolyPath(ctx,pctPoly(pts,bwPx,bhPx));
+  const insetPct=7;
+  const insetPts=pts.map(([px,py])=>[50+(px-50)*(1-insetPct/50),50+(py-50)*(1-insetPct/50)]);
+  ctx.fillStyle='#fff';fillPolyPath(ctx,pctPoly(insetPts,bwPx,bhPx));
+ }else{
+  ctx.strokeStyle=color;ctx.lineWidth=strokeW;
+  const iw=Math.max(0,hw-strokeW/2),ih=Math.max(0,hh-strokeW/2);
+  if(type==='rect'){roundRectPath(ctx,-iw,-ih,iw*2,ih*2,Math.min(bwPx,bhPx)*0.12);ctx.stroke();}
+  else if(type==='square'||type==='diamond'){roundRectPath(ctx,-iw,-ih,iw*2,ih*2,Math.min(bwPx,bhPx)*0.08);ctx.stroke();}
+  else{ctx.beginPath();ctx.ellipse(0,0,iw,ih,0,0,Math.PI*2);ctx.stroke();}
+ }
+ ctx.restore();
+}
+// The "structure" pattern types (gingham/chevron/stripeRow/scallopRow) are full
+// CSS repeating-gradient recipes rather than a placed shape - approximated here
+// with an equivalent canvas fill rather than reproduced pixel-for-pixel.
+function drawStructureBrick(ctx,b,bwPx,bhPx,color){
+ const hw=bwPx/2,hh=bhPx/2;
+ ctx.save();ctx.beginPath();ctx.rect(-hw,-hh,bwPx,bhPx);ctx.clip();
+ if(b.type==='gingham'){
+  ctx.globalCompositeOperation='multiply';ctx.fillStyle='rgba(0,0,0,.42)';
+  const period=Math.max(4,Math.min(bwPx,bhPx)/18);
+  for(let x=-hw;x<hw;x+=period*2)ctx.fillRect(x,-hh,period,bhPx);
+  for(let y=-hh;y<hh;y+=period*2)ctx.fillRect(-hw,y,bwPx,period);
+ }else if(b.type==='chevron'){
+  ctx.fillStyle='#fff';ctx.fillRect(-hw,-hh,bwPx,bhPx);
+  ctx.fillStyle=color;
+  const period=Math.max(6,Math.min(bwPx,bhPx)/10);
+  for(let y=-hh-period;y<hh+period;y+=period)for(let x=-hw-period;x<hw+period;x+=period){ctx.beginPath();ctx.moveTo(x,y+period/2);ctx.lineTo(x+period/2,y);ctx.lineTo(x+period,y+period/2);ctx.lineTo(x+period/2,y+period);ctx.closePath();ctx.fill();}
+ }else if(b.type==='stripeRow'){
+  // Bands always run along the shape's own long axis - a stripeRow rotated 90°
+  // (as the "plaid" preset's crossing pair is) is narrow-tall rather than
+  // wide-short before rotation, so using local width unconditionally packed the
+  // rotated pair into a few cramped bands instead of a matching thin bar.
+  const period=Math.max(6,Math.max(bwPx,bhPx)/16),tones=['#111111','#777777','#ffffff'];
+  if(bhPx>bwPx){for(let y=-hh,i=0;y<hh;y+=period,i++){ctx.fillStyle=tones[i%3];ctx.fillRect(-hw,y,bwPx,period+1);}}
+  else{for(let x=-hw,i=0;x<hw;x+=period,i++){ctx.fillStyle=tones[i%3];ctx.fillRect(x,-hh,period+1,bhPx);}}
+ }else if(b.type==='scallopRow'){
+  ctx.fillStyle=color;
+  const r=Math.max(3,bhPx*0.32);
+  for(let x=-hw-r;x<hw+r;x+=r*1.4){ctx.beginPath();ctx.arc(x,hh,r,0,Math.PI*2);ctx.fill();}
+ }else{
+  ctx.fillStyle=color;ctx.fillRect(-hw,-hh,bwPx,bhPx);
+ }
+ ctx.restore();
+}
+async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx){
+ ctx.save();
+ ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);
+ if(b.motifUrl){
+  try{const img=await loadImageCached(b.motifUrl);ctx.drawImage(img,-bwPx/2,-bhPx/2,bwPx,bhPx);}
+  catch(e){/* fall through silently if a motif image ever fails to decode */}
+ }else{
+  const color=colorForBrick(b);
+  if(['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type))drawStructureBrick(ctx,b,bwPx,bhPx,color);
+  else drawBrickShape(ctx,b.type==='arrowOval'?'oval':b.type,bwPx,bhPx,color);
+ }
+ ctx.restore();
+}
+// Vertical/horizontal/diagonal repeating stripe layers from the "texture" panel -
+// a canvas equivalent of stripeGradient()'s repeating-linear-gradient CSS, drawn
+// fresh within each tile's own local box exactly like renderTextureTiles() does.
+function drawTextureLayersToCanvas(ctx,textureObj,tilePx){
+ if(!textureObj)return;
+ if(textureObj.bgEnabled){ctx.fillStyle=hexToRgba(textureObj.bgColor,textureObj.bgOpacity);ctx.fillRect(0,0,tilePx,tilePx);}
+ if(!textureObj.enabled)return;
+ const sf=getPatternScale(textureObj)/100;
+ (textureObj.layers||[]).filter(l=>l.visible!==false).forEach(l=>{
+  ctx.save();ctx.beginPath();ctx.rect(0,0,tilePx,tilePx);ctx.clip();
+  if(l.blend&&l.blend!=='normal')ctx.globalCompositeOperation=l.blend;
+  ctx.fillStyle=hexToRgba(l.color,l.opacity);
+  const wPx=Math.max(.5,(+l.width||1)*sf/100*tilePx),gapPx=Math.max(.5,(+l.gap||1)*sf/100*tilePx),period=wPx+gapPx;
+  const offsetPx=((+l.offset||0)/100)*period;
+  if(l.direction==='horizontal'){for(let y=-period;y<tilePx+period;y+=period)ctx.fillRect(0,y+offsetPx,tilePx,wPx);}
+  else if(l.direction==='vertical'){for(let x=-period;x<tilePx+period;x+=period)ctx.fillRect(x+offsetPx,0,wPx,tilePx);}
+  else{
+   const angleDeg=l.direction==='diagLeft'?135:45;
+   ctx.translate(tilePx/2,tilePx/2);ctx.rotate(angleDeg*Math.PI/180);
+   const diag=Math.SQRT2*tilePx;
+   for(let x=-diag;x<diag+period;x+=period)ctx.fillRect(x+offsetPx-diag/2,-diag,wPx,diag*2);
+  }
+  ctx.restore();
+ });
+}
+// Renders the full pattern (background layer, classic-pattern layer, texture
+// stripes, every brick) straight onto the export canvas. Background/classic
+// layers are rendered by their own studios (window.bgRenderToTileCanvas /
+// window.tsRenderToTileCanvas) at native resolution and drawn in per tile,
+// same as renderTextureTiles() already does for the on-screen canvas.
+async function renderPatternToCanvas(canvas,pxW,pxH,tilePx){
+ const ctx=canvas.getContext('2d');
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);
+ const scale=tilePx/STAGE;
+ const tiles=[[0,0]];
+ if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
+
+ let bgTileCanvas=null,classicTileCanvas=null;
+ if(window.bgGetSnapshot){const rec=window.bgGetSnapshot();if(rec&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(rec,tilePx);}
+ if(window.tsRenderToTileCanvas)classicTileCanvas=window.tsRenderToTileCanvas(tilePx);
+
+ tiles.forEach(([tx,ty])=>{
+  const off=engineOffset(tx,ty);
+  const destX=off.x*scale,destY=off.y*scale;
+  if(destX>pxW||destY>pxH||destX+tilePx<0||destY+tilePx<0)return;
+  if(bgTileCanvas)ctx.drawImage(bgTileCanvas,destX,destY);
+  if(classicTileCanvas)ctx.drawImage(classicTileCanvas,destX,destY);
+  ctx.save();ctx.translate(destX,destY);ctx.beginPath();ctx.rect(0,0,tilePx,tilePx);ctx.clip();
+  drawTextureLayersToCanvas(ctx,texture,tilePx);
+  ctx.restore();
+ });
+
  const drawList=[];
  bricks.forEach(b=>{drawList.push({b,tx:0,ty:0});if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty});}));}});
- drawList.forEach(({b,tx,ty})=>{
-  const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;
-  const el=document.createElement('div');
-  el.className='brick';
-  el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';
-  el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';
-  el.style.width=(bw*10*scale)+'px';
-  el.style.height=(bh*10*scale)+'px';
-  el.style.color=colorForBrick(b);
-  el.style.transform=`rotate(${b.rot}deg)`;
-  el.innerHTML=brickHTML(b);
-  container.appendChild(el);
- });
- return container;
-}
-function collectPageCSS(){return [...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');}
-// Rasterising via an inline SVG <foreignObject> reuses the app's real CSS (every
-// shape's clip-path, motif image, background/texture layer) exactly as drawn on
-// screen, instead of hand-reimplementing every brick shape in canvas drawing calls.
-function svgDataUrlFor(container,pxW,pxH){
- const css=collectPageCSS();
- // foreignObject content must be well-formed XML - .outerHTML serialises void
- // elements like <img> without a self-closing slash (valid HTML, invalid XML),
- // which silently fails the whole SVG parse. XMLSerializer gets this right.
- const containerXML=new XMLSerializer().serializeToString(container);
- const xml=`<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${pxW}px;height:${pxH}px"><style>${css}</style>${containerXML}</div></foreignObject></svg>`;
- return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
+ const sf=getPatternScale(texture)/100;
+ for(const {b,tx,ty} of drawList){
+  const off=engineOffset(tx,ty);
+  const bw=b.w*sf,bh=b.h*sf;
+  const cx=(off.x+b.x*10)*scale,cy=(off.y+b.y*10)*scale;
+  const bwPx=bw*10*scale,bhPx=bh*10*scale;
+  if(cx+bwPx<0||cy+bhPx<0||cx-bwPx>pxW||cy-bhPx>pxH)continue;
+  await drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx);
+ }
 }
 function crc32(bytes){
  let table=crc32._t;
@@ -1255,14 +1389,8 @@ function makeZip(files){
 }
 window.exportPatternPNG=async function(pxSize,dpi){
  const dims=tileCanvasDims(pxSize);
- const scale=pxSize/STAGE;
- const container=buildExportContainer(dims.w,dims.h,scale);
- const img=new Image();
- await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('SVG render failed'));img.src=svgDataUrlFor(container,dims.w,dims.h);});
  const canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
- const ctx=canvas.getContext('2d');
- ctx.fillStyle='#fff';ctx.fillRect(0,0,dims.w,dims.h);
- ctx.drawImage(img,0,0,dims.w,dims.h);
+ await renderPatternToCanvas(canvas,dims.w,dims.h,pxSize);
  const bytes=await canvasToDpiPngBytes(canvas,dpi);
  const name=slugName(presets[current]?.name||(savedTemplates.find(t=>t.key===current)||{}).name||current);
  triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${name}-${dims.w}x${dims.h}-${dpi}dpi.png`);
@@ -2472,6 +2600,10 @@ function setTsApplyStatus(msg){const s=$('tsStatus');if(!s)return;s.textContent=
 window.tsGetSnapshot=function(){return tsAppliedState?copy(tsAppliedState):null;};
 window.tsApplySnapshot=function(snap){tsAppliedState=snap?copy(snap):null;tsAppliedDataUrl=null;try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));else localStorage.removeItem('pkmActiveClassicV65');}catch(e){}if(typeof render==='function')render();};
 window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);return c.toDataURL('image/png');};
+// renderPreview is already resolution-parameterised (unlike drawBackgroundToCanvas's
+// fixed 720x720), so the main pattern export can render the applied classic layer
+// natively at whatever tile size it needs, no upscaling required.
+window.tsRenderToTileCanvas=function(tilePx){if(!tsAppliedState)return null;const c=document.createElement('canvas');c.width=tilePx;c.height=tilePx;renderPreview(c,tilePx,tsAppliedState.state,'single',false);return c;};
 // Bulk "preview" cycles the palette's chromatic roles across the layers by position, not by
 // classifying each layer's own colour — the default stripes/dots/checks all start as the exact
 // same black, so classifying by original colour put every layer in the same 'hero' bucket and
@@ -3032,6 +3164,11 @@ window.bgApplySnapshot=function(rec){
  if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();
 };
 window.bgRecipeThumbUrl=function(rec){if(!rec)return'';let c=document.createElement('canvas');c.width=200;c.height=200;drawBackgroundToCanvas(c,rec);return c.toDataURL('image/png');};
+// drawBackgroundToCanvas always draws in a fixed 720x720 unit space regardless of
+// the target canvas's actual size, so the main pattern export renders natively at
+// 720 then scales that up to whatever tile size it needs - same approach as
+// Background Studio's own high-res download.
+window.bgRenderToTileCanvas=function(rec,tilePx){if(!rec)return null;const small=document.createElement('canvas');small.width=720;small.height=720;drawBackgroundToCanvas(small,rec);const out=document.createElement('canvas');out.width=tilePx;out.height=tilePx;const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(small,0,0,720,720,0,0,tilePx,tilePx);return out;};
 window.bgSetRoleColours=function(base,tex){if(!bgRecipe)return;bgRecipe.base=base||bgRecipe.base||'#ffffff';bgRecipe.tex=tex||bgRecipe.tex||'#555555';bgDataUrl=recipeToUrl(bgRecipe);try{if(bgRecipe.enabled)localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();if(typeof render==='function'&&bgRecipe.enabled)render();};
 window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercolour')return;bgRecipe.opacity=42;bgRecipe.scale=128;bgRecipe.density=30;bgRecipe.softness=90;bgRecipe.contrast=40;bgDataUrl=recipeToUrl(bgRecipe);if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
 })();
