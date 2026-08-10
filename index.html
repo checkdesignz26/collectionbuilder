@@ -1522,11 +1522,35 @@ function addStripeTextureLayer(){pushHistory();const n=(texture.layers||[]).leng
 function removeStripeTextureLayer(){if(!texture.layers.length)return;pushHistory();texture.layers.splice(selectedTextureLayer,1);selectedTextureLayer=Math.max(0,Math.min(selectedTextureLayer,texture.layers.length-1));if(!texture.layers.length)texture.enabled=false;renderTextureUI();render();}
 function miniWithTexture(list,t){t=t||texture;const bg=textureBackgroundCSS(t);let html='';if(bg)html+=`<div style="position:absolute;inset:0;background:${bg}"></div>`;html+=liveMiniHTML(list||[],getPatternScale(t));return html;}
 
-function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');stage.innerHTML='';const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const scale=(mode==='repeat'?size/(STAGE*3):size/STAGE); const origin=mode==='repeat'?STAGE:0;
- renderTextureTiles(stage,scale,origin);
- tileOffsets().forEach(([tx,ty,center])=>{const off=engineOffset(tx,ty);const guide=document.createElement('div');guide.className='tileGuide '+(center?'center':'');guide.style.left=((off.x+origin)*scale)+'px';guide.style.top=((off.y+origin)*scale)+'px';guide.style.width=(STAGE*scale)+'px';guide.style.height=(STAGE*scale)+'px';stage.appendChild(guide);});
+// The background/classic/texture-stripe tile layers (up to ~27 absolutely-
+// positioned divs, several carrying a full-size background-image) don't depend
+// on brick data at all - only on mode/scale/texture/the applied background and
+// classic pattern. render() used to rebuild them from scratch on every single
+// call though, including every pointermove frame while dragging a brick, which
+// is what made dragging feel laggy as soon as a background texture was applied
+// (repainting several large background-image layers 60x/sec for no reason).
+// They now live in their own "backdrop" layer that's only rebuilt when a cheap
+// signature of their actual inputs changes, while the (cheaper) bricks layer
+// still rebuilds every render() call as before.
+function ensureStageLayers(stage){
+ let backdrop=stage.querySelector(':scope > .stageBackdrop'),bricksLayer=stage.querySelector(':scope > .stageBricks');
+ if(!backdrop){backdrop=document.createElement('div');backdrop.className='stageBackdrop';backdrop.style.cssText='position:absolute;inset:0;pointer-events:none;';stage.appendChild(backdrop);}
+ if(!bricksLayer){bricksLayer=document.createElement('div');bricksLayer.className='stageBricks';bricksLayer.style.cssText='position:absolute;inset:0;';stage.appendChild(bricksLayer);}
+ return {backdrop,bricksLayer};
+}
+let lastBackdropSig=null;
+function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const scale=(mode==='repeat'?size/(STAGE*3):size/STAGE); const origin=mode==='repeat'?STAGE:0;
+ const {backdrop,bricksLayer}=ensureStageLayers(stage);
+ const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,window.bgGetSnapshot?window.bgGetSnapshot():null,window.tsGetSnapshot?window.tsGetSnapshot():null]);
+ if(backdropSig!==lastBackdropSig){
+  backdrop.innerHTML='';
+  renderTextureTiles(backdrop,scale,origin);
+  tileOffsets().forEach(([tx,ty,center])=>{const off=engineOffset(tx,ty);const guide=document.createElement('div');guide.className='tileGuide '+(center?'center':'');guide.style.left=((off.x+origin)*scale)+'px';guide.style.top=((off.y+origin)*scale)+'px';guide.style.width=(STAGE*scale)+'px';guide.style.height=(STAGE*scale)+'px';backdrop.appendChild(guide);});
+  lastBackdropSig=backdropSig;
+ }
+ bricksLayer.innerHTML='';
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
- drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); el.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();selected=b.id;const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);}} stage.appendChild(el);});
+ drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); el.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();selected=b.id;const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);}} bricksLayer.appendChild(el);});
 }
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
 // b.motifUrl changes either way - this only affects how brickHTML/liveMiniHTML render it, so
