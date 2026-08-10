@@ -885,7 +885,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <div class="grid3"><button id="alignL">left</button><button id="alignC">centre</button><button id="alignR">right</button><button id="alignT">top</button><button id="alignM">middle</button><button id="alignB">bottom</button></div>
       <div class="grid2" style="margin-top:7px"><button id="distH">space evenly h</button><button id="distV">space evenly v</button><button id="rowify">make row</button><button id="colify">make column</button><button id="sameSize">same size</button><button id="dup">duplicate</button></div>
     </div></div>
-    <div class="box"><h2>selected brick</h2><div class="body">
+    <div class="box"><h2>selected brick <button id="deselectBtn" class="small" style="float:right;font-size:11px;padding:5px 9px">deselect</button></h2><div class="body">
       <div class="range"><label>x</label><input id="xRange" type="range" min="0" max="100" value="50"></div>
       <div class="range"><label>y</label><input id="yRange" type="range" min="0" max="100" value="50"></div>
       <div class="range"><label>width</label><input id="wRange" type="range" min="4" max="100" value="24"></div>
@@ -1521,6 +1521,15 @@ function renderTextureUI(){
 function addStripeTextureLayer(){pushHistory();const n=(texture.layers||[]).length+1;texture.layers.push({id:'s'+Date.now(),name:'stripe '+n,visible:true,color:activeTextureColor,width:5,gap:16,opacity:100,direction:'vertical',blend:'normal'});texture.enabled=true;renderTextureUI();render();}
 function removeStripeTextureLayer(){if(!texture.layers.length)return;pushHistory();texture.layers.splice(selectedTextureLayer,1);selectedTextureLayer=Math.max(0,Math.min(selectedTextureLayer,texture.layers.length-1));if(!texture.layers.length)texture.enabled=false;renderTextureUI();render();}
 function miniWithTexture(list,t){t=t||texture;const bg=textureBackgroundCSS(t);let html='';if(bg)html+=`<div style="position:absolute;inset:0;background:${bg}"></div>`;html+=liveMiniHTML(list||[],getPatternScale(t));return html;}
+// Background/classic-pattern layers for a thumbnail, matching what the saved-
+// templates filmstrip already did - the repeat-layout grid's own thumbnails
+// never had this, so an applied background silently vanished the moment you
+// looked at any thumbnail instead of the live canvas.
+function bgClassicMiniLayers(bgRec,classicRec){
+ const bgUrl=(bgRec&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(bgRec):'';
+ const classicUrl=(classicRec&&window.tsThumbUrl)?window.tsThumbUrl(classicRec):'';
+ return (bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'')+(classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'');
+}
 
 // The background/classic/texture-stripe tile layers (up to ~27 absolutely-
 // positioned divs, several carrying a full-size background-image) don't depend
@@ -1723,8 +1732,14 @@ function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.in
  // current was only ever the saved template's own key, which never matches a skeletonOrder key,
  // so no thumbnail (not even its own base) ever reflected a saved template's live edits.
  const list=isLive?bricks:applyMotifShapesToCopy(blueprintStore[key]||presets[key].bricks);
- const t=isLive?texture:(textureStore[key]|| (key==='stripe'?stripeDefaultTexture():blankTexture()));const launch=textureLaunchers[key];c.innerHTML=`<div class="mini">${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{setPreset(key,true);};grid.appendChild(c);});}
-function updateLiveMini(){if(!current)return;if(presets[current]){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}const card=document.querySelector(`.skelCard[data-key="${current}"] .mini`);if(card)card.innerHTML=miniWithTexture(bricks,texture);if(currentTemplateBase){const baseCard=document.querySelector(`.skelCard[data-key="${currentTemplateBase}"] .mini`);if(baseCard)baseCard.innerHTML=miniWithTexture(bricks,texture);}const savedIndex=savedTemplates.findIndex(t=>t.key===current);if(savedIndex>=0){savedTemplates[savedIndex].bricks=copyBricks(bricks||[]);savedTemplates[savedIndex].texture=copyTexture(texture);persistSavedTemplates();const film=document.querySelectorAll('.filmCard .mini')[savedIndex];if(film)film.innerHTML=miniWithTexture(bricks,texture);}}
+ const t=isLive?texture:(textureStore[key]|| (key==='stripe'?stripeDefaultTexture():blankTexture()));const launch=textureLaunchers[key];
+ const bgRec=isLive?(window.bgGetSnapshot?window.bgGetSnapshot():null):sourceBackgroundFor(key);
+ const classicRec=isLive?(window.tsGetSnapshot?window.tsGetSnapshot():null):sourceClassicFor(key);
+ c.innerHTML=`<div class="mini">${bgClassicMiniLayers(bgRec,classicRec)}${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{setPreset(key,true);};grid.appendChild(c);});}
+function updateLiveMini(){if(!current)return;if(presets[current]){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
+ const bgRec=window.bgGetSnapshot?window.bgGetSnapshot():null;const classicRec=window.tsGetSnapshot?window.tsGetSnapshot():null;
+ const liveMini=bgClassicMiniLayers(bgRec,classicRec)+miniWithTexture(bricks,texture);
+ const card=document.querySelector(`.skelCard[data-key="${current}"] .mini`);if(card)card.innerHTML=liveMini;if(currentTemplateBase){const baseCard=document.querySelector(`.skelCard[data-key="${currentTemplateBase}"] .mini`);if(baseCard)baseCard.innerHTML=liveMini;}const savedIndex=savedTemplates.findIndex(t=>t.key===current);if(savedIndex>=0){savedTemplates[savedIndex].bricks=copyBricks(bricks||[]);savedTemplates[savedIndex].texture=copyTexture(texture);persistSavedTemplates();const film=document.querySelectorAll('.filmCard .mini')[savedIndex];if(film)film.innerHTML=liveMini;}}
 function miniClass(type){if(type==='arrowOval'||type==='oval')return 'miniOval';if(type==='circle')return 'miniCircle';if(type==='rect')return 'miniRect';if(type==='square')return 'miniSquare';if(type==='diamond')return 'miniDiamond';if(type==='triangle')return 'miniTriangle';if(type==='hexagon')return 'miniHexagon';if(type==='ogeeLens')return 'miniOgeeLens';if(type==='star')return 'miniStar';if(type==='heart')return 'miniHeart';return 'miniRect';}
 function isStructureBrick(b){return ['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type) || b.role==='black' || b.role==='grey';}
 function flowSymbol(b){if(isStructureBrick(b))return ''; if(typeof b.flow==='string' && b.flow && b.flow!=='true' && b.flow!=='false')return b.flow; return '→';}
@@ -1753,6 +1768,12 @@ function syncControls(set=true){const b=selectedBrick();if(!b)return; if(set){xR
 // active layout's own thumbnail catches up next time anything else triggers a renderGrid().
 ['w','h','r'].forEach(k=>{const rg=document.getElementById(k+'Range');rg.addEventListener('pointerdown',pushHistory);rg.addEventListener('input',e=>{const b=selectedBrick();if(!b)return;const prop=k==='r'?'rot':k;const val=+e.target.value;scopedBricks().forEach(x=>{x[prop]=val;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type][prop]=val;renderGrid();}render();});rg.addEventListener('pointerup',()=>renderGrid());});
 document.querySelectorAll('[data-add]').forEach(btn=>btn.onclick=()=>{pushHistory();addBrick(btn.dataset.add);});
+function deselectBrick(){if(selected==null)return;selected=null;render();}
+document.getElementById('deselectBtn').onclick=deselectBrick;
+// Bricks stopPropagation on their own click handler, so a click that reaches the
+// stage itself only ever came from empty backdrop space (or a tile guide) - that
+// should clear the selection instead of leaving the last brick highlighted.
+document.getElementById('stage').addEventListener('click',deselectBrick);
 document.getElementById('motifUploadBtn').onclick=()=>document.getElementById('motifFile').click();
 document.getElementById('motifFile').addEventListener('change',handleMotifUpload);
 document.getElementById('placeMotifBtn').onclick=placeMotifOnSelected;
@@ -2667,7 +2688,21 @@ function applyToPKM(){tsAppliedState=copy({type:state.type,state});(tsAppliedSta
 function setTsApplyStatus(msg){const s=$('tsStatus');if(!s)return;s.textContent=msg;clearTimeout(setTsApplyStatus.t);setTsApplyStatus.t=setTimeout(()=>{s.textContent='';},1200);}
 window.tsGetSnapshot=function(){return tsAppliedState?copy(tsAppliedState):null;};
 window.tsApplySnapshot=function(snap){tsAppliedState=snap?copy(snap):null;tsAppliedDataUrl=null;try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));else localStorage.removeItem('pkmActiveClassicV65');}catch(e){}if(typeof render==='function')render();};
-window.tsThumbUrl=function(snap){if(!snap)return'';const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);return c.toDataURL('image/png');};
+// Cached by recipe content - the same applied classic gets asked for repeatedly
+// (every repeat-layout thumbnail refresh, including on every render() during a
+// brick drag), and re-rendering it from scratch each time would reintroduce the
+// same kind of lag just fixed for the main canvas's own background/classic layers.
+const _tsThumbCache=new Map();
+window.tsThumbUrl=function(snap){
+ if(!snap)return'';
+ const key=JSON.stringify(snap);
+ if(_tsThumbCache.has(key))return _tsThumbCache.get(key);
+ const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);
+ const url=c.toDataURL('image/png');
+ if(_tsThumbCache.size>40)_tsThumbCache.clear();
+ _tsThumbCache.set(key,url);
+ return url;
+};
 // renderPreview is already resolution-parameterised (unlike drawBackgroundToCanvas's
 // fixed 720x720), so the main pattern export can render the applied classic layer
 // natively at whatever tile size it needs, no upscaling required.
@@ -3232,7 +3267,25 @@ window.bgApplySnapshot=function(rec){
  bgSelectedIds=[];
  if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();
 };
-window.bgRecipeThumbUrl=function(rec){if(!rec)return'';let c=document.createElement('canvas');c.width=200;c.height=200;drawBackgroundToCanvas(c,rec);return c.toDataURL('image/png');};
+// drawBackgroundToCanvas always draws in a fixed 720x720 unit space, so drawing
+// straight onto a 200x200 canvas only captured the top-left crop of the pattern,
+// not a scaled-down view of the whole thing - every thumbnail using this (saved
+// templates filmstrip, and now the repeat-layout thumbnails) was quietly showing
+// a zoomed-in corner instead of the real background. renderBackgroundToCanvasSized
+// already renders natively then scales, so reuse that instead of drawing direct.
+// Cached by recipe content for the same reason as _tsThumbCache above - a
+// generative recipe like watercolour is genuinely expensive to draw (many
+// gradient blobs), and this gets asked for on every render() during a drag.
+const _bgThumbCache=new Map();
+window.bgRecipeThumbUrl=function(rec){
+ if(!rec)return'';
+ const key=JSON.stringify(rec);
+ if(_bgThumbCache.has(key))return _bgThumbCache.get(key);
+ const url=renderBackgroundToCanvasSized(rec,200).toDataURL('image/png');
+ if(_bgThumbCache.size>40)_bgThumbCache.clear();
+ _bgThumbCache.set(key,url);
+ return url;
+};
 // drawBackgroundToCanvas always draws in a fixed 720x720 unit space regardless of
 // the target canvas's actual size, so the main pattern export renders natively at
 // 720 then scales that up to whatever tile size it needs - same approach as
