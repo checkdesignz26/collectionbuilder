@@ -1228,7 +1228,15 @@ async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx){
  ctx.save();
  ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);
  if(b.motifUrl){
-  try{const img=await loadImageCached(b.motifUrl);ctx.drawImage(img,-bwPx/2,-bhPx/2,bwPx,bhPx);}
+  try{
+   const img=await loadImageCached(b.motifUrl);
+   // Match the on-screen CSS (object-fit:contain): fit within the brick's box
+   // preserving the motif's own aspect ratio, not stretched to fill it.
+   const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+   const fit=iw&&ih?Math.min(bwPx/iw,bhPx/ih):1;
+   const dw=iw?iw*fit:bwPx,dh=ih?ih*fit:bhPx;
+   ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
+  }
   catch(e){/* fall through silently if a motif image ever fails to decode */}
  }else{
   const color=colorForBrick(b);
