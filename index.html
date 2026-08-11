@@ -1594,13 +1594,33 @@ let activeMotifId=null;
 // where it can shrink to an unrecognisable speck. Trim to the opaque content's bounding box (plus
 // a small breathing margin) once at upload time so every downstream use - tray thumbnail, brick
 // placement, layout-preview thumbnails - fills its box properly without any further changes.
+// Motif photos/illustrations routinely come in at several thousand px and
+// several MB (a phone photo, a stock illustration). Stored at that size, every
+// downstream use pays that cost repeatedly and simultaneously - a real <img>
+// DOM element per brick clone (up to 9x for edge clones), a full copy inside
+// every undo/redo history entry (up to 80 of them), a copy in the debounced
+// autosave snapshot written after every edit, a copy in every saved template -
+// which is exactly the kind of memory pressure that crashes a tab on a
+// constrained device like an iPad rather than just feeling slow. A motif never
+// needs to render larger than a fraction of an already-capped export tile, so
+// cap the stored size well above any real on-screen or export use.
+const MOTIF_MAX_DIM=1200;
+function downscaleMotifCanvas(canvas){
+ const w=canvas.width,h=canvas.height;
+ const scale=Math.min(1,MOTIF_MAX_DIM/Math.max(w,h));
+ if(scale>=1)return canvas.toDataURL('image/png');
+ const out=document.createElement('canvas');out.width=Math.max(1,Math.round(w*scale));out.height=Math.max(1,Math.round(h*scale));
+ const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+ ctx.drawImage(canvas,0,0,out.width,out.height);
+ return out.toDataURL('image/png');
+}
 function trimTransparentPadding(img){
  const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
  const ctx=canvas.getContext('2d');
  ctx.drawImage(img,0,0,w,h);
  let data;
- try{data=ctx.getImageData(0,0,w,h).data;}catch(e){return canvas.toDataURL('image/png');}
+ try{data=ctx.getImageData(0,0,w,h).data;}catch(e){return downscaleMotifCanvas(canvas);}
  let minX=w,minY=h,maxX=-1,maxY=-1;
  for(let y=0;y<h;y++){
   for(let x=0;x<w;x++){
@@ -1610,14 +1630,14 @@ function trimTransparentPadding(img){
    }
   }
  }
- if(maxX<0)return canvas.toDataURL('image/png');
+ if(maxX<0)return downscaleMotifCanvas(canvas);
  const pad=Math.round(Math.max(maxX-minX,maxY-minY)*0.04);
  minX=Math.max(0,minX-pad);minY=Math.max(0,minY-pad);
  maxX=Math.min(w-1,maxX+pad);maxY=Math.min(h-1,maxY+pad);
  const cw=maxX-minX+1,ch=maxY-minY+1;
  const out=document.createElement('canvas');out.width=cw;out.height=ch;
  out.getContext('2d').drawImage(canvas,minX,minY,cw,ch,0,0,cw,ch);
- return out.toDataURL('image/png');
+ return downscaleMotifCanvas(out);
 }
 function handleMotifUpload(e){
  const files=Array.from(e.target.files||[]);
@@ -2193,6 +2213,42 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 cmRenderSwatches(DEFAULT_COLORS);
 
 window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();if(!restoreAutosave())setPreset('grid');
+// One-time cleanup for motifs already sitting in this session oversized from
+// before MOTIF_MAX_DIM existed - newly uploaded motifs are capped going
+// forward, but an already-huge motif already in motifShapes/blueprintStore
+// keeps costing the same memory and per-edit serialisation price (autosave,
+// undo history, every brick clone's own <img>) that caused the lag/crashes in
+// the first place, even after that fix ships. Runs once, shortly after first
+// paint so it never blocks loading.
+function shrinkDataUrlIfOversized(url){
+ return new Promise(resolve=>{
+  // No cheap pre-filter here on purpose: PNG file size depends heavily on
+  // image complexity (a flat-colour illustration can compress to a fraction
+  // of a busy photo at the same pixel size), so text-length was an unreliable
+  // stand-in for actual pixel dimensions - decode and check the real size.
+  if(typeof url!=='string'||url.indexOf('data:image')!==0){resolve(url);return;}
+  const img=new Image();
+  img.onload=()=>{
+   if(Math.max(img.naturalWidth,img.naturalHeight)<=MOTIF_MAX_DIM){resolve(url);return;}
+   const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.getContext('2d').drawImage(img,0,0);
+   resolve(downscaleMotifCanvas(c));
+  };
+  img.onerror=()=>resolve(url);
+  img.src=url;
+ });
+}
+async function shrinkOversizedMotifsInSession(){
+ let shrunkCount=0;
+ for(const m of motifTray){const before=m.dataUrl;m.dataUrl=await shrinkDataUrlIfOversized(m.dataUrl);if(m.dataUrl!==before)shrunkCount++;}
+ for(const k of Object.keys(motifShapes)){const before=motifShapes[k];motifShapes[k]=await shrinkDataUrlIfOversized(motifShapes[k]);if(motifShapes[k]!==before)shrunkCount++;}
+ applyMotifShapesToBricks(bricks);
+ for(const key of Object.keys(blueprintStore)){for(const b of blueprintStore[key]||[]){if(b.motifUrl){const before=b.motifUrl;b.motifUrl=await shrinkDataUrlIfOversized(b.motifUrl);if(b.motifUrl!==before)shrunkCount++;}}}
+ if(shrunkCount>0){
+  renderMotifTray();renderGrid();render();
+  try{flashSaveStatus('optimised '+shrunkCount+' oversized motif image'+(shrunkCount===1?'':'s')+' for speed ✓');}catch(e){}
+ }
+}
+setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif shrink pass failed',e));},600);
 </script>
 
 <div id="downloadOverlay" class="bgStudioOverlay" style="z-index:20000" aria-hidden="true">
