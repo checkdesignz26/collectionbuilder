@@ -1831,7 +1831,30 @@ document.getElementById('motifUploadBtn').onclick=()=>document.getElementById('m
 document.getElementById('motifFile').addEventListener('change',handleMotifUpload);
 document.getElementById('placeMotifBtn').onclick=placeMotifOnSelected;
 document.getElementById('clearMotifBtn').onclick=clearMotifFromSelected;
-document.getElementById('motifDisplayModeBtn').onclick=()=>{showMotifs=!showMotifs;const btn=document.getElementById('motifDisplayModeBtn');btn.textContent='showing: '+(showMotifs?'motifs':'placeholders');btn.classList.toggle('active',!showMotifs);render();renderGrid();};
+// renderGrid() rebuilds every repeat-layout thumbnail (each with up to 9 motif
+// <img> clones) synchronously, which can take a real moment on a slower device.
+// Without a guard, a second tap that lands before that finishes queues up a
+// second toggle that fires the instant the first one completes - net effect:
+// showMotifs flips twice, landing back where it started, which is exactly the
+// "sometimes it switches back" behaviour. The button text flips synchronously
+// (so a tap always feels instantly acknowledged) but the actual re-render is
+// deferred one frame and the button disabled meanwhile, so a rapid re-tap is
+// ignored rather than queued.
+let motifToggleBusy=false;
+document.getElementById('motifDisplayModeBtn').onclick=()=>{
+ if(motifToggleBusy)return;
+ motifToggleBusy=true;
+ showMotifs=!showMotifs;
+ const btn=document.getElementById('motifDisplayModeBtn');
+ btn.textContent='showing: '+(showMotifs?'motifs':'placeholders');
+ btn.classList.toggle('active',!showMotifs);
+ btn.disabled=true;
+ requestAnimationFrame(()=>{
+  render();renderGrid();
+  btn.disabled=false;
+  motifToggleBusy=false;
+ });
+};
 document.getElementById('clearAllMotifsBtn').onclick=()=>{
  if(!Object.keys(motifShapes).length)return;
  pushHistory();
