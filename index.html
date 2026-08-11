@@ -1548,14 +1548,31 @@ function ensureStageLayers(stage){
  return {backdrop,bricksLayer};
 }
 let lastBackdropSig=null;
+// Cached once per render() call and reused by updateLiveMini() right after (see
+// the render wrapper below) instead of asking Background/Classics Studio to
+// clone their recipe a second time for the exact same frame.
+let lastBgSnap=null,lastClassicSnap=null;
 function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const scale=(mode==='repeat'?size/(STAGE*3):size/STAGE); const origin=mode==='repeat'?STAGE:0;
  const {backdrop,bricksLayer}=ensureStageLayers(stage);
- const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,window.bgGetSnapshot?window.bgGetSnapshot():null,window.tsGetSnapshot?window.tsGetSnapshot():null]);
- if(backdropSig!==lastBackdropSig){
-  backdrop.innerHTML='';
-  renderTextureTiles(backdrop,scale,origin);
-  tileOffsets().forEach(([tx,ty,center])=>{const off=engineOffset(tx,ty);const guide=document.createElement('div');guide.className='tileGuide '+(center?'center':'');guide.style.left=((off.x+origin)*scale)+'px';guide.style.top=((off.y+origin)*scale)+'px';guide.style.width=(STAGE*scale)+'px';guide.style.height=(STAGE*scale)+'px';backdrop.appendChild(guide);});
-  lastBackdropSig=backdropSig;
+ // Belt-and-braces: the bricks below are the one thing that must always redraw
+ // on every call, no matter what. If anything in the backdrop/signature step
+ // throws (a corrupted recipe, anything unforeseen in Background/Classics
+ // Studio's snapshot), it must never take the rest of render() down with it -
+ // that would freeze bricks mid-edit with no visible error, which is much worse
+ // than an occasionally-stale backdrop.
+ try{
+  lastBgSnap=window.bgGetSnapshot?window.bgGetSnapshot():null;
+  lastClassicSnap=window.tsGetSnapshot?window.tsGetSnapshot():null;
+  const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,lastBgSnap,lastClassicSnap]);
+  if(backdropSig!==lastBackdropSig){
+   backdrop.innerHTML='';
+   renderTextureTiles(backdrop,scale,origin);
+   tileOffsets().forEach(([tx,ty,center])=>{const off=engineOffset(tx,ty);const guide=document.createElement('div');guide.className='tileGuide '+(center?'center':'');guide.style.left=((off.x+origin)*scale)+'px';guide.style.top=((off.y+origin)*scale)+'px';guide.style.width=(STAGE*scale)+'px';guide.style.height=(STAGE*scale)+'px';backdrop.appendChild(guide);});
+   lastBackdropSig=backdropSig;
+  }
+ }catch(e){
+  console.warn('backdrop render failed, will retry next frame',e);
+  lastBackdropSig=null;
  }
  bricksLayer.innerHTML='';
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
@@ -1733,12 +1750,28 @@ function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.in
  // so no thumbnail (not even its own base) ever reflected a saved template's live edits.
  const list=isLive?bricks:applyMotifShapesToCopy(blueprintStore[key]||presets[key].bricks);
  const t=isLive?texture:(textureStore[key]|| (key==='stripe'?stripeDefaultTexture():blankTexture()));const launch=textureLaunchers[key];
- const bgRec=isLive?(window.bgGetSnapshot?window.bgGetSnapshot():null):sourceBackgroundFor(key);
- const classicRec=isLive?(window.tsGetSnapshot?window.tsGetSnapshot():null):sourceClassicFor(key);
- c.innerHTML=`<div class="mini">${bgClassicMiniLayers(bgRec,classicRec)}${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{setPreset(key,true);};grid.appendChild(c);});}
+ // A single bad recipe throwing while generating one card's background/classic
+ // thumbnail must never abort the rest of this loop - forEach doesn't recover
+ // from an uncaught exception mid-iteration, so every card after the failing
+ // one would otherwise be left completely empty instead of just missing its
+ // backdrop layer.
+ let bgClassicHTML='';
+ try{
+  // Fresh, not cached: unlike updateLiveMini() (always called right after
+  // render() in the same frame), renderGrid() often runs before render() has
+  // executed yet this cycle (preset switches, template loads), so the cached
+  // lastBgSnap/lastClassicSnap could still be stale or unset here.
+  const bgRec=isLive?(window.bgGetSnapshot?window.bgGetSnapshot():null):sourceBackgroundFor(key);
+  const classicRec=isLive?(window.tsGetSnapshot?window.tsGetSnapshot():null):sourceClassicFor(key);
+  bgClassicHTML=bgClassicMiniLayers(bgRec,classicRec);
+ }catch(e){console.warn('thumbnail backdrop failed for',key,e);}
+ c.innerHTML=`<div class="mini">${bgClassicHTML}${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{setPreset(key,true);};grid.appendChild(c);});}
 function updateLiveMini(){if(!current)return;if(presets[current]){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
- const bgRec=window.bgGetSnapshot?window.bgGetSnapshot():null;const classicRec=window.tsGetSnapshot?window.tsGetSnapshot():null;
- const liveMini=bgClassicMiniLayers(bgRec,classicRec)+miniWithTexture(bricks,texture);
+ // Reuses whatever render() just computed this same frame rather than asking
+ // Background/Classics Studio to clone their recipe again immediately after.
+ let liveMini;
+ try{liveMini=bgClassicMiniLayers(lastBgSnap,lastClassicSnap)+miniWithTexture(bricks,texture);}
+ catch(e){console.warn('live thumbnail update failed',e);liveMini=miniWithTexture(bricks,texture);}
  const card=document.querySelector(`.skelCard[data-key="${current}"] .mini`);if(card)card.innerHTML=liveMini;if(currentTemplateBase){const baseCard=document.querySelector(`.skelCard[data-key="${currentTemplateBase}"] .mini`);if(baseCard)baseCard.innerHTML=liveMini;}const savedIndex=savedTemplates.findIndex(t=>t.key===current);if(savedIndex>=0){savedTemplates[savedIndex].bricks=copyBricks(bricks||[]);savedTemplates[savedIndex].texture=copyTexture(texture);persistSavedTemplates();const film=document.querySelectorAll('.filmCard .mini')[savedIndex];if(film)film.innerHTML=liveMini;}}
 function miniClass(type){if(type==='arrowOval'||type==='oval')return 'miniOval';if(type==='circle')return 'miniCircle';if(type==='rect')return 'miniRect';if(type==='square')return 'miniSquare';if(type==='diamond')return 'miniDiamond';if(type==='triangle')return 'miniTriangle';if(type==='hexagon')return 'miniHexagon';if(type==='ogeeLens')return 'miniOgeeLens';if(type==='star')return 'miniStar';if(type==='heart')return 'miniHeart';return 'miniRect';}
 function isStructureBrick(b){return ['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type) || b.role==='black' || b.role==='grey';}
@@ -2695,13 +2728,15 @@ window.tsApplySnapshot=function(snap){tsAppliedState=snap?copy(snap):null;tsAppl
 const _tsThumbCache=new Map();
 window.tsThumbUrl=function(snap){
  if(!snap)return'';
- const key=JSON.stringify(snap);
- if(_tsThumbCache.has(key))return _tsThumbCache.get(key);
- const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);
- const url=c.toDataURL('image/png');
- if(_tsThumbCache.size>40)_tsThumbCache.clear();
- _tsThumbCache.set(key,url);
- return url;
+ try{
+  const key=JSON.stringify(snap);
+  if(_tsThumbCache.has(key))return _tsThumbCache.get(key);
+  const c=document.createElement('canvas');c.width=200;c.height=200;renderPreview(c,200,snap.state,'single',false);
+  const url=c.toDataURL('image/png');
+  if(_tsThumbCache.size>40)_tsThumbCache.clear();
+  _tsThumbCache.set(key,url);
+  return url;
+ }catch(e){console.warn('classic thumbnail failed',e);return'';}
 };
 // renderPreview is already resolution-parameterised (unlike drawBackgroundToCanvas's
 // fixed 720x720), so the main pattern export can render the applied classic layer
@@ -3279,12 +3314,14 @@ window.bgApplySnapshot=function(rec){
 const _bgThumbCache=new Map();
 window.bgRecipeThumbUrl=function(rec){
  if(!rec)return'';
- const key=JSON.stringify(rec);
- if(_bgThumbCache.has(key))return _bgThumbCache.get(key);
- const url=renderBackgroundToCanvasSized(rec,200).toDataURL('image/png');
- if(_bgThumbCache.size>40)_bgThumbCache.clear();
- _bgThumbCache.set(key,url);
- return url;
+ try{
+  const key=JSON.stringify(rec);
+  if(_bgThumbCache.has(key))return _bgThumbCache.get(key);
+  const url=renderBackgroundToCanvasSized(rec,200).toDataURL('image/png');
+  if(_bgThumbCache.size>40)_bgThumbCache.clear();
+  _bgThumbCache.set(key,url);
+  return url;
+ }catch(e){console.warn('background thumbnail failed',e);return'';}
 };
 // drawBackgroundToCanvas always draws in a fixed 720x720 unit space regardless of
 // the target canvas's actual size, so the main pattern export renders natively at
