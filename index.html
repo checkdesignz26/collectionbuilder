@@ -933,7 +933,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       <button id="cmApplyExtracted" class="full primary" style="display:none;margin-top:7px">use extracted palette</button>
     </div></div>
     <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
-      <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="luxe">luxurious / opulent</option>
+      <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="luxe">luxurious / opulent</option><option value="jewel">jewel tones</option><option value="christmas">christmas / festive</option>
     </select></div>
     <div class="range"><label>richness</label><input id="cmRichness" type="range" min="0" max="100" value="40"></div>
     <div class="range"><label>extra swatches</label><input id="cmVariationCount" type="range" min="0" max="24" value="8"></div>
@@ -996,7 +996,17 @@ const MOOD_CURVES={
  bold:     {sat:[70,95],val:[20,45],spread:0.9,accentPunch:1.8,damp:0.35},
  nostalgic:{sat:[22,38],val:[55,72],spread:0.55,accentPunch:0.9,damp:0.85},
  fresh:    {sat:[25,45],val:[85,97],spread:0.75,accentPunch:1.0,damp:1.0},
- luxe:     {sat:[55,85],val:[30,55],spread:1.15,accentPunch:1.3,damp:1.0}
+ luxe:     {sat:[55,85],val:[30,55],spread:1.15,accentPunch:1.3,damp:1.0},
+ // Deep, saturated, wide-hue-spread stones (emerald/sapphire/ruby/amethyst/topaz) -
+ // works with any hero the way the other moods do, since "jewel" is a richness
+ // treatment rather than a specific hue family.
+ jewel:    {sat:[65,92],val:[32,58],spread:1.35,accentPunch:1.25,damp:1.0},
+ // "Traditional Christmas" needs to actually read as red+green+gold no matter
+ // which hero hue was picked - a hero-relative offset (like every other mood
+ // uses) can't guarantee that, so this is the one mood with hueAbsolute: fixed
+ // hue targets for secondary/accent/accent2/filler instead of hue+offset*spread.
+ // The hero swatch itself is still never touched, same as any other mood.
+ christmas:{sat:[58,88],val:[26,48],spread:1.0,accentPunch:1.15,damp:1.0,hueAbsolute:[140,353,45,125]}
 };
 function generateAdaptivePalette(heroHex,mood,richness){
  const curve=MOOD_CURVES[mood]||MOOD_CURVES.summer;
@@ -1021,14 +1031,17 @@ function generateAdaptivePalette(heroHex,mood,richness){
  // consistent directional identity instead (e.g. winter always reading as icy blue/teal, whatever
  // hero was picked) can override with its own [secondary,accent,accent2,filler] hueOffsets so
  // every derived role stays biased toward the same family rather than spreading across the wheel.
+ // hueAbsolute goes one step further: fixed hue targets instead of hero-relative offsets, for a
+ // mood (christmas) that needs to land on specific hues (red/green/gold) regardless of hero.
  const [secOff,accOff,acc2Off,fillOff]=curve.hueOffsets||[130,-40,80,200];
+ const [hSec,hAcc,hAcc2,hFill]=curve.hueAbsolute||[hue+secOff*spread,hue+accOff*spread,hue+acc2Off*spread,hue+fillOff*spread];
  const cs=(s)=>Math.max(4,Math.min(98,s)), cv=(v)=>Math.max(4,Math.min(98,v));
  const roles={
   hero:heroHex,
-  secondary:hsvToHexMB(hue+secOff*spread,cs(sat*0.85*damp),cv(Math.min(96,val+6))),
-  accent:hsvToHexMB(hue+accOff*spread,cs(Math.min(98,sat*1.1*punch)),cv(Math.max(20,val-4))),
-  accent2:hsvToHexMB(hue+acc2Off*spread,cs(sat*0.75*damp),cv(Math.min(96,val+2))),
-  filler:hsvToHexMB(hue+fillOff*spread,cs(sat*0.7*damp),cv(Math.min(96,val+10))),
+  secondary:hsvToHexMB(hSec,cs(sat*0.85*damp),cv(Math.min(96,val+6))),
+  accent:hsvToHexMB(hAcc,cs(Math.min(98,sat*1.1*punch)),cv(Math.max(20,val-4))),
+  accent2:hsvToHexMB(hAcc2,cs(sat*0.75*damp),cv(Math.min(96,val+2))),
+  filler:hsvToHexMB(hFill,cs(sat*0.7*damp),cv(Math.min(96,val+10))),
   deep:hsvToHexMB(hue,cs(Math.min(98,sat*1.15)),cv(Math.max(12,val*0.42))),
   tint:hsvToHexMB(hue,cs(Math.max(6,sat*0.25)),cv(Math.min(97,val+(100-val)*0.55))),
   black:hsvToHexMB(hue,cs(Math.min(60,sat*0.6)),14),
