@@ -794,59 +794,100 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 .filmUseAsBg{display:block;width:100%;margin-top:5px;font-size:10px;padding:5px 4px;border-radius:8px;background:rgba(155,107,255,.18)!important;border:1px solid rgba(155,107,255,.45)!important;color:#e9defe!important}
 .filmUseAsBg:active{background:rgba(155,107,255,.35)!important}
 
-/* ===== Light "makeover" theme - main screen chrome only =====
-   Scoped to `main` (the header + both sidebars + centre workspace) and the
-   download panel it opens, so Classics Studio and Background Studio (which
-   live in their own overlay markup outside <main>, using their own tsBox/
-   bgBox classes) keep their current dark theme untouched. The pattern
-   canvas and every thumbnail preview (.repeatStage, .mini) already default
-   to plain white and are deliberately left alone here too, so patterns stay
-   the visual focus rather than competing with the chrome around them. */
-:root{--cream:#f2e6d3;--cream2:#ecd9bd;--panelTan:#f1e3cc;--btnTan:#fffaf0;--ink:#3a2e26;--inkSoft:#7d6a58;--teal:#5cb8ab;--tealInk:#1f5c53;--coral:#f0917a;--coralInk:#7a3325;--gold:#e8b74f;--goldInk:#7a5a12;--lav:#b39ddb;--lavInk:#4a3a72;}
-body:has(main){background:linear-gradient(160deg,var(--cream),var(--cream2))!important;}
-header{background:linear-gradient(180deg,#f8ecd8,#f2e0c2)!important;border-bottom:1px solid rgba(58,46,38,.14)!important;box-shadow:0 8px 22px rgba(58,46,38,.08)!important;}
-header h1{color:var(--ink)!important;}
-header p{color:var(--inkSoft)!important;}
-.logo{background:linear-gradient(135deg,#f0dcc0,#e8cba6)!important;border-color:rgba(58,46,38,.18)!important;}
-main .side{background:linear-gradient(180deg,#f6e9d4,#f0dfc4)!important;border-right:1px solid rgba(58,46,38,.10)!important;}
-main .workspace{background:var(--cream)!important;background-image:none!important;}
-main .box,#downloadOverlay .bgStudioModal{background:var(--panelTan)!important;border:1px solid rgba(58,46,38,.12)!important;box-shadow:0 4px 14px rgba(58,46,38,.06)!important;}
-main .box h2,#downloadOverlay h2{background:#e9d8ba!important;color:var(--ink)!important;border-bottom:1px solid rgba(58,46,38,.10)!important;}
-#downloadOverlay .bgStudioHeader{background:#e9d8ba!important;border-bottom:1px solid rgba(58,46,38,.10)!important;}
-#downloadOverlay p,#downloadOverlay .bgStudioHeader p{color:var(--inkSoft)!important;}
-#downloadOverlay .bgClose{background:var(--btnTan)!important;border:1px solid rgba(58,46,38,.24)!important;color:var(--ink)!important;}
-main .hint,main .footerNote,main .range label,#downloadOverlay .footerNote,#downloadOverlay .range label{color:var(--inkSoft)!important;}
-main button,main select,main input,header button,#downloadOverlay button,#downloadOverlay input{background:var(--btnTan)!important;border:1px solid rgba(58,46,38,.30)!important;color:var(--ink)!important;box-shadow:0 1px 3px rgba(58,46,38,.12)!important;}
-main input[type=text],main input[type=number],main input[type=color],#downloadOverlay input[type=number]{background:#fbf5ea!important;}
-main input[type=range],#downloadOverlay input[type=range]{accent-color:var(--lav);}
-main .pill{background:rgba(92,184,171,.20)!important;border:1px solid rgba(92,184,171,.5)!important;color:var(--tealInk)!important;}
-#openTextureStudio{background:linear-gradient(90deg,#cdbdf2,var(--lav))!important;border:0!important;color:var(--lavInk)!important;}
-#openBackgroundStudio{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
-#openDownload,#dlDownloadBtn.primary{background:linear-gradient(90deg,#f6d98a,var(--gold))!important;border:0!important;color:var(--goldInk)!important;}
-#saveBtn{background:linear-gradient(90deg,#a9dfc9,var(--teal))!important;border:0!important;color:var(--tealInk)!important;}
-#resetBtn{background:var(--btnTan)!important;border:1px solid rgba(240,145,122,.6)!important;color:var(--coralInk)!important;}
-#placeMotifBtn{background:linear-gradient(90deg,#f3b6c9,#e8829f)!important;border:0!important;color:#6b2f3e!important;}
-main .box .full.primary{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
-main .skelCard,main .filmCard{background:var(--panelTan)!important;border:1px solid rgba(58,46,38,.12)!important;}
+/* ===== Theme toggle: "ivory" (light) vs the original dark theme =====
+   With no `theme-light` class on <body>, the app renders exactly like the
+   original dark theme (only structural additions below - icons, the script
+   font, the motif dropzone, decorative selection corner-dots - apply in both
+   themes, recoloured per theme so nothing looks out of place either way).
+   Toggling adds/removes one class; every colour override below is gated on
+   `body.theme-light` so light and dark stay two coherent, complete looks
+   rather than a patchwork. Applies across the main screen, Classics Studio,
+   Background Studio and the shared colour-mode panel - the pattern canvas
+   and every thumbnail preview stay plain white in both themes so patterns
+   remain the visual focus. */
+:root{--cream:#f2e6d3;--cream2:#ecd9bd;--panelTan:#f1e3cc;--btnTan:#fffaf0;--ink:#3a2e26;--inkSoft:#7d6a58;--teal:#5cb8ab;--tealInk:#1f5c53;--coral:#f0917a;--coralInk:#7a3325;--gold:#e8b74f;--goldInk:#7a5a12;--lav:#b39ddb;--lavInk:#4a3a72;--rose:#e8829f;--roseInk:#6b2f3e;}
 .btnIcon{width:16px;height:16px;vertical-align:-3px;margin-right:6px}
-main .box h2,#downloadOverlay h2,main #currentName{font-family:'Caveat',cursive!important;font-weight:700!important;font-size:26px!important;letter-spacing:.01em;}
-main .box h2 button,#downloadOverlay h2 button{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;font-size:11px!important;}
-main .box h2{padding-top:12px!important;padding-bottom:12px!important;}
-main .brick.selected{outline:2px dashed #e8829f!important;outline-offset:4px;}
-main .handle{background:linear-gradient(90deg,#f3b6c9,#e8829f)!important;border-radius:50%!important;}
-main .handleDot{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #e8829f;box-shadow:0 2px 4px rgba(58,46,38,.25);pointer-events:none;z-index:5}
-main .handleDot.dot-tl{top:-7px;left:-7px}main .handleDot.dot-tr{top:-7px;right:-7px}main .handleDot.dot-bl{bottom:-7px;left:-7px}
-main .motifDropzone{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;padding:22px 14px;border:2px dashed rgba(58,46,38,.28)!important;background:#fbf5ea!important;border-radius:14px;text-align:center;box-shadow:none!important;}
+main .box h2,.tsHeader h2,.bgStudioHeader h2,main #currentName{font-family:'Caveat',cursive;font-weight:700;font-size:26px;letter-spacing:.01em;}
+main .box h2 button{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:11px;}
+main .box h2{padding-top:12px;padding-bottom:12px;}
+main .motifDropzone{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;padding:22px 14px;border-radius:14px;text-align:center;border:2px dashed rgba(255,235,250,.24);background:rgba(255,255,255,.035);}
 main .motifDropzone svg{width:26px;height:26px;margin:0}
 main .motifDropzone b{font-size:14px}
-main .motifDropzone span{font-size:11px;color:var(--inkSoft);font-weight:600}
-main .skelCard span,main .filmCard span{color:var(--ink)!important;}
-main .skelCard.active{outline-color:var(--coral)!important;background:rgba(240,145,122,.06)!important;}
-main .filmstripBlock{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;}
-main .scopeRow button.active,main .box button.active{outline-color:var(--teal)!important;}
+main .motifDropzone span{font-size:11px;font-weight:700;color:var(--muted)}
+main .handleDot{position:absolute;width:12px;height:12px;border-radius:50%;background:#1a1420;border:2px solid var(--pink);box-shadow:0 2px 4px rgba(0,0,0,.4);pointer-events:none;z-index:5}
+main .handleDot.dot-tl{top:-7px;left:-7px}main .handleDot.dot-tr{top:-7px;right:-7px}main .handleDot.dot-bl{bottom:-7px;left:-7px}
+
+/* ---- ivory theme: only active with body.theme-light ---- */
+body.theme-light{background:linear-gradient(160deg,var(--cream),var(--cream2))!important;}
+body.theme-light header{background:linear-gradient(180deg,#f8ecd8,#f2e0c2)!important;border-bottom:1px solid rgba(58,46,38,.14)!important;box-shadow:0 8px 22px rgba(58,46,38,.08)!important;}
+body.theme-light header h1{color:var(--ink)!important;}
+body.theme-light header p{color:var(--inkSoft)!important;}
+body.theme-light .logo{background:linear-gradient(135deg,#f0dcc0,#e8cba6)!important;border-color:rgba(58,46,38,.18)!important;}
+body.theme-light main .side{background:linear-gradient(180deg,#f6e9d4,#f0dfc4)!important;border-color:rgba(58,46,38,.10)!important;}
+body.theme-light main .workspace{background:var(--cream)!important;background-image:none!important;}
+body.theme-light .box,body.theme-light .bgStudioModal{background:var(--panelTan)!important;border:1px solid rgba(58,46,38,.12)!important;box-shadow:0 4px 14px rgba(58,46,38,.06)!important;}
+body.theme-light .box h2,body.theme-light .bgStudioHeader,body.theme-light .tsHeader{background:#e9d8ba!important;color:var(--ink)!important;border-bottom:1px solid rgba(58,46,38,.10)!important;}
+body.theme-light .bgStudioHeader p,body.theme-light .tsHeader p{color:var(--inkSoft)!important;}
+body.theme-light .bgClose,body.theme-light .tsClose{background:var(--btnTan)!important;border:1px solid rgba(58,46,38,.24)!important;color:var(--ink)!important;}
+body.theme-light .hint,body.theme-light .footerNote,body.theme-light .range label,body.theme-light .tsHint,body.theme-light .bgHint,body.theme-light .bgTiny,body.theme-light .tsRow label,body.theme-light .bgControlsRow label,body.theme-light .tsMiniValue,body.theme-light .tsLayerInfo small,body.theme-light .tsEmpty{color:var(--inkSoft)!important;}
+body.theme-light button,body.theme-light select,body.theme-light input{background:var(--btnTan)!important;border:1px solid rgba(58,46,38,.30)!important;color:var(--ink)!important;box-shadow:0 1px 3px rgba(58,46,38,.12)!important;}
+body.theme-light input[type=text],body.theme-light input[type=number],body.theme-light input[type=color]{background:#fbf5ea!important;}
+body.theme-light input[type=range]{accent-color:var(--lav);}
+body.theme-light .pill{background:rgba(92,184,171,.20)!important;border:1px solid rgba(92,184,171,.5)!important;color:var(--tealInk)!important;}
+body.theme-light #openTextureStudio{background:linear-gradient(90deg,#cdbdf2,var(--lav))!important;border:0!important;color:var(--lavInk)!important;}
+body.theme-light #openBackgroundStudio{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
+body.theme-light #openDownload,body.theme-light #dlDownloadBtn.primary{background:linear-gradient(90deg,#f6d98a,var(--gold))!important;border:0!important;color:var(--goldInk)!important;}
+body.theme-light #saveBtn{background:linear-gradient(90deg,#a9dfc9,var(--teal))!important;border:0!important;color:var(--tealInk)!important;}
+body.theme-light #resetBtn,body.theme-light #tsReset{background:var(--btnTan)!important;border:1px solid rgba(240,145,122,.6)!important;color:var(--coralInk)!important;}
+body.theme-light #placeMotifBtn{background:linear-gradient(90deg,#f3b6c9,var(--rose))!important;border:0!important;color:var(--roseInk)!important;}
+body.theme-light main .box .full.primary{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
+body.theme-light .bgStudioOverlay .primary{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
+body.theme-light .tsOverlay .primary{background:linear-gradient(90deg,#cdbdf2,var(--lav))!important;border:0!important;color:var(--lavInk)!important;}
+body.theme-light #tsSave,body.theme-light #bgSave{background:linear-gradient(90deg,#a9dfc9,var(--teal))!important;border:0!important;color:var(--tealInk)!important;}
+body.theme-light #tsDownload,body.theme-light #bgDownload{background:linear-gradient(90deg,#f6d98a,var(--gold))!important;border:0!important;color:var(--goldInk)!important;}
+body.theme-light .skelCard,body.theme-light .filmCard,body.theme-light .tsFilmCard,body.theme-light .bgFilmCard,body.theme-light .tsLayerCard{background:#fffefb!important;border:1px solid rgba(58,46,38,.12)!important;}
+body.theme-light .skelCard span,body.theme-light .filmCard span,body.theme-light .tsFilmCard span,body.theme-light .bgFilmCard span,body.theme-light .tsLayerInfo b{color:var(--ink)!important;}
+body.theme-light .skelCard.active{outline-color:var(--coral)!important;background:rgba(240,145,122,.06)!important;}
+body.theme-light .tsFilmCard.active,body.theme-light .bgFilmCard.active,body.theme-light .tsLayerCard.active{outline-color:var(--rose)!important;background:rgba(232,130,159,.08)!important;}
+body.theme-light .filmstripBlock,body.theme-light .tsFooterFilm,body.theme-light .bgFilm{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;}
+body.theme-light .scopeRow button.active,body.theme-light .box button.active{outline-color:var(--teal)!important;}
+body.theme-light .brick.selected{outline:2px dashed var(--rose)!important;outline-offset:4px;}
+body.theme-light .handle{background:linear-gradient(90deg,#f3b6c9,var(--rose))!important;border-radius:50%!important;}
+body.theme-light .handleDot{background:#fff!important;border-color:var(--rose)!important;box-shadow:0 2px 4px rgba(58,46,38,.25)!important;}
+body.theme-light .motifDropzone{border-color:rgba(58,46,38,.28)!important;background:#fbf5ea!important;}
+body.theme-light .motifDropzone span{color:var(--inkSoft)!important;}
+/* Classics Studio + Background Studio + the shared colour-mode panel mounted inside either */
+body.theme-light .tsModal{background:var(--panelTan)!important;}
+body.theme-light .tsBody,body.theme-light .bgStudioBody{background:var(--cream)!important;background-image:none!important;}
+body.theme-light .tsPanel,body.theme-light .bgStudioPanel{background:linear-gradient(180deg,#f6e9d4,#f0dfc4)!important;border-color:rgba(58,46,38,.10)!important;}
+body.theme-light .tsBox,body.theme-light .bgBox{background:#fffefb!important;border:1px solid rgba(58,46,38,.10)!important;}
+body.theme-light .tsBox h3,body.theme-light .bgBox h3{background:#f3e8d8!important;color:var(--ink)!important;border-bottom:1px solid rgba(58,46,38,.08)!important;}
+body.theme-light .tsSw,body.theme-light .tsColourDot,body.theme-light .sw,body.theme-light .motifThumb{border-color:rgba(58,46,38,.25)!important;}
+body.theme-light .tsToggle{background:rgba(58,46,38,.14)!important;border-color:rgba(58,46,38,.20)!important;}
+body.theme-light .tsToggle i{background:#fff!important;}
+body.theme-light .tsToggle.on{background:rgba(179,157,219,.55)!important;}
+body.theme-light .tsCanvasWrap,body.theme-light .bgCanvasWrap{background:#fbf5ea!important;border-color:rgba(58,46,38,.10)!important;box-shadow:none!important;}
+body.theme-light .tsScaleBox{background:rgba(232,130,159,.08)!important;border-color:rgba(232,130,159,.3)!important;}
+body.theme-light .tsBadge{background:rgba(232,130,159,.15)!important;border:1px solid rgba(232,130,159,.4)!important;color:var(--roseInk)!important;}
+body.theme-light .bgTypeBtn.active{outline-color:var(--coral)!important;background:rgba(240,145,122,.10)!important;}
+body.theme-light .bgGradModes button.active{outline-color:var(--teal)!important;}
+body.theme-light .bgFilmDelete{background:rgba(58,46,38,.7)!important;border:1px solid rgba(255,255,255,.5)!important;}
+/* The dark theme leans on --muted (and a handful of literal pink hex values) for
+   secondary text in ~50 places across Classics/Background Studio. Redefining the
+   variable here fixes every var(--muted) usage in one shot; the literal hex ones
+   still need their own overrides since a custom property can't retarget those. */
+body.theme-light{--muted:var(--inkSoft);}
+body.theme-light .launchBadge,body.theme-light .tsRow output,body.theme-light .tsMiniValue,body.theme-light .bgSummaryCard b,body.theme-light .bgSelectedTitle,body.theme-light .tsPreviewTop h3,body.theme-light .tsPaletteLabel b,body.theme-light .tsLayerNum{color:var(--ink)!important;}
+body.theme-light .scaleTop span{color:var(--ink)!important;}
+body.theme-light .bgStopRow small,body.theme-light .tsStudioTitleNote{color:var(--inkSoft)!important;}
+body.theme-light #textureStudioOverlay .tsLayerInfo small{color:var(--inkSoft)!important;}
+body.theme-light #textureStudioOverlay .tsLayerCard:after{color:var(--roseInk)!important;}
+body.theme-light .tsFilmHead b,body.theme-light .bgFilmHead b,body.theme-light .filmstripHead b{color:var(--ink)!important;}
+body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rgba(232,130,159,.4)!important;background:rgba(232,130,159,.15)!important;}
 </style>
 </head>
 <body>
+<script>(function(){try{if((localStorage.getItem('pkmTheme')||'light')==='light')document.body.classList.add('theme-light');}catch(e){document.body.classList.add('theme-light');}})();</script>
 <svg style="display:none" aria-hidden="true">
 <defs>
 <symbol id="i-dice" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></symbol>
@@ -879,12 +920,14 @@ main .scopeRow button.active,main .box button.active{outline-color:var(--teal)!i
 <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"/></symbol>
 <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></symbol>
 <symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15 9-2 6-4-2 2-6 4 2Z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
 </defs>
 </svg>
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>magic collection builder</h1><p>v62 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save template</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset template</button></div>
+  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save template</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset template</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
 </header>
 <main>
   <aside class="side left">
@@ -2044,6 +2087,18 @@ function resetCurrentTemplate(){
   renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();
 }
 addRowBtn.onclick=()=>{pushHistory();[20,50,80].forEach(x=>bricks.push(p('oval',x,50,16,10,'filler')));render();};addColBtn.onclick=()=>{pushHistory();[20,50,80].forEach(y=>bricks.push(p('oval',50,y,16,10,'filler')));render();};resetBtn.onclick=()=>{pushHistory();resetCurrentTemplate();};undoBtn.onclick=undo;redoBtn.onclick=redo;saveBtn.onclick=()=>{saveTemplateToFilmstrip();};
+function syncThemeToggleUI(){
+ const light=document.body.classList.contains('theme-light');
+ const icon=document.getElementById('themeToggleIcon'),label=document.getElementById('themeToggleLabel');
+ if(icon)icon.innerHTML='<use href="'+(light?'#i-moon':'#i-sun')+'"/>';
+ if(label)label.textContent=light?'dark mode':'light mode';
+}
+document.getElementById('themeToggle').onclick=()=>{
+ const light=document.body.classList.toggle('theme-light');
+ try{localStorage.setItem('pkmTheme',light?'light':'dark');}catch(e){}
+ syncThemeToggleUI();
+};
+syncThemeToggleUI();
 renderSwatchesUI();
 const legacyTextureToggle=document.getElementById('textureToggle');
 if(legacyTextureToggle)legacyTextureToggle.onclick=()=>{pushHistory();if(!texture.layers.length)texture=stripeDefaultTexture();else texture.enabled=!texture.enabled;renderTextureUI();render();};
