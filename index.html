@@ -801,29 +801,30 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
    canvas and every thumbnail preview (.repeatStage, .mini) already default
    to plain white and are deliberately left alone here too, so patterns stay
    the visual focus rather than competing with the chrome around them. */
-:root{--cream:#fdf6ec;--cream2:#faece0;--ink:#3a2e26;--inkSoft:#8a7a6c;--teal:#5cb8ab;--tealInk:#1f5c53;--coral:#f0917a;--coralInk:#7a3325;--gold:#e8b74f;--goldInk:#7a5a12;--lav:#b39ddb;--lavInk:#4a3a72;}
+:root{--cream:#f2e6d3;--cream2:#ecd9bd;--panelTan:#f1e3cc;--btnTan:#e6d4b3;--ink:#3a2e26;--inkSoft:#7d6a58;--teal:#5cb8ab;--tealInk:#1f5c53;--coral:#f0917a;--coralInk:#7a3325;--gold:#e8b74f;--goldInk:#7a5a12;--lav:#b39ddb;--lavInk:#4a3a72;}
 body:has(main){background:linear-gradient(160deg,var(--cream),var(--cream2))!important;}
-header{background:linear-gradient(180deg,#fffaf3,#fdf1e3)!important;border-bottom:1px solid rgba(58,46,38,.10)!important;box-shadow:0 8px 22px rgba(58,46,38,.06)!important;}
+header{background:linear-gradient(180deg,#f8ecd8,#f2e0c2)!important;border-bottom:1px solid rgba(58,46,38,.14)!important;box-shadow:0 8px 22px rgba(58,46,38,.08)!important;}
 header h1{color:var(--ink)!important;}
 header p{color:var(--inkSoft)!important;}
-.logo{background:linear-gradient(135deg,#fff2df,#ffe4d0)!important;border-color:rgba(58,46,38,.14)!important;}
-main .side{background:linear-gradient(180deg,#fffaf3,#fef6ec)!important;border-right:1px solid rgba(58,46,38,.07)!important;}
+.logo{background:linear-gradient(135deg,#f0dcc0,#e8cba6)!important;border-color:rgba(58,46,38,.18)!important;}
+main .side{background:linear-gradient(180deg,#f6e9d4,#f0dfc4)!important;border-right:1px solid rgba(58,46,38,.10)!important;}
 main .workspace{background:var(--cream)!important;background-image:none!important;}
-main .box,#downloadOverlay .bgStudioModal{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;box-shadow:0 4px 14px rgba(58,46,38,.05)!important;}
-main .box h2,#downloadOverlay h2{background:#fff8ef!important;color:var(--ink)!important;border-bottom:1px solid rgba(58,46,38,.08)!important;}
-#downloadOverlay .bgStudioHeader{background:#fff8ef!important;border-bottom:1px solid rgba(58,46,38,.08)!important;}
+main .box,#downloadOverlay .bgStudioModal{background:var(--panelTan)!important;border:1px solid rgba(58,46,38,.12)!important;box-shadow:0 4px 14px rgba(58,46,38,.06)!important;}
+main .box h2,#downloadOverlay h2{background:#e9d8ba!important;color:var(--ink)!important;border-bottom:1px solid rgba(58,46,38,.10)!important;}
+#downloadOverlay .bgStudioHeader{background:#e9d8ba!important;border-bottom:1px solid rgba(58,46,38,.10)!important;}
 #downloadOverlay p,#downloadOverlay .bgStudioHeader p{color:var(--inkSoft)!important;}
-#downloadOverlay .bgClose{background:#fff!important;border:1px solid rgba(58,46,38,.16)!important;color:var(--ink)!important;}
+#downloadOverlay .bgClose{background:var(--btnTan)!important;border:1px solid rgba(58,46,38,.24)!important;color:var(--ink)!important;}
 main .hint,main .footerNote,main .range label,#downloadOverlay .footerNote,#downloadOverlay .range label{color:var(--inkSoft)!important;}
-main button,main select,main input,header button,#downloadOverlay button,#downloadOverlay input{background:#fff!important;border:1px solid rgba(58,46,38,.16)!important;color:var(--ink)!important;box-shadow:0 1px 2px rgba(58,46,38,.05)!important;}
+main button,main select,main input,header button,#downloadOverlay button,#downloadOverlay input{background:var(--btnTan)!important;border:1px solid rgba(58,46,38,.28)!important;color:var(--ink)!important;box-shadow:0 1px 3px rgba(58,46,38,.10)!important;}
+main input[type=text],main input[type=number],main input[type=color],#downloadOverlay input[type=number]{background:#fbf5ea!important;}
 main input[type=range],#downloadOverlay input[type=range]{accent-color:var(--lav);}
-main .pill{background:rgba(92,184,171,.16)!important;border:1px solid rgba(92,184,171,.45)!important;color:var(--tealInk)!important;}
+main .pill{background:rgba(92,184,171,.20)!important;border:1px solid rgba(92,184,171,.5)!important;color:var(--tealInk)!important;}
 #openTextureStudio{background:linear-gradient(90deg,#cdbdf2,var(--lav))!important;border:0!important;color:var(--lavInk)!important;}
 #openBackgroundStudio{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
 #openDownload,#dlDownloadBtn.primary{background:linear-gradient(90deg,#f6d98a,var(--gold))!important;border:0!important;color:var(--goldInk)!important;}
 #saveBtn{background:linear-gradient(90deg,#a9dfc9,var(--teal))!important;border:0!important;color:var(--tealInk)!important;}
-#resetBtn{background:#fff!important;border:1px solid rgba(240,145,122,.5)!important;color:var(--coralInk)!important;}
-main .skelCard,main .filmCard{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;}
+#resetBtn{background:var(--btnTan)!important;border:1px solid rgba(240,145,122,.6)!important;color:var(--coralInk)!important;}
+main .skelCard,main .filmCard{background:var(--panelTan)!important;border:1px solid rgba(58,46,38,.12)!important;}
 main .skelCard span,main .filmCard span{color:var(--ink)!important;}
 main .skelCard.active{outline-color:var(--coral)!important;background:rgba(240,145,122,.06)!important;}
 main .filmstripBlock{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;}
