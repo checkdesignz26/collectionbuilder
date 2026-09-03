@@ -949,6 +949,10 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
         <div class="tsColourReadout"><span id="cmTexChip" class="tsColourChip"></span><span id="cmTexHex">#555555</span></div>
       </div>
       <p class="tsHint" style="margin:6px 0 0">The selected colour is applied live to the preview. No colour roles to remember.</p>
+      <div id="tsBgExtras" class="hidden" style="margin-top:8px">
+        <div class="tsToggleLine"><span class="tsHint" style="margin:0">enable background</span><button id="tsBgToggle" class="tsToggle on"><i></i></button></div>
+        <div class="tsRow"><label>opacity</label><input id="tsBgOpacity" type="range" min="0" max="100" value="100"></div>
+      </div>
     </div></div>
     <div class="grid2" style="margin-top:7px"><button id="cmApplyLive" class="small">preview</button><button id="cmResetGrey" class="small">reset to grey</button></div>
     <div class="tsCustomAdd" style="margin-top:9px"><input id="cmColourwayName" placeholder="colourway name" class="selectTiny"><button id="cmSaveColourway" class="small primary">save colourway</button></div>
@@ -1936,7 +1940,17 @@ if(legacyRemoveStripeLayerBtn)legacyRemoveStripeLayerBtn.onclick=removeStripeTex
 let tapTimes=[];window.addEventListener('pointerup',e=>{if(e.pointerType==='touch'){tapTimes.push(Date.now());tapTimes=tapTimes.filter(t=>Date.now()-t<430);if(tapTimes.length===2){undo();tapTimes=[];}else if(tapTimes.length===3){redo();tapTimes=[];}}});window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}});const patternScaleRange=document.getElementById('patternScaleRange');if(patternScaleRange)patternScaleRange.oninput=()=>{texture.patternScale=+patternScaleRange.value;const psv=document.getElementById('patternScaleValue');if(psv)psv.textContent=texture.patternScale+'%';renderTextureUI();render();};
 /* v65 colour mode: recolour the current template (bricks + background) from one hero
    colour via generateAdaptivePalette(), with named colourways saved per saved template. */
-function mountColourMode(slotId){const slot=document.getElementById(slotId);const panel=document.getElementById('cmPanel');if(!slot||!panel)return;panel.style.display='block';slot.appendChild(panel);}
+function mountColourMode(slotId){
+ const slot=document.getElementById(slotId);const panel=document.getElementById('cmPanel');if(!slot||!panel)return;
+ panel.style.display='block';slot.appendChild(panel);
+ // The "background colours" box is one shared panel re-parented into whichever
+ // studio opened it - Classics Studio also needs an enable/opacity toggle for
+ // its own flat background fill (Background Studio has its own separate
+ // enable/opacity elsewhere, so those only make sense here).
+ const inClassics=slotId==='tsColourModeSlot';
+ const extras=document.getElementById('tsBgExtras');if(extras)extras.classList.toggle('hidden',!inClassics);
+ const texBtn=document.getElementById('cmTargetTex');if(texBtn)texBtn.textContent=inClassics?'selected layer':'texture';
+}
 window.mountColourMode=mountColourMode;
 function cmGetPalette(){const hero=document.getElementById('cmHero').value;const mood=document.getElementById('cmMood').value;const richness=document.getElementById('cmRichness').value;return generateAdaptivePalette(hero,mood,richness);}
 // Clicking a generated swatch is the deliberate way to colour something specific: the
@@ -1975,7 +1989,12 @@ function cmPrepareWatercolour(hex){
  }
 }
 function cmSyncBgColourUI(){
- const snap=window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null);
+ const tsOpen=document.getElementById('textureStudioOverlay')?.classList.contains('open');
+ // Inside Classics Studio the panel reads/writes its own background fill +
+ // selected layer, not Background Studio's unrelated recipe - those are two
+ // different things that happened to share one panel's swatch-tap logic before.
+ const snap=tsOpen?(window.tsGetWorkingBgSnapshot?window.tsGetWorkingBgSnapshot():null)
+                  :(window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null));
  const base=snap?.base||'#f2f2f2', tex=snap?.tex||'#555555';
  const bc=document.getElementById('cmBaseChip'),tc=document.getElementById('cmTexChip');
  const bh=document.getElementById('cmBaseHex'),th=document.getElementById('cmTexHex');
@@ -1985,9 +2004,14 @@ function cmSyncBgColourUI(){
 function cmSwatchClick(hex){
  const tsOpen=document.getElementById('textureStudioOverlay')?.classList.contains('open');
  const bgOpen=document.getElementById('backgroundStudioOverlay')?.classList.contains('open');
- if(tsOpen&&window.tsApplyColourToSelected){
+ if(tsOpen&&cmBgTarget()==='base'&&window.tsSetBackgroundColour){
+  window.tsSetBackgroundColour(hex);
+  cmMarkSelectedSwatch(hex);
+  cmSyncBgColourUI();
+ }else if(tsOpen&&window.tsApplyColourToSelected){
   const applied=window.tsApplyColourToSelected(hex);
   cmFlashStatus(applied?'layer coloured ✓':'select a layer first',applied);
+  cmSyncBgColourUI();
  }else if(bgOpen&&window.bgSetRoleColours){
   const snap=window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null);
   const base=snap?.base||'#f2f2f2', tex=snap?.tex||'#555555';
@@ -2362,11 +2386,6 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
           <button data-type="argyle"><span>◇</span>Argyle</button>
           <button data-type="gingham"><span>▦</span>Gingham</button>
         </div></div>
-        <div class="tsBox"><h3>Background</h3><div class="tsPad">
-          <div class="tsToggleLine"><span class="tsHint" style="margin:0">enable background</span><button id="tsBgToggle" class="tsToggle on"><i></i></button></div>
-          <div class="tsRow"><label>colour</label><input id="tsBgColor" type="color" value="#fff1d6"></div>
-          <div class="tsRow"><label>opacity</label><input id="tsBgOpacity" type="range" min="0" max="100" value="100"></div>
-        </div></div>
         <div class="tsBox"><h3>Collection Palette</h3><div class="tsPad">
           <div class="tsPaletteLabel"><b id="tsPaletteTitle">Collection colours</b><span>tap to colour selected layer</span></div>
           <div class="tsPalette" id="tsPalette"></div>
@@ -2532,7 +2551,7 @@ function ginghamDefault(){return {type:'gingham',bg:true,bgColor:'#ffffff',bgOpa
  {kind:'square',name:'white square',color:'#ffffff',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='madras'?madrasDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
-function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');}
+function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');window.cmSetBgTarget?.('tex');}
 function openType(type){state=defaultFor(type||'stripes');selected=0;previewMode='single';tsUndoStack=[];tsRedoStack=[];setSeg();document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));open();}
 function close(){document.body.style.overflow='';$('textureStudioOverlay').classList.remove('open');}
 function init(){state=stripeDefaults();previewMode='single';saved=(window.__savedItemsBlob&&window.__savedItemsBlob.classics)||[];renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
@@ -2682,7 +2701,7 @@ function wire(){
  $('tsAddCustomColour').onclick=()=>{const c=$('tsCustomColor').value; if(!palettes.custom.includes(c))palettes.custom.push(c); paletteSource='custom'; palette=palettes.custom; document.querySelectorAll('input[name="tsPaletteSource"]').forEach(r=>r.checked=(r.value==='custom')); setLayerColour(c);};
  $('openTextureStudio')?.addEventListener('click',open);$('tsClose').onclick=close;$('textureStudioOverlay').addEventListener('click',e=>{if(e.target.id==='textureStudioOverlay')close();});
  $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
- $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgColor').oninput=e=>{tsPushHistory();state.bgColor=e.target.value;renderAll();};$('tsBgColor').onclick=e=>e.currentTarget.showPicker&&e.currentTarget.showPicker();$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
+ $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
  $('tsSingle').onclick=()=>{previewMode='single';setSeg();renderAll();};$('tsRepeat').onclick=()=>{previewMode='repeat';setSeg();renderAll();};$('tsBrick').onclick=()=>{previewMode='brick';setSeg();renderAll();};$('tsGuides').onclick=()=>{showGuides=!showGuides;$('tsGuides').classList.toggle('active',showGuides);renderAll();};
  $('tsAddLayer').onclick=()=>{tsPushHistory();let base=state.layers[selected]||{kind:state.type==='dots'?'dot':state.type==='argyle'?'diamond':(state.type==='checks'||state.type==='gingham')?'check':'stripe',direction:'vertical',rotate:0,gap:18,width:18,opacity:100,blend:'normal'};let l=copy(base);l.name=(state.type==='dots'?'dot':state.type==='argyle'?'diamond':'stripe')+' '+(state.layers.length+1);l.color=palette[state.layers.length%palette.length];l.pos=((base.pos||0)+(base.width||12)+(base.gap||10))%100;l.visible=true;state.layers.splice(selected+1,0,l);selected++;renderAll();};
  $('tsRemoveLayer').onclick=()=>{if(state.layers.length){tsPushHistory();state.layers.splice(selected,1);selected=Math.max(0,selected-1);renderAll();}};
@@ -2708,7 +2727,7 @@ function wire(){
  if($('tsColourModeBtn'))$('tsColourModeBtn').onclick=()=>tsShowMode('colour');
 }
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
-function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgColor').value=state.bgColor||'#fff1d6';$('tsBgOpacity').value=state.bgOpacity??100;$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
+function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
  // Global Stripe Controls / Selected Direction Group / sequence duplication only make sense
  // for band recipes - a checkerboard of discrete squares has no "stripe sequence" to distribute
  // or duplicate into a plaid.
@@ -2866,6 +2885,27 @@ window.tsApplyColourToSelected=function(hex){
  if(typeof renderAll==='function')renderAll(false);
  if(typeof render==='function')render();
  return !!(state&&state.layers&&state.layers[selected]);
+};
+// Drives the "background colours" panel's background target - mirrors
+// tsApplyColourToSelected's pattern of updating both the studio's own working
+// state and (if present) the copy already applied to the main canvas, so a tap
+// shows up live in both places rather than only the one currently being edited.
+window.tsSetBackgroundColour=function(hex){
+ if(state){state.bg=true;state.bgColor=hex;}
+ if(tsAppliedState){tsAppliedState.state.bg=true;tsAppliedState.state.bgColor=hex;}
+ tsAppliedDataUrl=null;
+ try{if(tsAppliedState)localStorage.setItem('pkmActiveClassicV65',JSON.stringify(tsAppliedState));}catch(e){}
+ if(typeof renderAll==='function')renderAll(false);
+ if(typeof render==='function')render();
+};
+// Feeds the same hex readouts/chips the panel already shows for Background
+// Studio's base/tex, but sourced from Classics' own background fill + whatever
+// layer is currently selected, since those are the two things a tap here can
+// actually change while Classics Studio is open.
+window.tsGetWorkingBgSnapshot=function(){
+ if(!state)return null;
+ const sel=state.layers&&state.layers[selected];
+ return {base:state.bgColor||'#ffffff',tex:sel?sel.color:'#555555'};
 };
 window.tsResetToGrey=function(){
  if(state)tsGreyLayers(state.layers);
