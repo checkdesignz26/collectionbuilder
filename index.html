@@ -1976,14 +1976,18 @@ function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();
 // Reuses the same scope/styleAllLayouts rules the rotate slider already follows for consistency.
 function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const el=document.querySelector('.brick[data-id="'+id+'"].selected');if(!el)return;const r=el.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);while(angle>180)angle-=360;while(angle<-180)angle+=360;scopedBricks().forEach(x=>{x.rot=angle;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
 function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.innerHTML='';const textureLaunchers={stripe:'stripes',polka:'dots',gingham:'checks',plaid:'plaid'};skeletonOrder.forEach(key=>{const c=document.createElement('div');const isLive=key===current||key===currentTemplateBase;c.className='skelCard '+(isLive?'active':'');c.dataset.key=key;
- // Non-active layouts' thumbnails preview the same motifShapes assignments the active layout
- // has, on a throwaway copy - so every card side-by-side shows how the current motif set would
- // look there, without switching into each one (and without mutating the stored blueprint).
+ // Non-active layouts' thumbnails used to preview the current motifShapes assignments on a
+ // throwaway copy, so every card side-by-side showed how the motif set would look there without
+ // switching into each one - but that meant every renderGrid() call (adding a motif, toggling
+ // display mode, finishing a resize) redrew real motif <img>s across all ~13 cards at once:
+ // measured ~60ms with just 4 motifs assigned, vs ~1ms with plain outlines. Non-active cards now
+ // stay outline-only - motifs only actually appear on a layout's thumbnail once you've switched to
+ // it (isLive below), which is also the moment updateLiveMini() takes over keeping it live.
  // When working from a saved template, currentTemplateBase (the preset it was originally saved
  // from) also gets the live bricks, so that thumbnail keeps tracking your edits too - previously
  // current was only ever the saved template's own key, which never matches a skeletonOrder key,
  // so no thumbnail (not even its own base) ever reflected a saved template's live edits.
- const list=isLive?bricks:applyMotifShapesToCopy(blueprintStore[key]||presets[key].bricks);
+ const list=isLive?bricks:(blueprintStore[key]||presets[key].bricks);
  const t=isLive?texture:(textureStore[key]|| (key==='stripe'?stripeDefaultTexture():blankTexture()));const launch=textureLaunchers[key];
  // A single bad recipe throwing while generating one card's background/classic
  // thumbnail must never abort the rest of this loop - forEach doesn't recover
