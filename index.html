@@ -1004,15 +1004,51 @@ const MOOD_CURVES={
  // Deep, saturated, wide-hue-spread stones (emerald/sapphire/ruby/amethyst/topaz) -
  // works with any hero the way the other moods do, since "jewel" is a richness
  // treatment rather than a specific hue family.
- jewel:    {sat:[65,92],val:[32,58],spread:1.35,accentPunch:1.25,damp:1.0},
- // "Traditional Christmas" needs to actually read as red+green+gold no matter
- // which hero hue was picked - a hero-relative offset (like every other mood
- // uses) can't guarantee that, so this is the one mood with hueAbsolute: fixed
- // hue targets for secondary/accent/accent2/filler instead of hue+offset*spread.
- // The hero swatch itself is still never touched, same as any other mood.
- christmas:{sat:[58,88],val:[26,48],spread:1.0,accentPunch:1.15,damp:1.0,hueAbsolute:[140,353,45,125]}
+ jewel:    {sat:[65,92],val:[32,58],spread:1.35,accentPunch:1.25,damp:1.0}
+ // "christmas" isn't listed here - unlike every other mood it isn't an
+ // adaptive hue-shift recipe at all, it's a fixed curated palette (see
+ // generateChristmasPalette/cmChristmasVariations below), because a hero-
+ // relative hue shift can't reliably guarantee landing on red/green/gold no
+ // matter which hero was picked, and the first attempt at faking that with
+ // hueAbsolute offsets put two roles only 15° apart - both reading as the
+ // same green, exactly the "too much green, no dark green" that was reported.
 };
+// A curated, non-adaptive traditional palette: bright red, deep pine green,
+// bright gold, and a second deep berry red for filler rather than a second
+// green (the earlier hueAbsolute offsets put secondary at 140° and filler at
+// 125° - both effectively the same green, which read as "too much green,
+// no dark green" exactly as reported). richness fades everything toward pale/
+// pastel rather than shifting hue, since a fixed festive palette shouldn't
+// drift across the colour wheel just because richness moved.
+function generateChristmasPalette(heroHex,richness){
+ const r=Math.max(0,Math.min(100,+richness||0))/100;
+ const rgb=hexToRgbMB(heroHex);
+ const heroHsv=rgbToHsvMB(rgb.r,rgb.g,rgb.b);
+ // Quadratic rather than linear falloff: stays close to full-strength/vivid
+ // across the middle-to-high range of the slider (where richness normally
+ // sits) and only meaningfully pastels things toward the very low end -
+ // a linear fade was noticeably muting the red/gold even at the default
+ // richness of 40.
+ const pale=(1-r)*(1-r)*0.4;
+ const tone=(hex)=>cmMixWithWhite(hex,pale);
+ const hue=heroHsv.h;
+ const cs=(s)=>Math.max(4,Math.min(98,s)), cv=(v)=>Math.max(4,Math.min(98,v));
+ const roles={
+  hero:heroHex,
+  secondary:tone('#0b3d24'), // deep pine green
+  accent:tone('#d62828'),    // bright true red
+  accent2:tone('#f2b705'),   // bright gold
+  filler:tone('#8c1c3f'),    // deep berry/burgundy - a second red, not a second green
+  deep:hsvToHexMB(hue,cs(Math.min(98,heroHsv.s*1.15)),cv(Math.max(12,heroHsv.v*0.42))),
+  tint:hsvToHexMB(hue,cs(Math.max(6,heroHsv.s*0.25)),cv(Math.min(97,heroHsv.v+(100-heroHsv.v)*0.55))),
+  black:hsvToHexMB(hue,cs(Math.min(60,heroHsv.s*0.6)),14),
+  grey:hsvToHexMB(hue,cs(Math.min(35,heroHsv.s*0.35)),52),
+  white:hsvToHexMB(hue,cs(Math.min(14,heroHsv.s*0.12)),95)
+ };
+ return {roles,bg:{base:roles.white,tex:roles.hero}};
+}
 function generateAdaptivePalette(heroHex,mood,richness){
+ if(mood==='christmas')return generateChristmasPalette(heroHex,richness);
  const curve=MOOD_CURVES[mood]||MOOD_CURVES.summer;
  const r=Math.max(0,Math.min(100,+richness||0))/100;
  const rgb=hexToRgbMB(heroHex);
@@ -1035,8 +1071,9 @@ function generateAdaptivePalette(heroHex,mood,richness){
  // consistent directional identity instead (e.g. winter always reading as icy blue/teal, whatever
  // hero was picked) can override with its own [secondary,accent,accent2,filler] hueOffsets so
  // every derived role stays biased toward the same family rather than spreading across the wheel.
- // hueAbsolute goes one step further: fixed hue targets instead of hero-relative offsets, for a
- // mood (christmas) that needs to land on specific hues (red/green/gold) regardless of hero.
+ // hueAbsolute goes one step further: fixed hue targets instead of hero-relative offsets, kept
+ // as a general option for a future mood that needs to land on specific hues regardless of hero
+ // (christmas turned out to need a properly curated palette instead - see generateChristmasPalette).
  const [secOff,accOff,acc2Off,fillOff]=curve.hueOffsets||[130,-40,80,200];
  const [hSec,hAcc,hAcc2,hFill]=curve.hueAbsolute||[hue+secOff*spread,hue+accOff*spread,hue+acc2Off*spread,hue+fillOff*spread];
  const cs=(s)=>Math.max(4,Math.min(98,s)), cv=(v)=>Math.max(4,Math.min(98,v));
@@ -2156,11 +2193,31 @@ function cmApplyExtractedPalette(){
  render();
  cmFlashStatus('image palette applied ✓');
 }
+// A fixed set of festive tones rather than the generic hue-fan below - fanning
+// hues around whatever hero was picked doesn't reliably land on red/green/gold
+// at all, and even when it happened to, it produced several nearly-identical
+// hues in a row (several muddy greens, no true bright red) instead of a
+// balanced, recognisably traditional spread. richness fades toward pale/pastel
+// rather than shifting hue.
+const CHRISTMAS_PALETTE=['#d62828','#8c1c3f','#6b1414','#0b3d24','#1f7a4d','#043927','#f2b705','#c98a1f','#e8c37a','#fdf6e3','#c0c0c0','#2f2f2f'];
+function cmChristmasVariations(richness,count){
+ const r=Math.max(0,Math.min(100,+richness||0))/100;
+ // Same quadratic falloff as generateChristmasPalette, for the same reason.
+ const pale=(1-r)*(1-r)*0.55;
+ const out=[];
+ for(let i=0;i<count;i++){
+  const cycle=Math.floor(i/CHRISTMAS_PALETTE.length);
+  const base=CHRISTMAS_PALETTE[i%CHRISTMAS_PALETTE.length];
+  out.push(cmMixWithWhite(base,Math.min(0.85,pale+cycle*0.12)));
+ }
+ return out;
+}
 // Extra tappable shades beyond the 10 named roles - a fan of hues around the (already
 // hero-harmonized) sat/val, purely for exploration. Never touches hero/secondary/accent/etc.
 // as optional exploration colours; they are applied only to the currently selected target.
 function cmGenerateVariations(heroHex,mood,richness,count){
  if(!count)return [];
+ if(mood==='christmas')return cmChristmasVariations(richness,count);
  const curve=MOOD_CURVES[mood]||MOOD_CURVES.summer;
  const r=Math.max(0,Math.min(100,+richness||0))/100;
  const rgb=hexToRgbMB(heroHex);
