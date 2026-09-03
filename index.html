@@ -817,6 +817,8 @@ main .motifDropzone b{font-size:14px}
 main .motifDropzone span{font-size:11px;font-weight:700;color:var(--muted)}
 main .handleDot{position:absolute;width:12px;height:12px;border-radius:50%;background:#1a1420;border:2px solid var(--pink);box-shadow:0 2px 4px rgba(0,0,0,.4);pointer-events:none;z-index:5}
 main .handleDot.dot-tl{top:-7px;left:-7px}main .handleDot.dot-tr{top:-7px;right:-7px}main .handleDot.dot-bl{bottom:-7px;left:-7px}
+main .rotHandle{position:absolute;left:50%;top:-30px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:linear-gradient(90deg,var(--purple),var(--pink));border:2px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35);touch-action:none;z-index:6;cursor:grab}
+main .rotHandle::before{content:'';position:absolute;left:50%;top:100%;width:2px;height:14px;background:rgba(255,255,255,.5);margin-left:-1px}
 
 /* ---- ivory theme: only active with body.theme-light ---- */
 body.theme-light{background:linear-gradient(160deg,var(--cream),var(--cream2))!important;}
@@ -855,6 +857,8 @@ body.theme-light .scopeRow button.active,body.theme-light .box button.active{out
 body.theme-light .brick.selected{outline:2px dashed var(--rose)!important;outline-offset:4px;}
 body.theme-light .handle{background:linear-gradient(90deg,#f3b6c9,var(--rose))!important;border-radius:50%!important;}
 body.theme-light .handleDot{background:#fff!important;border-color:var(--rose)!important;box-shadow:0 2px 4px rgba(58,46,38,.25)!important;}
+body.theme-light .rotHandle{background:linear-gradient(90deg,#f3b6c9,var(--rose))!important;}
+body.theme-light .rotHandle::before{background:rgba(58,46,38,.35)!important;}
 body.theme-light .motifDropzone{border-color:rgba(58,46,38,.28)!important;background:#fbf5ea!important;}
 body.theme-light .motifDropzone span{color:var(--inkSoft)!important;}
 /* Classics Studio + Background Studio + the shared colour-mode panel mounted inside either */
@@ -980,7 +984,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 
     <div class="box"><h2>textures</h2><div class="body">
       <p class="hint">Open the shared Classics Studio for stripes, dots, checks, plaid, madras and argyle. Background Studio is separate now.</p>
-      <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
+      <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" id="clearBgBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>clear background</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
       <div class="grid2">
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('dots')">dots</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('checks')">checks</button>
@@ -1760,7 +1764,7 @@ function render(){const stage=document.getElementById('stage');stage.className='
  }
  bricksLayer.innerHTML='';
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
- drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); el.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();selected=b.id;const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);['dot-tl','dot-tr','dot-bl'].forEach(pos=>{const d=document.createElement('div');d.className='handleDot '+pos;el.appendChild(d);});}} bricksLayer.appendChild(el);});
+ drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); el.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();selected=b.id;const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);const rh=document.createElement('div');rh.className='rotHandle';rh.addEventListener('pointerdown',e=>startRotate(e,b.id));el.appendChild(rh);['dot-tl','dot-tr','dot-bl'].forEach(pos=>{const d=document.createElement('div');d.className='handleDot '+pos;el.appendChild(d);});}} bricksLayer.appendChild(el);});
 }
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
 // b.motifUrl changes either way - this only affects how brickHTML/liveMiniHTML render it, so
@@ -1944,6 +1948,11 @@ function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=br
 // and dragging the slider are two input methods for the same thing, so they should behave
 // identically rather than the handle being a single-brick-only shortcut.
 function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');const onMove=ev=>{const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/3:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));scopedBricks().forEach(x=>{x.w=nw;x.h=nh;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;renderGrid();}render();syncControls(false);};const onUp=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
+// Drag-to-rotate handle above the selected brick. Angle is measured from the brick's own screen
+// centre (via getBoundingClientRect, which stays correct through CSS rotation since the transform
+// origin is the element centre) so it works the same however the tile is currently scaled/rotated.
+// Reuses the same scope/styleAllLayouts rules the rotate slider already follows for consistency.
+function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const onMove=ev=>{const el=document.querySelector('.brick[data-id="'+id+'"].selected');if(!el)return;const r=el.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);while(angle>180)angle-=360;while(angle<-180)angle+=360;scopedBricks().forEach(x=>{x.rot=angle;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;renderGrid();}render();syncControls(false);};const onUp=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
 function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.innerHTML='';const textureLaunchers={stripe:'stripes',polka:'dots',gingham:'checks',plaid:'plaid'};skeletonOrder.forEach(key=>{const c=document.createElement('div');const isLive=key===current||key===currentTemplateBase;c.className='skelCard '+(isLive?'active':'');c.dataset.key=key;
  // Non-active layouts' thumbnails preview the same motifShapes assignments the active layout
  // has, on a throwaway copy - so every card side-by-side shows how the current motif set would
@@ -2038,6 +2047,12 @@ document.getElementById('motifDisplayModeBtn').onclick=()=>{
   btn.disabled=false;
   motifToggleBusy=false;
  });
+};
+document.getElementById('clearBgBtn').onclick=()=>{
+ pushHistory();
+ if(window.bgApplySnapshot)window.bgApplySnapshot(null);
+ render();
+ renderGrid();
 };
 document.getElementById('clearAllMotifsBtn').onclick=()=>{
  if(!Object.keys(motifShapes).length)return;
