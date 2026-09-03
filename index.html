@@ -811,6 +811,9 @@ main .box h2,.tsHeader h2,.bgStudioHeader h2,main #currentName{font-family:'Cave
 main .box h2 button{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:11px;}
 main .box h2{padding-top:12px;padding-bottom:12px;}
 .scopeRow{grid-template-columns:repeat(2,1fr)!important;}
+main .zoomRow{grid-template-columns:84px 1fr 46px!important;margin:0 0 10px 0!important;}
+main .zoomRow label{display:flex;align-items:center;gap:5px;}
+main .zoomRow output{font-size:12px;font-weight:850;text-align:right;color:var(--muted);}
 main .motifDropzone{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;padding:22px 14px;border-radius:14px;text-align:center;border:2px dashed rgba(255,235,250,.24);background:rgba(255,255,255,.035);}
 main .motifDropzone svg{width:26px;height:26px;margin:0}
 main .motifDropzone b{font-size:14px}
@@ -1004,7 +1007,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
   </aside>
   <section class="workspace">
     <div class="previewWrap">
-      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active"><svg class="btnIcon"><use href="#i-grid"/></svg>3×3 repeat</button><button id="singleBtn"><svg class="btnIcon"><use href="#i-square"/></svg>single tile</button><button id="fabricViewBtn" title="Step back and see the repeat tiled like printed fabric"><svg class="btnIcon"><use href="#i-zoom-out"/></svg>fabric view</button></div></div>
+      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active"><svg class="btnIcon"><use href="#i-grid"/></svg><span id="repeatBtnLabel">3×3</span> repeat</button><button id="singleBtn"><svg class="btnIcon"><use href="#i-square"/></svg>single tile</button></div></div>
+      <div class="range zoomRow" id="zoomOutRow"><label><svg class="btnIcon" style="margin:0"><use href="#i-zoom-out"/></svg>zoom out</label><input id="zoomOutRange" type="range" min="0" max="3" step="1" value="0"><output id="zoomOutValue"></output></div>
       <div class="stageOuter"><div id="stage" class="repeatStage repeat"></div></div>
       <div class="livePreviewHeader"><span class="livePreviewBadge">Live Preview</span><span class="footerNote">every thumbnail below stays in sync with your motifs and sizing as you edit</span></div>
       <div class="skeletonGrid" id="skeletonGrid"></div>
@@ -1660,7 +1664,11 @@ function saveTemplateToFilmstrip(){
 }
 function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
 function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();}
-function tileOffsets(){if(mode==='single')return [[0,0,'center']];return [[-1,-1], [0,-1], [1,-1],[-1,0],[0,0,'center'],[1,0],[-1,1],[0,1],[1,1]];}
+// repeatSpan is always odd (3/5/7/9, driven by the "zoom out" slider) so there's a true centre
+// tile. tileOffsets()/the brick edge-clone range below both walk the same -(n/2)..+(n/2) square, so
+// "zoomed out" just means a bigger square of the same tiles rather than a different code path.
+let repeatSpan=3;
+function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repeatSpan-1)/2;const out=[];for(let ty=-r;ty<=r;ty++)for(let tx=-r;tx<=r;tx++)out.push(tx===0&&ty===0?[0,0,'center']:[tx,ty]);return out;}
 function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
@@ -1742,7 +1750,7 @@ let lastBackdropSig=null;
 // the render wrapper below) instead of asking Background/Classics Studio to
 // clone their recipe a second time for the exact same frame.
 let lastBgSnap=null,lastClassicSnap=null;
-function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const scale=(mode==='repeat'?size/(STAGE*3):size/STAGE); const origin=mode==='repeat'?STAGE:0;
+function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const repeatHalf=(repeatSpan-1)/2; const scale=(mode==='repeat'?size/(STAGE*repeatSpan):size/STAGE); const origin=mode==='repeat'?repeatHalf*STAGE:0;
  const {backdrop,bricksLayer}=ensureStageLayers(stage);
  // Belt-and-braces: the bricks below are the one thing that must always redraw
  // on every call, no matter what. If anything in the backdrop/signature step
@@ -1765,7 +1773,11 @@ function render(){const stage=document.getElementById('stage');stage.className='
   lastBackdropSig=null;
  }
  bricksLayer.innerHTML='';
- const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
+ // In single-tile mode the clone range stays a fixed immediate-neighbour ring (just enough to
+ // preview edge wrap); in repeat mode it grows with the zoom-out slider so clones fill every tile
+ // the wider view now shows, not just the original fixed 3x3 window.
+ const cloneHalf=mode==='repeat'?repeatHalf:1;const cloneRange=Array.from({length:cloneHalf*2+1},(_,i)=>i-cloneHalf);
+ const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRange.forEach(tx=>cloneRange.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
  drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); el.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();selected=b.id;const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);const rh=document.createElement('div');rh.className='rotHandle';rh.addEventListener('pointerdown',e=>startRotate(e,b.id));el.appendChild(rh);['dot-tl','dot-tr','dot-bl'].forEach(pos=>{const d=document.createElement('div');d.className='handleDot '+pos;el.appendChild(d);});}} bricksLayer.appendChild(el);});
 }
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
@@ -1952,12 +1964,12 @@ function renderAssignedShapes(){
 // A plain tap-to-select also fires pointerdown (startDrag runs on every one, moved or not), so the
 // switch only kicks in from the first real pointermove onward - selecting a shape never flickers,
 // only an actual drag temporarily simplifies, and it restores the instant you let go.
-function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/3:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
+function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
 // width/height sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and
 // shapeStyles + a throttled renderGrid() when "apply to all layouts" is on - dragging the handle
 // and dragging the slider are two input methods for the same thing, so they should behave
 // identically rather than the handle being a single-brick-only shortcut.
-function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/3:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));scopedBricks().forEach(x=>{x.w=nw;x.h=nh;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
+function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));scopedBricks().forEach(x=>{x.w=nw;x.h=nh;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
 // Drag-to-rotate handle above the selected brick. Angle is measured from the brick's own screen
 // centre (via getBoundingClientRect, which stays correct through CSS rotation since the transform
 // origin is the element centre) so it works the same however the tile is currently scaled/rotated.
@@ -2083,7 +2095,16 @@ document.getElementById('clearAllMotifsBtn').onclick=()=>{
 };
 renderAssignedShapes();
 renderMotifTray();
-document.getElementById('repeatBtn').onclick=()=>{mode='repeat';repeatBtn.classList.add('active');singleBtn.classList.remove('active');render();};document.getElementById('singleBtn').onclick=()=>{mode='single';singleBtn.classList.add('active');repeatBtn.classList.remove('active');render();};
+function syncZoomOutVisibility(){document.getElementById('zoomOutRow').style.display=mode==='repeat'?'grid':'none';}
+document.getElementById('repeatBtn').onclick=()=>{mode='repeat';repeatBtn.classList.add('active');singleBtn.classList.remove('active');syncZoomOutVisibility();render();};document.getElementById('singleBtn').onclick=()=>{mode='single';singleBtn.classList.add('active');repeatBtn.classList.remove('active');syncZoomOutVisibility();render();};
+syncZoomOutVisibility();
+// Zoom out grows the same live, editable grid rather than opening a separate preview: each step
+// widens repeatSpan (3/5/7/9), so more repeats of the real pattern appear at once, like stepping
+// back from a bolt of fabric. The existing drag/resize/rotate motif-suppression fix already keys
+// off pointer movement rather than tile count, so it protects this the same way at any zoom level.
+const zoomOutSpans=[3,5,7,9];
+document.getElementById('zoomOutRange').oninput=e=>{repeatSpan=zoomOutSpans[+e.target.value];document.getElementById('zoomOutValue').textContent=repeatSpan+'×'+repeatSpan;document.getElementById('repeatBtnLabel').textContent=repeatSpan+'×'+repeatSpan;render();};
+document.getElementById('zoomOutValue').textContent=repeatSpan+'×'+repeatSpan;
 document.getElementById('edgeBtn').onclick=()=>{edgeClones=!edgeClones;edgeBtn.classList.toggle('active',edgeClones);render();};document.getElementById('deleteBtn').onclick=()=>{pushHistory();bricks=bricks.filter(b=>b.id!==selected);selected=bricks[0]?.id||null;render();syncControls();};document.getElementById('arrowsBtn').onclick=()=>{const b=selectedBrick();if(b){pushHistory();const flows=['','↑','→','↓','←','↗','↘','↙','↖','↻','↔','↕'];const i=flows.indexOf(b.flow||'');b.flow=flows[(i+1)%flows.length];render();}};document.getElementById('dup').onclick=()=>{const b=selectedBrick();if(!b)return;pushHistory();const n={...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:b.x+6,y:b.y+6};bricks.push(n);selected=n.id;render();syncControls();};
 let alignScope='type';
 function setScope(scope){alignScope=scope;[scopeSingle,scopeType,scopeRole,scopeAll].forEach(b=>b.classList.remove('active'));({single:scopeSingle,type:scopeType,role:scopeRole,all:scopeAll}[scope]).classList.add('active');}
@@ -2560,59 +2581,6 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
     </div>
   </div>
 </div>
-<div id="fabricPreviewOverlay" class="bgStudioOverlay" style="z-index:20000" aria-hidden="true">
-  <div class="bgStudioModal" style="grid-template-rows:auto 1fr;height:min(780px,94dvh);width:min(940px,calc(100vw - 16px))">
-    <div class="bgStudioHeader">
-      <div><h2>fabric view</h2><p>step back and see the repeat tiled like a printed yardage</p></div>
-      <button id="fabricPreviewClose" class="small bgClose">×</button>
-    </div>
-    <div style="padding:14px 16px;display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px;min-height:0">
-      <div class="range" style="grid-template-columns:60px 1fr 56px;align-items:center">
-        <label style="font-size:12px;font-weight:850">zoom</label>
-        <input id="fabricZoomRange" type="range" min="40" max="320" value="140">
-        <output id="fabricZoomValue" style="font-size:12px;text-align:right;font-weight:850;color:var(--muted)"></output>
-      </div>
-      <div id="fabricPreviewCanvas" style="min-height:0;border-radius:16px;border:1px solid rgba(255,235,250,.14);background-repeat:repeat;background-color:#fff;box-shadow:0 12px 35px rgba(0,0,0,.2)"></div>
-    </div>
-  </div>
-</div>
-<script>
-(function(){
- // Fabric view: rather than growing the live editable grid to more repeats (every extra tile would
- // mean more real motif <img>s and DOM nodes, reintroducing the same lag the drag-suppression fix
- // elsewhere just solved), this renders exactly one seamless tile through the same native-canvas
- // pipeline the PNG export already uses, then lets the browser repeat that single image via CSS
- // background-repeat - showing dozens of "tiles" costs nothing extra since it's one raster the GPU
- // tiles for free.
- let fabricPreviewTileDims=null;
- async function openFabricPreview(){
-  const overlay=document.getElementById('fabricPreviewOverlay');
-  overlay.classList.add('open');overlay.setAttribute('aria-hidden','false');
-  const el=document.getElementById('fabricPreviewCanvas');
-  el.style.backgroundImage='none';
-  const pxSize=600;
-  const dims=tileCanvasDims(pxSize);
-  const canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
-  await renderPatternToCanvas(canvas,dims.w,dims.h,pxSize);
-  fabricPreviewTileDims=dims;
-  el.style.backgroundImage=`url(${canvas.toDataURL('image/png')})`;
-  applyFabricZoom();
- }
- function applyFabricZoom(){
-  const zoom=+document.getElementById('fabricZoomRange').value;
-  document.getElementById('fabricZoomValue').textContent=zoom+'px';
-  const el=document.getElementById('fabricPreviewCanvas');
-  if(!fabricPreviewTileDims)return;
-  const ratio=fabricPreviewTileDims.w/fabricPreviewTileDims.h;
-  el.style.backgroundSize=(ratio>=1?zoom*ratio:zoom)+'px '+(ratio>=1?zoom:zoom/ratio)+'px';
- }
- function closeFabricPreview(){const overlay=document.getElementById('fabricPreviewOverlay');overlay.classList.remove('open');overlay.setAttribute('aria-hidden','true');}
- document.getElementById('fabricViewBtn').onclick=openFabricPreview;
- document.getElementById('fabricPreviewClose').onclick=closeFabricPreview;
- document.getElementById('fabricZoomRange').oninput=applyFabricZoom;
- document.getElementById('fabricPreviewOverlay').addEventListener('click',e=>{if(e.target.id==='fabricPreviewOverlay')closeFabricPreview();});
-})();
-</script>
 <script>
 (function(){
  // Generic single-PNG download panel, reused by the main canvas, Classics Studio
