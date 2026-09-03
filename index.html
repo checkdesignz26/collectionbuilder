@@ -793,6 +793,41 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 .filmUseAsBg{display:block;width:100%;margin-top:5px;font-size:10px;padding:5px 4px;border-radius:8px;background:rgba(155,107,255,.18)!important;border:1px solid rgba(155,107,255,.45)!important;color:#e9defe!important}
 .filmUseAsBg:active{background:rgba(155,107,255,.35)!important}
 
+/* ===== Light "makeover" theme - main screen chrome only =====
+   Scoped to `main` (the header + both sidebars + centre workspace) and the
+   download panel it opens, so Classics Studio and Background Studio (which
+   live in their own overlay markup outside <main>, using their own tsBox/
+   bgBox classes) keep their current dark theme untouched. The pattern
+   canvas and every thumbnail preview (.repeatStage, .mini) already default
+   to plain white and are deliberately left alone here too, so patterns stay
+   the visual focus rather than competing with the chrome around them. */
+:root{--cream:#fdf6ec;--cream2:#faece0;--ink:#3a2e26;--inkSoft:#8a7a6c;--teal:#5cb8ab;--tealInk:#1f5c53;--coral:#f0917a;--coralInk:#7a3325;--gold:#e8b74f;--goldInk:#7a5a12;--lav:#b39ddb;--lavInk:#4a3a72;}
+body:has(main){background:linear-gradient(160deg,var(--cream),var(--cream2))!important;}
+header{background:linear-gradient(180deg,#fffaf3,#fdf1e3)!important;border-bottom:1px solid rgba(58,46,38,.10)!important;box-shadow:0 8px 22px rgba(58,46,38,.06)!important;}
+header h1{color:var(--ink)!important;}
+header p{color:var(--inkSoft)!important;}
+.logo{background:linear-gradient(135deg,#fff2df,#ffe4d0)!important;border-color:rgba(58,46,38,.14)!important;}
+main .side{background:linear-gradient(180deg,#fffaf3,#fef6ec)!important;border-right:1px solid rgba(58,46,38,.07)!important;}
+main .workspace{background:var(--cream)!important;background-image:none!important;}
+main .box,#downloadOverlay .bgStudioModal{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;box-shadow:0 4px 14px rgba(58,46,38,.05)!important;}
+main .box h2,#downloadOverlay h2{background:#fff8ef!important;color:var(--ink)!important;border-bottom:1px solid rgba(58,46,38,.08)!important;}
+#downloadOverlay .bgStudioHeader{background:#fff8ef!important;border-bottom:1px solid rgba(58,46,38,.08)!important;}
+#downloadOverlay p,#downloadOverlay .bgStudioHeader p{color:var(--inkSoft)!important;}
+#downloadOverlay .bgClose{background:#fff!important;border:1px solid rgba(58,46,38,.16)!important;color:var(--ink)!important;}
+main .hint,main .footerNote,main .range label,#downloadOverlay .footerNote,#downloadOverlay .range label{color:var(--inkSoft)!important;}
+main button,main select,main input,header button,#downloadOverlay button,#downloadOverlay input{background:#fff!important;border:1px solid rgba(58,46,38,.16)!important;color:var(--ink)!important;box-shadow:0 1px 2px rgba(58,46,38,.05)!important;}
+main input[type=range],#downloadOverlay input[type=range]{accent-color:var(--lav);}
+main .pill{background:rgba(92,184,171,.16)!important;border:1px solid rgba(92,184,171,.45)!important;color:var(--tealInk)!important;}
+#openTextureStudio{background:linear-gradient(90deg,#cdbdf2,var(--lav))!important;border:0!important;color:var(--lavInk)!important;}
+#openBackgroundStudio{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
+#openDownload,#dlDownloadBtn.primary{background:linear-gradient(90deg,#f6d98a,var(--gold))!important;border:0!important;color:var(--goldInk)!important;}
+#saveBtn{background:linear-gradient(90deg,#a9dfc9,var(--teal))!important;border:0!important;color:var(--tealInk)!important;}
+#resetBtn{background:#fff!important;border:1px solid rgba(240,145,122,.5)!important;color:var(--coralInk)!important;}
+main .skelCard,main .filmCard{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;}
+main .skelCard span,main .filmCard span{color:var(--ink)!important;}
+main .skelCard.active{outline-color:var(--coral)!important;background:rgba(240,145,122,.06)!important;}
+main .filmstripBlock{background:#fffefb!important;border:1px solid rgba(58,46,38,.09)!important;}
+main .scopeRow button.active,main .box button.active{outline-color:var(--teal)!important;}
 </style>
 </head>
 <body>
@@ -803,7 +838,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 </header>
 <main>
   <aside class="side left">
-    <div class="box"><h2>placeholders</h2><div class="body">
+    <div class="box"><h2>placeholders 🌿</h2><div class="body">
       <p class="hint">Add outline placeholders to the selected repeat layout. Classic pattern tools live in Classics Studio now.</p>
       <div class="grid2">
         <button data-add="oval">⬭ oval</button><button data-add="circle">○ circle</button>
@@ -813,7 +848,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
       </div>
     </div></div>
 
-    <div class="box"><h2>motifs</h2><div class="body">
+    <div class="box"><h2>motifs 🌸</h2><div class="body">
       <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Live Preview carries the same motifs over to whichever placeholders share those shapes in every other repeat layout, so you can flip through them to compare the placement.</p>
       <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
       <button class="full" id="motifUploadBtn">upload motifs</button>
@@ -879,7 +914,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
     </div>
   </section>
   <aside class="side right">
-    <div class="box"><h2>control room</h2><div class="body">
+    <div class="box"><h2>control room ✨</h2><div class="body">
       <p class="hint">Alignment uses the selected brick as the anchor. Scope decides what follows it.</p>
       <div class="scopeRow"><button id="scopeType" class="active">same shape</button><button id="scopeRole">same colour</button><button id="scopeAll">all bricks</button></div>
       <div class="grid3"><button id="alignL">left</button><button id="alignC">centre</button><button id="alignR">right</button><button id="alignT">top</button><button id="alignM">middle</button><button id="alignB">bottom</button></div>
