@@ -2674,7 +2674,7 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
           <button data-tstex="vintage">vintage</button>
           <button data-tstex="splatter">ink splatter</button>
         </div>
-        <div class="tsRow" id="tsSurfaceTextureIntensityRow" style="display:none;margin-top:9px"><label>intensity</label><input id="tsSurfaceTextureScale" type="range" min="20" max="140" value="60"></div>
+        <div class="tsRow" id="tsSurfaceTextureIntensityRow" style="display:none;margin-top:9px"><label>intensity</label><input id="tsSurfaceTextureScale" type="range" min="20" max="200" value="60"></div>
         </div></div>
         <div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
         <p class="tsHint" style="margin-top:0">Edit the selected classic layer. Position, size and blend work the same in either mode below — only how you pick the colour changes.</p>
@@ -2754,7 +2754,21 @@ function tsGetSurfaceTexturePattern(ctx,color,cell,st){
  const size=Math.max(60,Math.round(cell));
  const key=tex.type+'|'+color+'|'+(tex.scale||60)+'|'+size;
  if(!(key in tsSurfaceTexCache)){
-  const rec={type:tex.type,base:tsShadeColor(color,0.32),tex:tsShadeColor(color,-0.30),opacity:100,scale:tex.scale||60,density:42,softness:62,contrast:46,seed:12345,editable:false,objects:[]};
+  // Each texture type behaves very differently (blob washes vs. fine grain vs. speckle noise), so
+  // one guessed set of density/contrast numbers looked great on watercolour and nearly flat on
+  // paper/chalk. Starting from that type's own proven-good defaults (window.bgDemoRecipe - the same
+  // ones Background Studio itself uses) and boosting contrast/density a bit from there reads well
+  // across all of them, since a small shape fill seen up close needs more punch than a full-screen
+  // background wash does, but each type's actual character stays intact.
+  const base=window.bgDemoRecipe?window.bgDemoRecipe(tex.type,12345):{};
+  // Chalk is the one type built inverted on purpose - a dark board with lighter chalk marks drawn
+  // on top - so its own base/tex are dark/light rather than every other type's light/dark. Forcing
+  // our light shade onto "base" and dark onto "tex" regardless of type flattened chalk into a barely
+  // visible pale wash; matching each type's own polarity keeps its actual character.
+  const lumOf=hex=>{const{r,g,b}=hexToRgb(hex);return 0.299*r+0.587*g+0.114*b;};
+  const inverted=base.base&&base.tex&&lumOf(base.base)<lumOf(base.tex);
+  const lightShade=tsShadeColor(color,0.44),darkShade=tsShadeColor(color,-0.40);
+  const rec={...base,type:tex.type,base:inverted?darkShade:lightShade,tex:inverted?lightShade:darkShade,opacity:100,scale:(tex.scale||base.scale||60)*1.5,density:Math.min(100,(base.density??42)*1.4),softness:base.softness??55,contrast:Math.min(100,(base.contrast??46)+18),seed:12345,editable:false,objects:[]};
   let canvas=null;
   try{canvas=window.bgRenderToTileCanvas(rec,size);}catch(e){console.warn('surface texture render failed',e);}
   tsSurfaceTexCache[key]=canvas?ctx.createPattern(canvas,'repeat'):null;
@@ -2997,7 +3011,7 @@ function wire(){
  $('tsSwitchToBg')?.addEventListener('click',()=>{close();window.openBackgroundStudio&&window.openBackgroundStudio();});
  $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
  $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
- $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;state.surfaceTexture=type==='none'?null:{type,scale:(state.surfaceTexture&&state.surfaceTexture.scale)||60};}));
+ $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;const typeDefault=window.bgDemoRecipe?window.bgDemoRecipe(type,1).scale:60;const samePrevType=state.surfaceTexture&&state.surfaceTexture.type===type;state.surfaceTexture=type==='none'?null:{type,scale:(samePrevType&&state.surfaceTexture.scale)||typeDefault};}));
  $('tsSurfaceTextureScale').oninput=e=>{tsPushHistory();if(state.surfaceTexture)state.surfaceTexture.scale=+e.target.value;renderAll();};
  $('tsSingle').onclick=()=>{previewMode='single';setSeg();renderAll();};$('tsRepeat').onclick=()=>{previewMode='repeat';setSeg();renderAll();};$('tsBrick').onclick=()=>{previewMode='brick';setSeg();renderAll();};$('tsGuides').onclick=()=>{showGuides=!showGuides;$('tsGuides').classList.toggle('active',showGuides);renderAll();};
  $('tsAddLayer').onclick=()=>{tsPushHistory();let base=state.layers[selected]||{kind:state.type==='dots'?'dot':state.type==='argyle'?'diamond':(state.type==='checks'||state.type==='gingham')?'check':'stripe',direction:'vertical',rotate:0,gap:18,width:18,opacity:100,blend:'normal'};let l=copy(base);l.name=(state.type==='dots'?'dot':state.type==='argyle'?'diamond':'stripe')+' '+(state.layers.length+1);l.color=palette[state.layers.length%palette.length];l.pos=((base.pos||0)+(base.width||12)+(base.gap||10))%100;l.visible=true;state.layers.splice(selected+1,0,l);selected++;renderAll();};
@@ -3758,6 +3772,7 @@ window.bgRecipeThumbUrl=function(rec){
 // 720 then scales that up to whatever tile size it needs - same approach as
 // Background Studio's own high-res download.
 window.bgRenderToTileCanvas=function(rec,tilePx){if(!rec)return null;const small=document.createElement('canvas');small.width=720;small.height=720;drawBackgroundToCanvas(small,rec);const out=document.createElement('canvas');out.width=tilePx;out.height=tilePx;const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(small,0,0,720,720,0,0,tilePx,tilePx);return out;};
+window.bgDemoRecipe=bgDemoRecipe;
 window.bgSetRoleColours=function(base,tex){if(!bgRecipe)return;bgRecipe.base=base||bgRecipe.base||'#ffffff';bgRecipe.tex=tex||bgRecipe.tex||'#555555';bgDataUrl=recipeToUrl(bgRecipe);try{if(bgRecipe.enabled)localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();if(typeof render==='function'&&bgRecipe.enabled)render();};
 window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercolour')return;bgRecipe.opacity=42;bgRecipe.scale=128;bgRecipe.density=30;bgRecipe.softness=90;bgRecipe.contrast=40;bgDataUrl=recipeToUrl(bgRecipe);if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
 })();
