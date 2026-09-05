@@ -3115,7 +3115,16 @@ function tsWobblyBandPath(ctx,center,halfWidth,yFrom,yTo,cell,seed,amp){
  for(let i=right.length-1;i>=0;i--)ctx.lineTo(right[i][0],right[i][1]);
  ctx.closePath();
 }
-function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',cell,st)||(l.color||'#000');let ww=pxFromSlider(l.width,cell);let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
+function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);let ww=pxFromSlider(l.width,cell);
+ // The texture pattern tile used to always be rendered at the FULL tile size (cell), regardless
+ // of how small the shape being filled actually is. A watercolour blob is drawn many tile-pixels
+ // wide, so a thin stripe (much narrower than cell) only ever showed a crop of a single blob's
+ // smooth interior-to-edge falloff - reading as a plain gradient rather than a textured wash.
+ // Sizing the texture tile to the SHAPE's own footprint instead means the same blobs repeat
+ // several times across that shape, so the actual multi-blob texture is visible again.
+ const shapeFootprint = l.kind==='dot' ? ww*2 : l.kind==='square' ? (l.width/100)*cell : l.kind==='diamond' ? ww*2.2 : ww;
+ ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',Math.min(cell,Math.max(shapeFootprint*2,60)),st)||(l.color||'#000');
+ let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
  // v56: one layer = one big polka dot. Mirror copies around the tile edges make it seamless
  // without turning the starter into one big grouped dot field.
  let r=ww;
