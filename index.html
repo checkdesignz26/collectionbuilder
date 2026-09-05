@@ -3122,7 +3122,12 @@ function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.
  let x=((l.x ?? l.pos ?? 50)/100)*cell;
  let y=((l.y ?? l.rotate ?? 50)/100)*cell;
  const wobAmp=Math.min(tsHandDrawnAmp(st,cell),r*0.4);
- [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r,idx*13+7,wobAmp);ctx.fill();}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill();} if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r+tsHighlightMargin(cell),0,Math.PI*2);ctx.stroke();});}));
+ [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r,idx*13+7,wobAmp);ctx.fill();}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill();} if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{
+  // Trace the SAME wobbly outline as the fill (just a hair bigger) rather than a plain circle -
+  // otherwise the highlight visibly cuts across the wobble's peaks/valleys instead of hugging them.
+  if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r+tsHighlightMargin(cell),idx*13+7,wobAmp);}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r+tsHighlightMargin(cell),0,Math.PI*2);}
+  ctx.stroke();
+ });}));
 }
 else if(l.kind==='square'){
  // v69: a discrete positioned square (checkerboard tile) rather than a full-tile band.
@@ -3165,7 +3170,14 @@ else{
   [-cell,0,cell].forEach(dx=>{
    if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2,-cell*3,cell*3,cell,idx*31+11,wobAmp);ctx.fill();}
    else ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6);
-   if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6));}
+   if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>{
+    // Same reasoning as the dot highlight above: trace the actual wobbly band edges (widened by
+    // the margin) rather than a straight rectangle, or the highlight reads as a stray straight
+    // line cutting across a wavy stripe - especially glaring on a white/near-invisible layer,
+    // where that straight highlight becomes the only visible trace of the layer at all.
+    if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2+m,-cell*3,cell*3,cell,idx*31+11,wobAmp);}else{ctx.beginPath();ctx.rect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6);}
+    ctx.stroke();
+   });}
   });
   ctx.restore();
 }
