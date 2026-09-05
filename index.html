@@ -2662,6 +2662,11 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
       </section>
       <aside class="tsPanel tsLayersPanel"><div class="tsBox"><h3>Layers / Items</h3><div class="tsPad"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px"><button id="tsAddLayer">+ add</button><button id="tsDuplicateTop">⧉ duplicate</button><button id="tsRemoveLayer">− remove</button></div><div id="tsLayerList" class="tsLayerList" style="margin-top:10px"></div></div></div></aside>
       <aside class="tsPanel right">
+        <div class="tsBox" id="tsHandDrawnBox"><h3>Hand-Drawn Look</h3><div class="tsPad">
+        <p class="tsHint" style="margin-top:0">Give straight stripes and perfect dots a gentle hand-drawn wobble. The wobble is one exact repeat per tile, so it lines back up with itself at every seam - no visible joins at any repeat size.</p>
+        <div class="tsToggleLine"><span>enable wobble</span><div class="tsToggle" id="tsWobbleToggle"><i></i></div></div>
+        <div class="tsRow" id="tsWobbleIntensityRow" style="display:none"><label>wobble</label><input id="tsWobbleAmount" type="range" min="5" max="100" value="35"></div>
+        </div></div>
         <div class="tsBox" id="tsSurfaceTextureBox"><h3>Surface Texture</h3><div class="tsPad">
         <p class="tsHint" style="margin-top:0">Give the whole pattern a textured fill instead of flat colour - watercolour bleed, grunge, paper grain. Each shape still acts as its own mask, and it stays seamless at any scale.</p>
         <div class="grid2" id="tsSurfaceTextureGrid">
@@ -3013,6 +3018,8 @@ function wire(){
  $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
  $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;const typeDefault=window.bgDemoRecipe?window.bgDemoRecipe(type,1).scale:60;const samePrevType=state.surfaceTexture&&state.surfaceTexture.type===type;state.surfaceTexture=type==='none'?null:{type,scale:(samePrevType&&state.surfaceTexture.scale)||typeDefault};}));
  $('tsSurfaceTextureScale').oninput=e=>{tsPushHistory();if(state.surfaceTexture)state.surfaceTexture.scale=+e.target.value;renderAll();};
+ $('tsWobbleToggle').onclick=()=>tsMutate(()=>{state.handDrawn=state.handDrawn||{enabled:false,amount:35};state.handDrawn.enabled=!state.handDrawn.enabled;});
+ $('tsWobbleAmount').oninput=e=>{tsPushHistory();state.handDrawn=state.handDrawn||{enabled:true,amount:35};state.handDrawn.amount=+e.target.value;renderAll();};
  $('tsSingle').onclick=()=>{previewMode='single';setSeg();renderAll();};$('tsRepeat').onclick=()=>{previewMode='repeat';setSeg();renderAll();};$('tsBrick').onclick=()=>{previewMode='brick';setSeg();renderAll();};$('tsGuides').onclick=()=>{showGuides=!showGuides;$('tsGuides').classList.toggle('active',showGuides);renderAll();};
  $('tsAddLayer').onclick=()=>{tsPushHistory();let base=state.layers[selected]||{kind:state.type==='dots'?'dot':state.type==='argyle'?'diamond':(state.type==='checks'||state.type==='gingham')?'check':'stripe',direction:'vertical',rotate:0,gap:18,width:18,opacity:100,blend:'normal'};let l=copy(base);l.name=(state.type==='dots'?'dot':state.type==='argyle'?'diamond':'stripe')+' '+(state.layers.length+1);l.color=palette[state.layers.length%palette.length];l.pos=((base.pos||0)+(base.width||12)+(base.gap||10))%100;l.visible=true;state.layers.splice(selected+1,0,l);selected++;renderAll();};
  $('tsRemoveLayer').onclick=()=>{if(state.layers.length){tsPushHistory();state.layers.splice(selected,1);selected=Math.max(0,selected-1);renderAll();}};
@@ -3039,7 +3046,8 @@ function wire(){
 }
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
 function syncSurfaceTextureUI(){const tex=state.surfaceTexture;const activeType=tex&&tex.type?tex.type:'none';$('tsSurfaceTextureGrid')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tstex===activeType));const row=$('tsSurfaceTextureIntensityRow');if(row)row.style.display=activeType==='none'?'none':'grid';if($('tsSurfaceTextureScale'))$('tsSurfaceTextureScale').value=(tex&&tex.scale)||60;}
-function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
+function syncHandDrawnUI(){const hd=state.handDrawn;const on=!!(hd&&hd.enabled);$('tsWobbleToggle')?.classList.toggle('on',on);const row=$('tsWobbleIntensityRow');if(row)row.style.display=on?'grid':'none';if($('tsWobbleAmount'))$('tsWobbleAmount').value=(hd&&hd.amount)||35;}
+function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
  // Global Stripe Controls / Selected Direction Group / sequence duplication only make sense
  // for band recipes - a checkerboard of discrete squares has no "stripe sequence" to distribute
  // or duplicate into a plaid.
@@ -3051,13 +3059,55 @@ function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();$('t
 function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':(dirIcon[l.direction]||'│'));let lock=l.manual?' · <span class="tsLockToggle" title="tap to unlock from preview cycling">🔒 locked</span>':'';card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}${lock}</small></div><button class="tsEye">${l.visible?'shown':'hidden'}</button>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else if(e.target.classList.contains('tsLockToggle')){l.manual=false;}else selected=i;renderAll();};list.appendChild(card);});}
 function renderInspector(sync=true){let l=state.layers[selected];$('tsInspectorTitle').textContent=l?'Classic Controls · '+(l.name||('Layer '+(selected+1))):'Classic Controls';if(!l)return;if(sync){$('tsMove').value=l.pos;$('tsRotate').value=((l.kind==='dot'||l.kind==='diamond') ? (l.y ?? l.rotate ?? 50) : (l.rotate||0));$('tsWidth').value=l.width;$('tsGap').value=l.gap;if($('tsAllWidths'))$('tsAllWidths').value=l.width;if($('tsAllGaps'))$('tsAllGaps').value=l.gap;$('tsOpacity').value=l.opacity;$('tsBlend').value=l.blend||'normal';if($('tsGroupOpacity'))$('tsGroupOpacity').value=l.opacity??100;if($('tsGroupBlend'))$('tsGroupBlend').value=l.blend||'normal';['tsDirV','tsDirH','tsDirD1','tsDirD2'].forEach(id=>$(id).classList.remove('active'));$({vertical:'tsDirV',horizontal:'tsDirH',diag1:'tsDirD1',diag2:'tsDirD2'}[l.direction]||'tsDirV').classList.add('active');}updateHSBControls(sync);}
 function pxFromSlider(v,cell){return Math.max(1,(v||10)*cell/900);}
+// Hand-drawn wobble: every perturbation below is built from sin(2*pi*k*t + phase) with an
+// INTEGER k, over a parameter t that runs exactly 0..1 across one repeat (one full circle for a
+// dot, one cell-length for a stripe run). Because k is a whole number of cycles, the value at
+// t=0 and t=1 is mathematically identical - so a wobbly shape always closes/repeats on itself
+// with no visible seam, however large the wobble amplitude, with zero special-casing needed.
+function tsWobbleValue(t,seed,amp){
+ if(!amp)return 0;
+ const rnd=n=>{const x=Math.sin((seed+n*13.37)*127.1)*43758.5453123;return x-Math.floor(x);};
+ // Mid-to-high, non-multiple harmonics read as a shaky hand tracing the line - a fine constant
+ // tremor - rather than the big smooth lobes a couple of low harmonics (k=2,3) would produce.
+ const harmonics=[4,7,11,17];
+ let v=0,wsum=0;
+ harmonics.forEach((k,i)=>{const w=1/(i+1);const ph=rnd(i)*Math.PI*2;v+=w*Math.sin(2*Math.PI*k*t+ph);wsum+=w;});
+ return (v/wsum)*amp;
+}
+function tsHandDrawnAmp(st,cell){const hd=st&&st.handDrawn;if(!hd||!hd.enabled||!hd.amount)return 0;return (hd.amount/100)*cell*0.025;}
+function tsWobblyCirclePath(ctx,cx,cy,r,seed,amp){
+ const steps=Math.max(160,Math.round(r*0.6));
+ ctx.beginPath();
+ for(let i=0;i<=steps;i++){const t=i/steps;const theta=t*Math.PI*2;const rr=Math.max(0.5,r+tsWobbleValue(t,seed,amp));const x=cx+Math.cos(theta)*rr,y=cy+Math.sin(theta)*rr;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+ ctx.closePath();
+}
+// center/halfWidth define a straight band in local (pre-rotation) coordinates; yFrom/yTo is the
+// long axis the band runs along. t=y/cell (not normalised to the yFrom..yTo span), so the wobble
+// repeats every exact multiple of `cell` - the same period every tile in the grid draws with, so
+// one tile's bottom edge always reproduces the next tile's top edge exactly.
+function tsWobblyBandPath(ctx,center,halfWidth,yFrom,yTo,cell,seed,amp){
+ const steps=Math.max(24,Math.round((yTo-yFrom)/cell*140));
+ // The band wanders left/right as a whole (both edges share this term - a hand meandering the
+ // pen down the page), plus a much smaller independent "breathe" term per edge so the width
+ // isn't perfectly rigid. Breathing is capped well under halfWidth so the two edges can never
+ // cross - a wobbly stripe should never pinch shut into a chain of diamonds.
+ const breatheAmp=Math.min(amp*0.35,halfWidth*0.4);
+ const left=[],right=[];
+ for(let i=0;i<=steps;i++){const y=yFrom+(yTo-yFrom)*i/steps;const t=y/cell;const wander=tsWobbleValue(t,seed,amp);left.push([center-halfWidth+wander-tsWobbleValue(t,seed+97,breatheAmp),y]);right.push([center+halfWidth+wander+tsWobbleValue(t,seed+197,breatheAmp),y]);}
+ ctx.beginPath();
+ ctx.moveTo(left[0][0],left[0][1]);
+ for(let i=1;i<left.length;i++)ctx.lineTo(left[i][0],left[i][1]);
+ for(let i=right.length-1;i>=0;i--)ctx.lineTo(right[i][0],right[i][1]);
+ ctx.closePath();
+}
 function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',cell,st)||(l.color||'#000');let ww=pxFromSlider(l.width,cell);let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
  // v56: one layer = one big polka dot. Mirror copies around the tile edges make it seamless
  // without turning the starter into one big grouped dot field.
  let r=ww;
  let x=((l.x ?? l.pos ?? 50)/100)*cell;
  let y=((l.y ?? l.rotate ?? 50)/100)*cell;
- [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill(); if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r+tsHighlightMargin(cell),0,Math.PI*2);ctx.stroke();});}));
+ const wobAmp=Math.min(tsHandDrawnAmp(st,cell),r*0.4);
+ [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r,idx*13+7,wobAmp);ctx.fill();}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill();} if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{ctx.beginPath();ctx.arc(x+dx,y+dy,r+tsHighlightMargin(cell),0,Math.PI*2);ctx.stroke();});}));
 }
 else if(l.kind==='square'){
  // v69: a discrete positioned square (checkerboard tile) rather than a full-tile band.
@@ -3089,10 +3139,19 @@ else{
   const baseAngle = l.direction==='horizontal' ? Math.PI/2 : l.direction==='diag1' ? -Math.PI/4 : l.direction==='diag2' ? Math.PI/4 : 0;
   const extra = ((l.rotate||0) * Math.PI) / 180;
   const offset = (((l.pos||0)/100)-0.5) * cell;
+  // Wobble is only safe on axis-aligned bands: rotating by an exact multiple of 90deg keeps the
+  // cell-periodic wobble lined up with the tile grid. Diagonal directions/custom rotations are
+  // left perfectly straight rather than risk a seam.
+  const axisAligned = l.direction!=='diag1' && l.direction!=='diag2' && (l.rotate||0)%90===0;
+  const wobAmp = axisAligned ? tsHandDrawnAmp(st,cell) : 0;
   ctx.save();
   ctx.translate(cell/2,cell/2);
   ctx.rotate(baseAngle + extra);
-  [-cell,0,cell].forEach(dx=>{ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6));}});
+  [-cell,0,cell].forEach(dx=>{
+   if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2,-cell*3,cell*3,cell,idx*31+11,wobAmp);ctx.fill();}
+   else ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6);
+   if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6));}
+  });
   ctx.restore();
 }
 ctx.restore();});ctx.restore();}
