@@ -310,6 +310,12 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 /* --- v40 Background Studio control-room cleanup + gradient stops --- */
 .bgStudioOverlay.open{display:flex!important;}
 .bgStudioModal{width:min(1480px,calc(100vw - 14px))!important;height:min(960px,calc(100dvh - 14px))!important;grid-template-rows:auto minmax(0,1fr) 126px!important;overflow:hidden!important;}
+/* The download panel reuses .bgStudioModal purely for its box/header styling, but it's a small
+   form (two number fields and a button), not a full studio - the rule above was forcing it to
+   the same near-fullscreen size as the actual Background Studio modal (its own inline style
+   asking for a compact 520px box couldn't win against that rule's !important). Scope a
+   higher-specificity override back to the small size for this one overlay only. */
+#downloadOverlay .bgStudioModal{width:min(520px,calc(100vw - 16px))!important;height:auto!important;max-height:90dvh!important;grid-template-rows:auto auto!important;}
 .bgStudioBody{display:grid!important;grid-template-columns:250px minmax(420px,1fr) 360px!important;min-height:0!important;overflow:hidden!important;}
 .bgStudioPanel,.bgPreviewPanel,.bgStudioPanel.right{position:relative!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;display:block!important;}
 .bgPreviewPanel{display:grid!important;grid-template-rows:auto minmax(0,1fr)!important;}
@@ -331,7 +337,8 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 .bgSelectedTitle{font-size:13px;color:#ffe4f7;font-weight:950;margin-bottom:6px;}
 .bgControlsRow.compact{grid-template-columns:78px 1fr 42px!important;margin:6px 0!important;}
 .bgRecipeTextGone{display:none!important;}
-@media(max-width:980px){.bgStudioBody{grid-template-columns:210px minmax(360px,1fr) 315px!important;}.bgStudioModal{width:100%!important;height:98dvh!important;border-radius:16px!important;}#bgPreviewCanvas{width:min(100%,430px)!important;}}
+@media(max-width:980px){.bgStudioBody{grid-template-columns:210px minmax(360px,1fr) 315px!important;}.bgStudioModal{width:100%!important;height:98dvh!important;border-radius:16px!important;}#bgPreviewCanvas{width:min(100%,430px)!important;}
+#downloadOverlay .bgStudioModal{width:min(520px,calc(100vw - 16px))!important;height:auto!important;max-height:90dvh!important;}}
 
 
 /* --- v41 restore normal layout skeletons --- */
