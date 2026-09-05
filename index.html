@@ -1333,6 +1333,24 @@ function restoreAutosave(){
 }
 let saveBusy=false;
 function flashSaveStatus(msg,ok=true){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},1200);}
+// Filmstrip delete used to be a blocking confirm() dialog - the standard failure mode for those
+// is that people tap through them out of habit without reading, so a mis-tapped tiny delete
+// button (the "x" corner of a cramped filmstrip card) still ends up deleting the item anyway.
+// An immediate delete + a few seconds of "undo" is the same pattern Gmail/Trello/etc use for
+// exactly this: no interruption for the 99% of intentional deletes, and a real one-tap recovery
+// for the accidental ones, which a confirm dialog people click through doesn't actually provide.
+let undoToastTimer=null;
+function showUndoToast(message,onUndo){
+ let el=document.getElementById('undoToast');
+ if(!el){el=document.createElement('div');el.id='undoToast';el.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1b1424;color:#ffe9fb;padding:12px 8px 12px 16px;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.45);display:flex;gap:10px;align-items:center;font-size:13px;font-weight:800;z-index:99999;border:1px solid rgba(255,142,214,.4);';document.body.appendChild(el);}
+ clearTimeout(undoToastTimer);
+ el.innerHTML='';
+ const span=document.createElement('span');span.textContent=message;
+ const btn=document.createElement('button');btn.textContent='undo';btn.style.cssText='background:rgba(255,142,214,.25);border:1px solid rgba(255,142,214,.55);color:#ffe9fb;padding:7px 14px;border-radius:10px;font-weight:950;font-size:13px;';
+ btn.onclick=()=>{onUndo();el.remove();clearTimeout(undoToastTimer);};
+ el.appendChild(span);el.appendChild(btn);
+ undoToastTimer=setTimeout(()=>{el.remove();},6000);
+}
 
 // --- Pattern export -------------------------------------------------------
 // A plain square tile only reproduces a straight/grid-style repeat when placed
@@ -1643,7 +1661,9 @@ window.exportPatternPNG=async function(pxSize,dpi){
  return {width:dims.w,height:dims.h};
 };
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';c.innerHTML=`<button class="filmDelete tsFilmDelete" title="delete">×</button><div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}loadSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
-function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;if(!confirm('Delete "'+t.name+'" from the filmstrip?'))return;const wasCurrent=current===t.key;savedTemplates.splice(i,1);persistSavedTemplates();if(wasCurrent){setPreset(t.base&&presets[t.base]?t.base:'grid');}else{renderFilmstrip();}}
+function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const wasCurrent=current===t.key;savedTemplates.splice(i,1);persistSavedTemplates();if(wasCurrent){setPreset(t.base&&presets[t.base]?t.base:'grid');}else{renderFilmstrip();}
+ showUndoToast('Deleted "'+t.name+'"',()=>{savedTemplates.splice(i,0,t);persistSavedTemplates();renderFilmstrip();});
+}
 function saveTemplateToFilmstrip(){
  if(saveBusy)return;
  saveBusy=true;
@@ -2982,7 +3002,9 @@ function applyGroupStyle(){
 }
 function duplicateSequenceTo(targetDir){const sourceDir=selectedDirection();const original=(state.layers||[]).filter(l=>isStripeLike(l)&&l.direction===sourceDir); if(!original.length)return; tsPushHistory(); const baseCount=state.layers.length; const copies=original.map((l,i)=>{let n=copy(l); n.direction=targetDir||l.direction; n.name=(targetDir?(({horizontal:'horizontal ',vertical:'vertical ',diag1:'diagonal / ',diag2:'diagonal \\ '}[targetDir])||'copy '):'copy ')+(l.name||('stripe '+(i+1))); return n;}); state.layers.push(...copies); selected=baseCount; renderAll();}
 function duplicateSequence(makePlaid=false){if(makePlaid){duplicateSequenceTo(selectedDirection()==='horizontal'?'vertical':'horizontal');return;} duplicateSequenceTo(null);}
-function deleteSavedTexture(i){if(i<0||i>=saved.length)return; const label=saved[i]?.name||'texture'; if(!confirm('Delete '+label+' from the filmstrip?'))return; saved.splice(i,1); try{persistAllSavedItems();}catch(e){} renderFilmstrip(); setSaveStatus('deleted ✓','ok');}
+function deleteSavedTexture(i){if(i<0||i>=saved.length)return; const removed=saved[i]; const label=removed?.name||'texture'; saved.splice(i,1); try{persistAllSavedItems();}catch(e){} renderFilmstrip(); setSaveStatus('deleted ✓','ok');
+ showUndoToast('Deleted "'+label+'"',()=>{saved.splice(i,0,removed); try{persistAllSavedItems();}catch(e){} renderFilmstrip();});
+}
 
 function canvasPointToTile(ev){
  const canvas=$('tsPreview'), rect=canvas.getBoundingClientRect();
@@ -3752,7 +3774,7 @@ function buildBgUI(){
  syncBgUI();
 }
 let bgSelectMode=false,bgSelectedIdx=new Set();
-function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';const useHTML=bgSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>${useHTML}`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();bgSaved.splice(i,1);persistAllSavedItems();renderBgFilm();return;}if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.bgApplySavedItem(rec);q('bgStatus').textContent='applied ✓';setTimeout(()=>q('bgStatus').textContent='',1200);return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
+function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';const useHTML=bgSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${rec.name||'background'}</span>${useHTML}`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();const removed=bgSaved[i];bgSaved.splice(i,1);persistAllSavedItems();renderBgFilm();showUndoToast('Deleted "'+(removed.name||'background')+'"',()=>{bgSaved.splice(i,0,removed);persistAllSavedItems();renderBgFilm();});return;}if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.bgApplySavedItem(rec);q('bgStatus').textContent='applied ✓';setTimeout(()=>q('bgStatus').textContent='',1200);return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
 function bgUpdateSelectUI(){const btn=q('bgDownloadSelected');if(!btn)return;btn.textContent=bgSelectedIdx.size?`download ${bgSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!bgSelectedIdx.size;}
 function bgToggleSelectMode(){bgSelectMode=!bgSelectMode;bgSelectedIdx.clear();const btn=q('bgSelectMode');btn.textContent=bgSelectMode?'done':'select';btn.classList.toggle('active',bgSelectMode);q('bgDownloadSelected').classList.toggle('hidden',!bgSelectMode);bgUpdateSelectUI();renderBgFilm();}
 // drawBackgroundToCanvas always draws within a fixed 720x720 internal canvas
