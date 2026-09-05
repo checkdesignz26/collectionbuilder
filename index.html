@@ -2662,6 +2662,20 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
       </section>
       <aside class="tsPanel tsLayersPanel"><div class="tsBox"><h3>Layers / Items</h3><div class="tsPad"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px"><button id="tsAddLayer">+ add</button><button id="tsDuplicateTop">⧉ duplicate</button><button id="tsRemoveLayer">− remove</button></div><div id="tsLayerList" class="tsLayerList" style="margin-top:10px"></div></div></div></aside>
       <aside class="tsPanel right">
+        <div class="tsBox" id="tsSurfaceTextureBox"><h3>Surface Texture</h3><div class="tsPad">
+        <p class="tsHint" style="margin-top:0">Give the whole pattern a textured fill instead of flat colour - watercolour bleed, grunge, paper grain. Each shape still acts as its own mask, and it stays seamless at any scale.</p>
+        <div class="grid2" id="tsSurfaceTextureGrid">
+          <button data-tstex="none" class="active">none</button>
+          <button data-tstex="watercolour">watercolour</button>
+          <button data-tstex="paper">paper grain</button>
+          <button data-tstex="linen">linen</button>
+          <button data-tstex="speckles">speckles</button>
+          <button data-tstex="chalk">grunge</button>
+          <button data-tstex="vintage">vintage</button>
+          <button data-tstex="splatter">ink splatter</button>
+        </div>
+        <div class="tsRow" id="tsSurfaceTextureIntensityRow" style="display:none;margin-top:9px"><label>intensity</label><input id="tsSurfaceTextureScale" type="range" min="20" max="140" value="60"></div>
+        </div></div>
         <div class="tsBox"><h3 id="tsInspectorTitle">Classic Controls</h3><div class="tsPad">
         <p class="tsHint" style="margin-top:0">Edit the selected classic layer. Position, size and blend work the same in either mode below — only how you pick the colour changes.</p>
         <div class="grid2" style="margin-bottom:9px"><button id="tsGreyModeBtn" class="small active">grey mode</button><button id="tsColourModeBtn" class="small">colour mode</button></div>
@@ -2724,6 +2738,29 @@ function rgbToHex(r,g,b){return '#'+[r,g,b].map(v=>clamp(Math.round(v),0,255).to
 function rgbToHsv(r,g,b){r/=255;g/=255;b/=255;let max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,h=0,s=max===0?0:d/max,v=max;if(d!==0){switch(max){case r:h=((g-b)/d+(g<b?6:0));break;case g:h=((b-r)/d+2);break;case b:h=((r-g)/d+4);break;}h*=60;}return {h:Math.round(h),s:Math.round(s*100),v:Math.round(v*100)};}
 function hsvToHex(h,s,v){h=((+h%360)+360)%360;s=clamp(+s,0,100)/100;v=clamp(+v,0,100)/100;let c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c,r=0,g=0,b=0;if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}return rgbToHex((r+m)*255,(g+m)*255,(b+m)*255);}
 function hexToHsv(hex){let {r,g,b}=hexToRgb(hex);return rgbToHsv(r,g,b);}
+// amt<0 darkens toward black, amt>0 lightens toward white (both by that fraction).
+function tsShadeColor(hex,amt){const{r,g,b}=hexToRgb(hex);const t=amt<0?0:255,p=Math.abs(amt);return rgbToHex(r+(t-r)*p,g+(t-g)*p,b+(t-b)*p);}
+// Reuses Background Studio's seamless texture generators (window.bgRenderToTileCanvas, the same
+// pipeline behind its own watercolour/paper/grunge previews and exports) to fill each stripe/dot/
+// check/square with an organic textured look instead of flat colour - the shape's own fill path
+// already acts as the clipping mask, canvas patterns just need the tinted texture image. Cached by
+// type+colour+scale+size since drawOneCell can call this many times per frame (every visible layer,
+// every mirrored copy, every repeated tile) and regenerating the underlying canvas each time would
+// undo the drag-performance work done elsewhere.
+let tsSurfaceTexCache={};
+function tsGetSurfaceTexturePattern(ctx,color,cell,st){
+ const tex=st&&st.surfaceTexture;
+ if(!tex||!tex.type||tex.type==='none'||!window.bgRenderToTileCanvas)return null;
+ const size=Math.max(60,Math.round(cell));
+ const key=tex.type+'|'+color+'|'+(tex.scale||60)+'|'+size;
+ if(!(key in tsSurfaceTexCache)){
+  const rec={type:tex.type,base:tsShadeColor(color,0.32),tex:tsShadeColor(color,-0.30),opacity:100,scale:tex.scale||60,density:42,softness:62,contrast:46,seed:12345,editable:false,objects:[]};
+  let canvas=null;
+  try{canvas=window.bgRenderToTileCanvas(rec,size);}catch(e){console.warn('surface texture render failed',e);}
+  tsSurfaceTexCache[key]=canvas?ctx.createPattern(canvas,'repeat'):null;
+ }
+ return tsSurfaceTexCache[key];
+}
 function updateHSBControls(sync=true){let l=currentLayer(); if(!l)return; const hsv=hexToHsv(l.color||'#000000'); if(sync){$('tsHue').value=hsv.h;$('tsSat').value=hsv.s;$('tsBri').value=hsv.v;} const h=+$('tsHue').value,s=+$('tsSat').value,v=+$('tsBri').value; $('tsHueVal').textContent=h+'°';$('tsSatVal').textContent=s+'%';$('tsBriVal').textContent=v+'%';$('tsColourHex').textContent=(l.color||'#000000').toUpperCase();$('tsColourChip').style.background=l.color||'#000000';}
 function applyHSBColour(){let l=currentLayer(); if(!l)return; l.color=hsvToHex($('tsHue').value,$('tsSat').value,$('tsBri').value);l.manual=true;refreshLayerColourName(l,true);renderAll(false);}
 
@@ -2960,6 +2997,8 @@ function wire(){
  $('tsSwitchToBg')?.addEventListener('click',()=>{close();window.openBackgroundStudio&&window.openBackgroundStudio();});
  $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
  $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
+ $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;state.surfaceTexture=type==='none'?null:{type,scale:(state.surfaceTexture&&state.surfaceTexture.scale)||60};}));
+ $('tsSurfaceTextureScale').oninput=e=>{tsPushHistory();if(state.surfaceTexture)state.surfaceTexture.scale=+e.target.value;renderAll();};
  $('tsSingle').onclick=()=>{previewMode='single';setSeg();renderAll();};$('tsRepeat').onclick=()=>{previewMode='repeat';setSeg();renderAll();};$('tsBrick').onclick=()=>{previewMode='brick';setSeg();renderAll();};$('tsGuides').onclick=()=>{showGuides=!showGuides;$('tsGuides').classList.toggle('active',showGuides);renderAll();};
  $('tsAddLayer').onclick=()=>{tsPushHistory();let base=state.layers[selected]||{kind:state.type==='dots'?'dot':state.type==='argyle'?'diamond':(state.type==='checks'||state.type==='gingham')?'check':'stripe',direction:'vertical',rotate:0,gap:18,width:18,opacity:100,blend:'normal'};let l=copy(base);l.name=(state.type==='dots'?'dot':state.type==='argyle'?'diamond':'stripe')+' '+(state.layers.length+1);l.color=palette[state.layers.length%palette.length];l.pos=((base.pos||0)+(base.width||12)+(base.gap||10))%100;l.visible=true;state.layers.splice(selected+1,0,l);selected++;renderAll();};
  $('tsRemoveLayer').onclick=()=>{if(state.layers.length){tsPushHistory();state.layers.splice(selected,1);selected=Math.max(0,selected-1);renderAll();}};
@@ -2985,7 +3024,8 @@ function wire(){
  if($('tsColourModeBtn'))$('tsColourModeBtn').onclick=()=>tsShowMode('colour');
 }
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
-function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
+function syncSurfaceTextureUI(){const tex=state.surfaceTexture;const activeType=tex&&tex.type?tex.type:'none';$('tsSurfaceTextureGrid')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tstex===activeType));const row=$('tsSurfaceTextureIntensityRow');if(row)row.style.display=activeType==='none'?'none':'grid';if($('tsSurfaceTextureScale'))$('tsSurfaceTextureScale').value=(tex&&tex.scale)||60;}
+function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
  // Global Stripe Controls / Selected Direction Group / sequence duplication only make sense
  // for band recipes - a checkerboard of discrete squares has no "stripe sequence" to distribute
  // or duplicate into a plaid.
@@ -2997,7 +3037,7 @@ function renderAll(sync=true){refreshAllLayerNames();$('tsBgToggle').classList.t
 function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':(dirIcon[l.direction]||'│'));let lock=l.manual?' · <span class="tsLockToggle" title="tap to unlock from preview cycling">🔒 locked</span>':'';card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}${lock}</small></div><button class="tsEye">${l.visible?'shown':'hidden'}</button>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else if(e.target.classList.contains('tsLockToggle')){l.manual=false;}else selected=i;renderAll();};list.appendChild(card);});}
 function renderInspector(sync=true){let l=state.layers[selected];$('tsInspectorTitle').textContent=l?'Classic Controls · '+(l.name||('Layer '+(selected+1))):'Classic Controls';if(!l)return;if(sync){$('tsMove').value=l.pos;$('tsRotate').value=((l.kind==='dot'||l.kind==='diamond') ? (l.y ?? l.rotate ?? 50) : (l.rotate||0));$('tsWidth').value=l.width;$('tsGap').value=l.gap;if($('tsAllWidths'))$('tsAllWidths').value=l.width;if($('tsAllGaps'))$('tsAllGaps').value=l.gap;$('tsOpacity').value=l.opacity;$('tsBlend').value=l.blend||'normal';if($('tsGroupOpacity'))$('tsGroupOpacity').value=l.opacity??100;if($('tsGroupBlend'))$('tsGroupBlend').value=l.blend||'normal';['tsDirV','tsDirH','tsDirD1','tsDirD2'].forEach(id=>$(id).classList.remove('active'));$({vertical:'tsDirV',horizontal:'tsDirH',diag1:'tsDirD1',diag2:'tsDirD2'}[l.direction]||'tsDirV').classList.add('active');}updateHSBControls(sync);}
 function pxFromSlider(v,cell){return Math.max(1,(v||10)*cell/900);}
-function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);ctx.fillStyle=l.color||'#000';let ww=pxFromSlider(l.width,cell);let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
+function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',cell,st)||(l.color||'#000');let ww=pxFromSlider(l.width,cell);let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
  // v56: one layer = one big polka dot. Mirror copies around the tile edges make it seamless
  // without turning the starter into one big grouped dot field.
  let r=ww;
