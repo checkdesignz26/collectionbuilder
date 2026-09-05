@@ -2909,8 +2909,23 @@ function distributeClassic(dir){
  const arr=(state.layers||[]).filter(l=>l && l.direction===dir).sort((a,b)=>(a.pos||0)-(b.pos||0));
  if(arr.length<2)return;
  tsPushHistory();
- const step=100/arr.length;
- arr.forEach((l,i)=>{l.pos=Math.round((i*step + step/2)*10)/10;});
+ // A stripe deliberately parked at pos 0/100 straddles the tile seam on purpose (a common way
+ // to build a "seam stripe" that lines up across every tile boundary). Distribute must never
+ // drag it inward - that would silently undo a seamless setup the designer built by hand. So any
+ // edge-pinned stripe stays exactly put, and only the remaining stripes get spaced evenly
+ // through the open gap between it and itself (going all the way around).
+ const EDGE_EPS=0.5;
+ const isEdge=p=>p<=EDGE_EPS||p>=100-EDGE_EPS;
+ const pinned=arr.filter(l=>isEdge(l.pos||0));
+ const free=arr.filter(l=>!isEdge(l.pos||0));
+ if(pinned.length){
+  pinned.forEach(l=>{l.pos=(l.pos||0)<=EDGE_EPS?0:100;});
+  const step=100/(free.length+1);
+  free.forEach((l,i)=>{l.pos=Math.round(((i+1)*step)*10)/10;});
+ } else {
+  const step=100/arr.length;
+  arr.forEach((l,i)=>{l.pos=Math.round((i*step + step/2)*10)/10;});
+ }
  renderAll();
 }
 function markActiveSwatches(root){
