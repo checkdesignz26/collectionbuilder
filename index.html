@@ -2890,7 +2890,7 @@ function ginghamDefault(){return {type:'gingham',bg:true,bgColor:'#ffffff',bgOpa
  {kind:'square',name:'white square',color:'#ffffff',x:75,y:75,pos:75,width:50,gap:0,opacity:100,blend:'normal',direction:'single',rotate:0,visible:true}
 ]};}
 function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='madras'?madrasDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
-function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');window.cmSetBgTarget?.('tex');}
+function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();renderFilmstrip();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');window.cmSetBgTarget?.('tex');}
 function openType(type){
  // Opening a specific pattern type from OUTSIDE the studio (a main-app shortcut button, or the
  // very first open) resumes unsaved work-in-progress for that same type instead of silently
@@ -2972,7 +2972,14 @@ function markActiveSwatches(root){
  if(!root||!l)return;
  root.querySelectorAll('[data-colour]').forEach(el=>el.classList.toggle('selectedForLayer', el.dataset.colour.toLowerCase()===(l.color||'').toLowerCase()));
 }
-function setLayerColour(c){let l=currentLayer(); if(l){tsPushHistory();l.color=c;l.manual=true;refreshLayerColourName(l,true);renderAll();}}
+function setLayerColour(c){let l=currentLayer(); if(l){tsPushHistory();l.color=c;
+ // Only a genuinely custom colour (typed/picked off-palette, or one of the user's own saved
+ // custom swatches) locks a layer out of "preview" palette-cycling - tapping a Collection/Hero
+ // swatch is exactly the same action auto-cycling would take anyway, so it shouldn't silently
+ // lock the layer. Locking on every colour tap meant a layer ended up "locked" the moment anyone
+ // touched its colour at all, which made preview-cycling stop doing anything after normal use.
+ l.manual=(paletteSource==='custom');
+ refreshLayerColourName(l,true);renderAll();}}
 function renderPalette(){const p=$('tsPalette');p.innerHTML='';palette.forEach(c=>{let d=document.createElement('div');d.className='tsSw';d.dataset.colour=c;d.style.background=c;d.title=c;d.onclick=()=>setLayerColour(c);p.appendChild(d);});markActiveSwatches(p);const title=$('tsPaletteTitle');if(title)title.textContent=paletteSource==='hero'?'Hero colours':paletteSource==='custom'?'Custom colours':'Collection colours';}
 function renderColourGrid(){const g=$('tsColourGrid');g.innerHTML='';let label=document.createElement('div');label.className='tsHint';label.style.gridColumn='1 / -1';label.textContent='Palette colours';g.appendChild(label);palette.forEach(c=>{let d=document.createElement('div');d.className='tsColourDot';d.dataset.colour=c;d.style.background=c;d.title=c;d.onclick=()=>setLayerColour(c);g.appendChild(d);});markActiveSwatches(g);}
 
@@ -3112,7 +3119,15 @@ function wire(){
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
 function syncSurfaceTextureUI(){const tex=state.surfaceTexture;const activeType=tex&&tex.type?tex.type:'none';$('tsSurfaceTextureGrid')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tstex===activeType));const row=$('tsSurfaceTextureIntensityRow');if(row)row.style.display=activeType==='none'?'none':'grid';if($('tsSurfaceTextureScale'))$('tsSurfaceTextureScale').value=(tex&&tex.scale)||60;}
 function syncHandDrawnUI(){const hd=state.handDrawn;const on=!!(hd&&hd.enabled);$('tsWobbleToggle')?.classList.toggle('on',on);const row=$('tsWobbleIntensityRow');if(row)row.style.display=on?'grid':'none';if($('tsWobbleAmount'))$('tsWobbleAmount').value=(hd&&hd.amount)||35;}
-function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();tsScheduleWipAutosave();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
+function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();tsScheduleWipAutosave();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;
+ // renderFilmstrip() used to run here too, on every single edit - fine with a couple of saved
+ // patterns, but with a real library of them it means fully re-rendering every saved thumbnail
+ // (each running the same wobble/surface-texture drawing as the live canvas) on every slider
+ // tick, which is exactly the kind of lag that scales with how much you've saved. None of the
+ // saved thumbnails change from editing the CURRENTLY OPEN pattern, so it's now only re-rendered
+ // at the specific points where the saved list itself actually changes: opening the studio, and
+ // save/delete/undo (already called explicitly at each of those).
+ tsUpdateUndoRedo();
  // Global Stripe Controls / Selected Direction Group / sequence duplication only make sense
  // for band recipes - a checkerboard of discrete squares has no "stripe sequence" to distribute
  // or duplicate into a plaid.
@@ -3129,15 +3144,29 @@ function pxFromSlider(v,cell){return Math.max(1,(v||10)*cell/900);}
 // dot, one cell-length for a stripe run). Because k is a whole number of cycles, the value at
 // t=0 and t=1 is mathematically identical - so a wobbly shape always closes/repeats on itself
 // with no visible seam, however large the wobble amplitude, with zero special-casing needed.
+// Mid-to-high, non-multiple harmonics read as a shaky hand tracing the line - a fine constant
+// tremor - rather than the big smooth lobes a couple of low harmonics (k=2,3) would produce.
+const TS_WOBBLE_HARMONICS=[4,7,11,17];
+const TS_WOBBLE_WSUM=TS_WOBBLE_HARMONICS.reduce((s,_,i)=>s+1/(i+1),0);
+let tsWobblePhaseCache={};
+function tsWobblePhases(seed){
+ // The phase for a given seed+harmonic never depends on t, only on the seed - but a wobbly path
+ // samples hundreds of t values along its length, and this used to be recomputed (with its own
+ // Math.sin call) at every single one of them. Computing it once per seed and reusing it cut the
+ // dominant cost of rendering a wobbly stripe live while dragging a slider.
+ let phases=tsWobblePhaseCache[seed];
+ if(phases)return phases;
+ const rnd=n=>{const x=Math.sin((seed+n*13.37)*127.1)*43758.5453123;return x-Math.floor(x);};
+ phases=TS_WOBBLE_HARMONICS.map((k,i)=>rnd(i)*Math.PI*2);
+ tsWobblePhaseCache[seed]=phases;
+ return phases;
+}
 function tsWobbleValue(t,seed,amp){
  if(!amp)return 0;
- const rnd=n=>{const x=Math.sin((seed+n*13.37)*127.1)*43758.5453123;return x-Math.floor(x);};
- // Mid-to-high, non-multiple harmonics read as a shaky hand tracing the line - a fine constant
- // tremor - rather than the big smooth lobes a couple of low harmonics (k=2,3) would produce.
- const harmonics=[4,7,11,17];
- let v=0,wsum=0;
- harmonics.forEach((k,i)=>{const w=1/(i+1);const ph=rnd(i)*Math.PI*2;v+=w*Math.sin(2*Math.PI*k*t+ph);wsum+=w;});
- return (v/wsum)*amp;
+ const phases=tsWobblePhases(seed);
+ let v=0;
+ for(let i=0;i<TS_WOBBLE_HARMONICS.length;i++){v+=(1/(i+1))*Math.sin(2*Math.PI*TS_WOBBLE_HARMONICS[i]*t+phases[i]);}
+ return (v/TS_WOBBLE_WSUM)*amp;
 }
 function tsHandDrawnAmp(st,cell){const hd=st&&st.handDrawn;if(!hd||!hd.enabled||!hd.amount)return 0;return (hd.amount/100)*cell*0.025;}
 function tsWobblyCirclePath(ctx,cx,cy,r,seed,amp){
@@ -3227,14 +3256,19 @@ else{
   ctx.translate(cell/2,cell/2);
   ctx.rotate(baseAngle + extra);
   [-cell,0,cell].forEach(dx=>{
-   if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2,-cell*3,cell*3,cell,idx*31+11,wobAmp);ctx.fill();}
+   // Only the -cell/2..cell/2 span (one cell, centred) is ever actually visible through this
+   // tile's own clip once any 90deg-multiple rotation is applied - wobble is gated to exactly
+   // that case, so -cell..cell gives a comfortable 2x margin without sampling 6 cells' worth of
+   // path that can never be seen (the straight fillRect below keeps the old generous span since
+   // its cost is negligible either way).
+   if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2,-cell,cell,cell,idx*31+11,wobAmp);ctx.fill();}
    else ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6);
    if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>{
     // Same reasoning as the dot highlight above: trace the actual wobbly band edges (widened by
     // the margin) rather than a straight rectangle, or the highlight reads as a stray straight
     // line cutting across a wavy stripe - especially glaring on a white/near-invisible layer,
     // where that straight highlight becomes the only visible trace of the layer at all.
-    if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2+m,-cell*3,cell*3,cell,idx*31+11,wobAmp);}else{ctx.beginPath();ctx.rect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6);}
+    if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2+m,-cell,cell,cell,idx*31+11,wobAmp);}else{ctx.beginPath();ctx.rect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6);}
     ctx.stroke();
    });}
   });
