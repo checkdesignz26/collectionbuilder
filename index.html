@@ -2704,13 +2704,11 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
           <div class="tsRow"><label>all gaps</label><input id="tsAllGaps" type="range" min="0" max="120" value="18"></div>
           <div class="tsGlobalGrid"><button id="tsApplyAllWidths">apply width</button><button id="tsApplyAllGaps">apply gap</button></div>
           <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsDistributeV">distribute vertical</button><button id="tsDistributeH">distribute horizontal</button></div>
-          <div class="tsBox" style="margin:10px 0 0"><h3>Selected Direction Group</h3><div class="tsPad">
-            <p class="tsHint" style="margin-top:0">Applies to every layer running the same way as the selected one (e.g. all verticals), and brings them to the front so blend/opacity actually show where they cross the other direction.</p>
-            <div class="tsRow"><label>group opacity</label><input id="tsGroupOpacity" type="range" min="0" max="100" value="70"></div>
-            <div class="tsRow"><label>group blend</label><select id="tsGroupBlend"><option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="soft-light">soft light</option></select></div>
-            <div class="tsGlobalGrid"><button id="tsApplyGroupStyle">apply to group</button><button id="tsCopyToHorizontal">copy → horizontal</button></div>
-            <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsCopyToDiag1">copy → diagonal /</button><button id="tsCopyToDiag2">copy → diagonal \</button></div>
-          </div></div>
+          <p class="tsHint" style="margin-top:8px">Group opacity/blend below applies to every layer running the same way as the selected one (e.g. all verticals), and brings them to the front so blend/opacity actually show where they cross the other direction.</p>
+          <div class="tsRow"><label>group opacity</label><input id="tsGroupOpacity" type="range" min="0" max="100" value="70"></div>
+          <div class="tsRow"><label>group blend</label><select id="tsGroupBlend"><option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="soft-light">soft light</option></select></div>
+          <div class="tsGlobalGrid"><button id="tsApplyGroupStyle">apply to group</button><button id="tsCopyToHorizontal">copy → horizontal</button></div>
+          <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsCopyToDiag1">copy → diagonal /</button><button id="tsCopyToDiag2">copy → diagonal \</button></div>
           <p class="tsHint" style="margin-top:8px">Use these when the whole stripe recipe needs to get chunkier, airier, or evenly spaced.</p>
         </div></div>
       </div></div>
