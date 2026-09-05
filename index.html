@@ -3414,8 +3414,15 @@ window.renderTextureTiles=renderTextureTiles=function(stage,scale,origin){
 window.openTextureStudioType=openType;
 window.openTextureStudio=open;
 init();
-// v36: never auto-open Classics Studio on file load.
-window.addEventListener('load',()=>{try{document.getElementById('textureStudioOverlay')?.classList.remove('open');document.getElementById('backgroundStudioOverlay')?.classList.remove('open');document.body.style.overflow='';}catch(e){}
+// v36: never auto-open Classics Studio on file load. This used to run on the window 'load'
+// event - but 'load' waits for every resource (images, fonts, everything) to finish, which can
+// fire well after the page is already interactive. A user tapping a shortcut like "classic
+// stripes" in that window would open the studio via open() (adding the "open" class), only for
+// this handler to fire moments later and rip it straight back off - looking exactly like
+// tapping "classics" bounces you back to the main page. Running it immediately, synchronously,
+// right here closes that whole window: no click can be processed until this script finishes.
+try{document.getElementById('textureStudioOverlay')?.classList.remove('open');document.getElementById('backgroundStudioOverlay')?.classList.remove('open');document.body.style.overflow='';}catch(e){}
+window.addEventListener('load',()=>{
  // First run after the unified saved-items store landed: everything has now
  // initialised from the old separate keys (see loadAllSavedItemsBlob), so write
  // the merged result out under the new shared key right away rather than
