@@ -2733,6 +2733,14 @@ let tsUndoStack=[], tsRedoStack=[], tsRestoring=false;
 function copy(o){return JSON.parse(JSON.stringify(o));}
 function tsSnapshot(){return copy({state,selected,previewMode,showGuides});}
 function tsRestore(snap){if(!snap)return;tsRestoring=true;state=copy(snap.state);selected=snap.selected||0;previewMode=snap.previewMode||'single';showGuides=snap.showGuides!==false;setSeg();renderAll();tsRestoring=false;}
+// Work-in-progress autosave: closing the studio (or reloading) without hitting "save classic" /
+// "apply to template" used to silently discard whatever you were mid-way through designing -
+// only explicitly-saved/applied patterns persisted. Debounced the same way as the main canvas's
+// autosave so a slider drag doesn't write on every frame.
+const TS_WIP_KEY='tsWipAutosaveV1';
+let tsWipTimer=null;
+function tsScheduleWipAutosave(){if(tsRestoring||!state)return;clearTimeout(tsWipTimer);tsWipTimer=setTimeout(()=>{try{localStorage.setItem(TS_WIP_KEY,JSON.stringify(tsSnapshot()));}catch(e){}},900);}
+function tsLoadWip(){try{const raw=localStorage.getItem(TS_WIP_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function tsPushHistory(){if(tsRestoring||!state)return;tsUndoStack.push(tsSnapshot());if(tsUndoStack.length>80)tsUndoStack.shift();tsRedoStack=[];tsUpdateUndoRedo();}
 function tsUndo(){if(!tsUndoStack.length)return;tsRedoStack.push(tsSnapshot());tsRestore(tsUndoStack.pop());tsUpdateUndoRedo();}
 function tsRedo(){if(!tsRedoStack.length)return;tsUndoStack.push(tsSnapshot());tsRestore(tsRedoStack.pop());tsUpdateUndoRedo();}
@@ -2865,9 +2873,22 @@ function ginghamDefault(){return {type:'gingham',bg:true,bgColor:'#ffffff',bgOpa
 ]};}
 function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='madras'?madrasDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():stripeDefaults();}
 function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');window.cmSetBgTarget?.('tex');}
-function openType(type){state=defaultFor(type||'stripes');selected=0;previewMode='single';tsUndoStack=[];tsRedoStack=[];setSeg();document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));open();}
+function openType(type){
+ // Opening a specific pattern type from OUTSIDE the studio (a main-app shortcut button, or the
+ // very first open) resumes unsaved work-in-progress for that same type instead of silently
+ // discarding it - but switching type from the CLASSIC PATTERNS list while already inside the
+ // studio (see $('tsTabs') wiring in wire()) still deliberately resets to that type's defaults,
+ // since that's a "start a new pattern of this kind" action, not a "come back later" one.
+ const wip=tsLoadWip();
+ if(wip&&wip.state&&(!type||wip.state.type===type)){
+  state=copy(wip.state);selected=Math.min(wip.selected||0,Math.max(0,(state.layers||[]).length-1));previewMode=wip.previewMode||'single';showGuides=wip.showGuides!==false;
+ } else {
+  state=defaultFor(type||'stripes');selected=0;previewMode='single';
+ }
+ tsUndoStack=[];tsRedoStack=[];setSeg();document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));open();
+}
 function close(){document.body.style.overflow='';$('textureStudioOverlay').classList.remove('open');}
-function init(){state=stripeDefaults();previewMode='single';saved=(window.__savedItemsBlob&&window.__savedItemsBlob.classics)||[];renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
+function init(){const wip=tsLoadWip();state=(wip&&wip.state)?copy(wip.state):stripeDefaults();if(wip){selected=Math.min(wip.selected||0,Math.max(0,(state.layers||[]).length-1));previewMode=wip.previewMode||'single';showGuides=wip.showGuides!==false;}saved=(window.__savedItemsBlob&&window.__savedItemsBlob.classics)||[];renderPalette();renderColourGrid();wire();wireCanvasDrag();setSeg();renderAll();}
 window.tsGetSavedList=function(){return saved;};
 // One-tap apply for a saved classic's filmstrip card - sets the applied layer
 // directly from the saved item, same effect as applyToPKM() but without first
@@ -3062,7 +3083,7 @@ function wire(){
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
 function syncSurfaceTextureUI(){const tex=state.surfaceTexture;const activeType=tex&&tex.type?tex.type:'none';$('tsSurfaceTextureGrid')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tstex===activeType));const row=$('tsSurfaceTextureIntensityRow');if(row)row.style.display=activeType==='none'?'none':'grid';if($('tsSurfaceTextureScale'))$('tsSurfaceTextureScale').value=(tex&&tex.scale)||60;}
 function syncHandDrawnUI(){const hd=state.handDrawn;const on=!!(hd&&hd.enabled);$('tsWobbleToggle')?.classList.toggle('on',on);const row=$('tsWobbleIntensityRow');if(row)row.style.display=on?'grid':'none';if($('tsWobbleAmount'))$('tsWobbleAmount').value=(hd&&hd.amount)||35;}
-function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
+function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();tsScheduleWipAutosave();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;renderFilmstrip();tsUpdateUndoRedo();
  // Global Stripe Controls / Selected Direction Group / sequence duplication only make sense
  // for band recipes - a checkerboard of discrete squares has no "stripe sequence" to distribute
  // or duplicate into a plaid.
@@ -3466,7 +3487,17 @@ function bgDemoRecipe(type,seed){
  };
  return {...base,...(presets[type]||{})};
 }
-let bgRecipe={type:'paper',grad:'four',base:'#f2f2f2',tex:'#555555',opacity:58,scale:75,density:42,softness:62,contrast:46,seed:12345,enabled:false,name:'Greyscale Paper Grain',objects:[],editable:false};
+// Work-in-progress autosave: closing Background Studio (or reloading) without hitting "apply to
+// template" used to discard whatever recipe you were mid-way through tweaking. Restored here as
+// the starting recipe, same debounced approach as Classics Studio's WIP autosave - but always
+// forced back to enabled:false on restore, so a reload never re-shows a background on the main
+// canvas that wasn't explicitly applied (the "blank sketchbook startup" behaviour below stays
+// intact; this only affects what you see if you reopen the editor itself).
+const BG_WIP_KEY='bgWipAutosaveV1';
+let bgWipTimer=null;
+function bgScheduleWipAutosave(){clearTimeout(bgWipTimer);bgWipTimer=setTimeout(()=>{try{localStorage.setItem(BG_WIP_KEY,JSON.stringify(bgRecipe));}catch(e){}},900);}
+function bgLoadWip(){try{const raw=localStorage.getItem(BG_WIP_KEY);const wip=raw?JSON.parse(raw):null;return wip?{...wip,enabled:false}:null;}catch(e){return null;}}
+let bgRecipe=bgLoadWip()||{type:'paper',grad:'four',base:'#f2f2f2',tex:'#555555',opacity:58,scale:75,density:42,softness:62,contrast:46,seed:12345,enabled:false,name:'Greyscale Paper Grain',objects:[],editable:false};
 let bgSaved=(window.__savedItemsBlob&&window.__savedItemsBlob.backgrounds)||[];
 window.bgGetSavedList=function(){return bgSaved;};
 // One-tap apply for a saved background's filmstrip card - applies it to the
@@ -3703,7 +3734,7 @@ function applyPostContrast(ctx,rec){
 }
 function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('2d');ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=rec.base||'#fff';ctx.fillRect(0,0,W,H);let useObj=rec.editable&&rec.objects&&rec.objects.length&&editableKinds(rec.type);if(rec.type==='gradient')drawGradient(ctx,rec);if(rec.type==='paper')drawPaper(ctx,rec);if(rec.type==='linen')drawLinen(ctx,rec);if(rec.type==='speckles')drawSpeckles(ctx,rec);if(rec.type==='watercolour'&&!useObj)drawWatercolour(ctx,rec);if(rec.type==='chalk'&&!useObj)drawChalk(ctx,rec);if(rec.type==='vintage')drawVintage(ctx,rec);if(rec.type==='splatter'&&!useObj)drawSplatter(ctx,rec);if(rec.type==='sprinkles'&&!useObj)drawSprinkles(ctx,rec);if(rec.type==='doodles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(25,rec.density),scale:Math.max(65,rec.scale)});if(rec.type==='scribbles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(30,rec.density),scale:Math.max(90,rec.scale)});if(rec.type==='crosshatch'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(45,rec.density),scale:Math.max(70,rec.scale)});if(useObj)drawEditableObjects(ctx,rec,true);applyPostContrast(ctx,rec);ctx.restore();return canvas}
 function recipeToUrl(rec=bgRecipe){let cn=document.createElement('canvas');cn.width=W;cn.height=H;drawBackgroundToCanvas(cn,rec);return cn.toDataURL('image/png')}
-function renderBgPreview(){let can=q('bgPreviewCanvas'); if(!can)return; drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
+function renderBgPreview(){bgScheduleWipAutosave();let can=q('bgPreviewCanvas'); if(!can)return; drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
  q('bgPreviewName').textContent=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
 function updateRepeatBox(){let box=q('bgRepeatBox'),can=q('bgPreviewCanvas'); if(!box||!can)return; if(bgView==='single'){box.classList.add('hidden');can.classList.remove('hidden');return;} can.classList.add('hidden');box.classList.remove('hidden');box.style.display='grid';box.style.gridTemplateColumns='repeat(3,1fr)';box.style.gap='0';box.innerHTML='';for(let i=0;i<9;i++){let cn=document.createElement('canvas');cn.width=180;cn.height=180;cn.style.width='150px';cn.style.height='150px';cn.style.borderRadius='0';cn.getContext('2d').drawImage(can,0,0,180,180);box.appendChild(cn)}}
 function syncBgUI(){q('bgBaseColor').value=bgRecipe.base;q('bgTexColor').value=bgRecipe.tex;['Opacity','Scale','Density','Softness','Contrast'].forEach(k=>{let id='bg'+k;let val=q(id+'Val'),inp=q(id); if(inp){inp.value=bgRecipe[k.toLowerCase()]; if(val)val.textContent=inp.value;}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.classList.toggle('active',b.dataset.bggrad===bgRecipe.grad));document.querySelectorAll('.bgTypeBtn').forEach(b=>b.classList.toggle('active',b.dataset.bgtype===bgRecipe.type));renderBgPreview()}
