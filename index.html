@@ -3174,8 +3174,38 @@ ctx.restore();});ctx.restore();}
 // fill colour is never swallowed by the selection outline itself.
 function tsHighlightMargin(cell){return Math.max(3,cell/300);}
 function tsStrokeSelected(ctx,cell,drawFn){ctx.save();ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.strokeStyle='#ff8ed6';ctx.lineWidth=Math.max(2,cell/400);drawFn();ctx.restore();}
-function drawTile(ctx,x,y,w,st){ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.rect(0,0,w,w);ctx.clip();ctx.clearRect(0,0,w,w);let scale=(st.scale||100)/100;let cell=Math.max(40,w*scale);for(let yy=-cell;yy<w+cell;yy+=cell){for(let xx=-cell;xx<w+cell;xx+=cell){drawOneCell(ctx,cell,st,xx,yy);}}ctx.restore();}
-function renderPreview(canvas,size,st,mode,guides){let ctx=canvas.getContext('2d');ctx.clearRect(0,0,size,size);ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);let n=mode==='single'?1:3, tile=size/n;for(let r=0;r<n;r++)for(let c=0;c<n;c++){let ox=(mode==='brick'&&r%2)?tile/2:0;drawTile(ctx,c*tile-tile+ox,r*tile,tile,st);drawTile(ctx,c*tile+ox,r*tile,tile,st);if(guides&&n>1){ctx.strokeStyle='rgba(20,20,35,.22)';ctx.lineWidth=1;ctx.strokeRect(c*tile,r*tile,tile,tile);}}}
+function drawTile(ctx,x,y,w,st){ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.rect(0,0,w,w);ctx.clip();ctx.clearRect(0,0,w,w);let scale=(st.scale||100)/100;
+ // A cell is one full pattern period - it can never be bigger than the area it's filling, or
+ // this tile would only ever show a partial, mid-period crop (Pattern Scale above 100% used to
+ // do exactly that). Capping at `w` means a single exported/previewed tile is always a whole,
+ // genuinely seamless period, at any scale setting.
+ let cell=Math.max(40,Math.min(w,w*scale));for(let yy=-cell;yy<w+cell;yy+=cell){for(let xx=-cell;xx<w+cell;xx+=cell){drawOneCell(ctx,cell,st,xx,yy);}}ctx.restore();}
+function renderPreview(canvas,size,st,mode,guides){
+ let ctx=canvas.getContext('2d');ctx.clearRect(0,0,size,size);ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);
+ if(mode==='single'){drawTile(ctx,0,0,size,st);return;}
+ // Repeat/brick preview: march ONE shared cell size across the whole canvas in a single pass,
+ // instead of the old approach of drawing 3 independent size/3 "repeat squares" that each
+ // restarted their own internal tiling from local (0,0). Whenever the pattern's real cell size
+ // didn't evenly divide size/3 - guaranteed once Pattern Scale goes much past 100% - each square
+ // showed a different partial slice and the squares didn't line up with each other, even though
+ // the underlying pattern itself is genuinely seamless. Marching one real cell size across the
+ // full canvas can never slice a tile mid-period, at any scale.
+ const scale=(st.scale||100)/100;
+ const cell=Math.max(40,(size/3)*scale);
+ let row=0;
+ for(let ty=0; ty<size; ty+=cell, row++){
+  const ox=(mode==='brick'&&row%2)?cell/2:0;
+  for(let tx=ox-cell; tx<size; tx+=cell){drawOneCell(ctx,cell,st,tx,ty);}
+ }
+ if(guides){
+  ctx.strokeStyle='rgba(20,20,35,.22)';ctx.lineWidth=1;
+  row=0;
+  for(let ty=0; ty<size; ty+=cell, row++){
+   const ox=(mode==='brick'&&row%2)?cell/2:0;
+   for(let tx=ox-cell; tx<size; tx+=cell){ctx.strokeRect(tx,ty,cell,cell);}
+  }
+ }
+}
 let tsSaving=false;
 function saveTexture(){
  if(tsSaving)return;
