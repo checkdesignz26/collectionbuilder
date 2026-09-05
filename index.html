@@ -3072,6 +3072,15 @@ function wire(){
  $('tsBack').onclick=()=>{if(selected<state.layers.length-1){const [l]=state.layers.splice(selected,1);state.layers.splice(selected+1,0,l);selected++;renderAll();}};
  $('tsClear').onclick=()=>{tsPushHistory();state.layers=[];selected=0;renderAll();};
  if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal'); if($('tsApplyGroupStyle'))$('tsApplyGroupStyle').onclick=applyGroupStyle; if($('tsCopyToHorizontal'))$('tsCopyToHorizontal').onclick=()=>duplicateSequenceTo('horizontal'); if($('tsCopyToDiag1'))$('tsCopyToDiag1').onclick=()=>duplicateSequenceTo('diag1'); if($('tsCopyToDiag2'))$('tsCopyToDiag2').onclick=()=>duplicateSequenceTo('diag2'); if($('tsDuplicateSequence'))$('tsDuplicateSequence').onclick=()=>duplicateSequence(false); if($('tsPlaidAction'))$('tsPlaidAction').onclick=()=>duplicateSequence(true);
+ // Group opacity/blend (and all-widths/all-gaps) used to only take effect on an explicit "apply"
+ // click - but renderInspector() resyncs those sliders to the SELECTED layer's own value on every
+ // other render in between, so any intervening action (picking a different layer, nudging another
+ // control) silently snapped the slider back before the click ever landed, making "apply" look
+ // like it did nothing. Applying live on every input removes that whole discard window.
+ if($('tsGroupOpacity'))$('tsGroupOpacity').oninput=applyGroupStyle;
+ if($('tsGroupBlend'))$('tsGroupBlend').onchange=applyGroupStyle;
+ if($('tsAllWidths'))$('tsAllWidths').oninput=()=>applyAllStripe('width',$('tsAllWidths').value);
+ if($('tsAllGaps'))$('tsAllGaps').oninput=()=>applyAllStripe('gap',$('tsAllGaps').value);
  $('tsReset').onclick=()=>{tsPushHistory();state=defaultFor(state.type);selected=0;renderAll();};$('tsSave').onclick=saveTexture; if($('tsUndo'))$('tsUndo').onclick=tsUndo; if($('tsRedo'))$('tsRedo').onclick=tsRedo; const ov=$('textureStudioOverlay'); let tsTap=null; ov.addEventListener('touchend',e=>{if(!ov.classList.contains('open'))return; if(e.changedTouches.length===2||e.touches.length===2){e.preventDefault();tsUndo();} if(e.changedTouches.length===3||e.touches.length===3){e.preventDefault();tsRedo();}}, {passive:false});
  if($('tsApplyToPKM'))$('tsApplyToPKM').onclick=applyToPKM;
  if($('tsDownload'))$('tsDownload').onclick=()=>window.openDownloadPanel('download classic pattern',async(w,dpi)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,state,'single',false);const bytes=await canvasToDpiPngBytes(canvas,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(state.type||'classic')}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current single tile as a seamless ${w}×${w}px PNG.`);
