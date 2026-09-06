@@ -2789,8 +2789,17 @@ let tsSurfaceTexCache={};
 function tsGetSurfaceTexturePattern(ctx,color,cell,st){
  const tex=st&&st.surfaceTexture;
  if(!tex||!tex.type||tex.type==='none'||!window.bgRenderToTileCanvas)return null;
- const size=Math.max(60,Math.round(cell));
- const key=tex.type+'|'+color+'|'+(tex.scale||60)+'|'+size;
+ // `cell` here is the DESIRED size the pattern should visually repeat at (sized to the shape's
+ // own footprint by the caller, so a thin stripe shows several blobs instead of one crop) - it is
+ // NOT the resolution to render at. Those used to be the same number, so shrinking the repeat
+ // size for a thin stripe also shrank the actual source bitmap down to near nothing, turning
+ // "watercolour" into a soft blurry smear with no real texture left in it. Render the bitmap at a
+ // fixed, generous resolution always, and use the pattern's own transform to make it repeat at
+ // the smaller desired size - downsampling a sharp source looks clean, upscaling a tiny blurry
+ // one never does.
+ const desiredTileSize=Math.max(24,Math.round(cell));
+ const renderRes=360;
+ const key=tex.type+'|'+color+'|'+(tex.scale||60)+'|'+renderRes;
  if(!(key in tsSurfaceTexCache)){
   // Each texture type behaves very differently (blob washes vs. fine grain vs. speckle noise), so
   // one guessed set of density/contrast numbers looked great on watercolour and nearly flat on
@@ -2808,10 +2817,14 @@ function tsGetSurfaceTexturePattern(ctx,color,cell,st){
   const lightShade=tsShadeColor(color,0.44),darkShade=tsShadeColor(color,-0.40);
   const rec={...base,type:tex.type,base:inverted?darkShade:lightShade,tex:inverted?lightShade:darkShade,opacity:100,scale:(tex.scale||base.scale||60)*1.5,density:Math.min(100,(base.density??42)*1.4),softness:base.softness??55,contrast:Math.min(100,(base.contrast??46)+18),seed:12345,editable:false,objects:[]};
   let canvas=null;
-  try{canvas=window.bgRenderToTileCanvas(rec,size);}catch(e){console.warn('surface texture render failed',e);}
+  try{canvas=window.bgRenderToTileCanvas(rec,renderRes);}catch(e){console.warn('surface texture render failed',e);}
   tsSurfaceTexCache[key]=canvas?ctx.createPattern(canvas,'repeat'):null;
  }
- return tsSurfaceTexCache[key];
+ const pattern=tsSurfaceTexCache[key];
+ if(pattern&&pattern.setTransform){
+  try{pattern.setTransform(new DOMMatrix().scale(desiredTileSize/renderRes));}catch(e){}
+ }
+ return pattern;
 }
 function updateHSBControls(sync=true){let l=currentLayer(); if(!l)return; const hsv=hexToHsv(l.color||'#000000'); if(sync){$('tsHue').value=hsv.h;$('tsSat').value=hsv.s;$('tsBri').value=hsv.v;} const h=+$('tsHue').value,s=+$('tsSat').value,v=+$('tsBri').value; $('tsHueVal').textContent=h+'°';$('tsSatVal').textContent=s+'%';$('tsBriVal').textContent=v+'%';$('tsColourHex').textContent=(l.color||'#000000').toUpperCase();$('tsColourChip').style.background=l.color||'#000000';}
 function applyHSBColour(){let l=currentLayer(); if(!l)return; l.color=hsvToHex($('tsHue').value,$('tsSat').value,$('tsBri').value);l.manual=true;refreshLayerColourName(l,true);renderAll(false);}
@@ -3211,7 +3224,7 @@ function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.
  // Sizing the texture tile to the SHAPE's own footprint instead means the same blobs repeat
  // several times across that shape, so the actual multi-blob texture is visible again.
  const shapeFootprint = l.kind==='dot' ? ww*2 : l.kind==='square' ? (l.width/100)*cell : l.kind==='diamond' ? ww*2.2 : ww;
- ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',Math.min(cell,Math.max(shapeFootprint*2,60)),st)||(l.color||'#000');
+ ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',Math.min(cell,200,Math.max(shapeFootprint*1.2,40)),st)||(l.color||'#000');
  let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
  // v56: one layer = one big polka dot. Mirror copies around the tile edges make it seamless
  // without turning the starter into one big grouped dot field.
