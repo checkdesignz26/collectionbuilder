@@ -3670,6 +3670,32 @@ function drawPaper(ctx,rec){
  ctx.restore();
 }
 function drawSpeckles(ctx,rec){noiseLayer(ctx,60+rec.density*11, rec.scale/30, rec.opacity/105,rec,{minR:.3,boost:1.15,seedOffset:44})}
+// Sum of sine harmonics with INTEGER frequency multipliers around a blob's own angle - the same
+// seamless-closure trick Classics Studio's hand-drawn wobble uses: since t runs 0..2*pi for one
+// full lap, and every harmonic k is a whole number of cycles, the value at t=0 and t=2*pi is
+// always bit-for-bit identical, so the wobbly edge always closes on itself with no seam however
+// jagged the amplitude gets. Real watercolour edges bleed unevenly rather than wobbling smoothly,
+// so this replaces the old 2-harmonic gentle wave with more, higher harmonics for a rougher,
+// bleeding-paper edge instead of a simple wavy blob outline.
+const BG_EDGE_HARMONICS=[2,3,5,8];
+const BG_EDGE_WSUM=BG_EDGE_HARMONICS.reduce((s,_,i)=>s+1/(i+1),0);
+let bgEdgePhaseCache={};
+function bgOrganicEdge(t,seed,amp){
+ // The phase for a given seed+harmonic never depends on t, only on the seed - but a blob samples
+ // this at dozens of points around its edge, times 9 mirror copies, times dozens of blobs per
+ // tile. Recomputing it (with its own Math.sin call) at every one of those was the dominant cost
+ // of drawing a watercolour tile - same mistake already fixed once for Classics Studio's wobble,
+ // here in Background Studio's blob edges too. Caching per seed cut render time roughly 5x.
+ let phases=bgEdgePhaseCache[seed];
+ if(!phases){
+  const rnd=n=>{const x=Math.sin((seed+n*13.37)*127.1)*43758.5453123;return x-Math.floor(x);};
+  phases=BG_EDGE_HARMONICS.map((k,i)=>rnd(i)*Math.PI*2);
+  bgEdgePhaseCache[seed]=phases;
+ }
+ let v=0;
+ for(let i=0;i<BG_EDGE_HARMONICS.length;i++){v+=(1/(i+1))*Math.sin(BG_EDGE_HARMONICS[i]*t+phases[i]);}
+ return (v/BG_EDGE_WSUM)*amp;
+}
 function drawWatercolour(ctx,rec){
   // v68: unmistakable soft watercolour wash.
   // Broad overlapping pigment pools with enough tonal variation to read
@@ -3684,7 +3710,10 @@ function drawWatercolour(ctx,rec){
   ctx.globalCompositeOperation='multiply';
 
   function blob(cx,cy,r,a,edge=false){
-    const bumps=26;
+    const bumps=48;
+    // Each blob gets its own edge-noise seed from its centre, so neighbouring blobs bleed
+    // differently rather than all wobbling in lockstep.
+    const edgeSeed=(rec.seed||1)+Math.round(cx)*7+Math.round(cy)*13;
     for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
       const x=cx+ox,y=cy+oy;
       const g=ctx.createRadialGradient(x,y,0,x,y,r);
@@ -3698,7 +3727,7 @@ function drawWatercolour(ctx,rec){
       ctx.beginPath();
       for(let i=0;i<bumps;i++){
         const t=i/bumps*Math.PI*2;
-        const rr=r*(.80+Math.sin(t*3+(cx+cy)*.013)*.075+Math.sin(t*7+(rec.seed||1)*.017)*.035);
+        const rr=r*(0.78+bgOrganicEdge(t,edgeSeed,0.26));
         if(i===0)ctx.moveTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
         else ctx.lineTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
       }
