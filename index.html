@@ -2731,6 +2731,7 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
           <div class="tsRow"><label>all gaps</label><input id="tsAllGaps" type="range" min="0" max="120" value="18"></div>
           <div class="tsGlobalGrid"><button id="tsApplyAllWidths">apply width</button><button id="tsApplyAllGaps">apply gap</button></div>
           <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsDistributeV">distribute vertical</button><button id="tsDistributeH">distribute horizontal</button></div>
+          <button id="tsRotateGroup90" class="full" style="margin-top:7px">↻ rotate whole pattern 90°</button>
           <p class="tsHint" style="margin-top:8px">Group opacity/blend below applies to every layer running the same way as the selected one (e.g. all verticals), and brings them to the front so blend/opacity actually show where they cross the other direction.</p>
           <div class="tsRow"><label>group opacity</label><input id="tsGroupOpacity" type="range" min="0" max="100" value="70"></div>
           <div class="tsRow"><label>group blend</label><select id="tsGroupBlend"><option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="soft-light">soft light</option></select></div>
@@ -3137,7 +3138,17 @@ function wire(){
  $('tsForward').onclick=()=>{if(selected>0){const [l]=state.layers.splice(selected,1);state.layers.splice(selected-1,0,l);selected--;renderAll();}};
  $('tsBack').onclick=()=>{if(selected<state.layers.length-1){const [l]=state.layers.splice(selected,1);state.layers.splice(selected+1,0,l);selected++;renderAll();}};
  $('tsClear').onclick=()=>{tsPushHistory();state.layers=[];selected=0;renderAll();};
- if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal'); if($('tsApplyGroupStyle'))$('tsApplyGroupStyle').onclick=applyGroupStyle; if($('tsCopyToHorizontal'))$('tsCopyToHorizontal').onclick=()=>duplicateSequenceTo('horizontal'); if($('tsCopyToDiag1'))$('tsCopyToDiag1').onclick=()=>duplicateSequenceTo('diag1'); if($('tsCopyToDiag2'))$('tsCopyToDiag2').onclick=()=>duplicateSequenceTo('diag2'); if($('tsDuplicateSequence'))$('tsDuplicateSequence').onclick=()=>duplicateSequence(false); if($('tsPlaidAction'))$('tsPlaidAction').onclick=()=>duplicateSequence(true);
+ if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal');
+ if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
+  // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
+  // duplicating a new set on top ("copy -> horizontal" already does that) - this turns an
+  // already-built vertical-stripe classic into the same recipe running horizontal instead,
+  // in one tap, with widths/gaps/colours untouched.
+  const swap={vertical:'horizontal',horizontal:'vertical',diag1:'diag2',diag2:'diag1'};
+  tsPushHistory();
+  state.layers.forEach(l=>{if(l.kind==='stripe'||l.kind==='check'){l.direction=swap[l.direction]||l.direction;}});
+  renderAll();
+ }; if($('tsApplyGroupStyle'))$('tsApplyGroupStyle').onclick=applyGroupStyle; if($('tsCopyToHorizontal'))$('tsCopyToHorizontal').onclick=()=>duplicateSequenceTo('horizontal'); if($('tsCopyToDiag1'))$('tsCopyToDiag1').onclick=()=>duplicateSequenceTo('diag1'); if($('tsCopyToDiag2'))$('tsCopyToDiag2').onclick=()=>duplicateSequenceTo('diag2'); if($('tsDuplicateSequence'))$('tsDuplicateSequence').onclick=()=>duplicateSequence(false); if($('tsPlaidAction'))$('tsPlaidAction').onclick=()=>duplicateSequence(true);
  // Group opacity/blend (and all-widths/all-gaps) used to only take effect on an explicit "apply"
  // click - but renderInspector() resyncs those sliders to the SELECTED layer's own value on every
  // other render in between, so any intervening action (picking a different layer, nudging another
