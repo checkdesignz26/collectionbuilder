@@ -945,7 +945,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>magic collection builder</h1><p>v62 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save template</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset template</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
+  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save template</button><button id="exportForPlayground" class="small" title="Export this template's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset template</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
 </header>
 <main>
   <aside class="side left">
@@ -2174,6 +2174,19 @@ function resetCurrentTemplate(){
   renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();
 }
 addRowBtn.onclick=()=>{pushHistory();[20,50,80].forEach(x=>bricks.push(p('oval',x,50,16,10,'filler')));render();};addColBtn.onclick=()=>{pushHistory();[20,50,80].forEach(y=>bricks.push(p('oval',50,y,16,10,'filler')));render();};resetBtn.onclick=()=>{pushHistory();resetCurrentTemplate();};undoBtn.onclick=undo;redoBtn.onclick=redo;saveBtn.onclick=()=>{saveTemplateToFilmstrip();};
+// Exports just the current template's SKELETON (brick positions/sizes/rotation/role) as JSON -
+// not a texture/colour export, those already exist (download PNG). This is the layout half of
+// the Magic Builder <-> Pattern Playground bridge: Playground reads this file and turns each
+// brick into a fillable slot, so a template designed here can be filled with hand-drawn/painted
+// motifs there instead of just coloured shapes here.
+function currentTemplateDisplayName(){return (savedTemplates.find(t=>t.key===current)||{}).name||(presets[current]||{}).name||current||'template';}
+document.getElementById('exportForPlayground').onclick=()=>{
+ const shapeMap={circle:'circle',diamond:'diamond'};
+ const name=currentTemplateDisplayName();
+ const data={app:'magic-collection-builder',kind:'pattern-playground-template',version:1,name,
+  bricks:(bricks||[]).map(b=>({x:b.x,y:b.y,w:b.w,h:b.h,rot:b.rot||0,role:b.role||'filler',shape:shapeMap[b.type]||'oval'}))};
+ triggerBlobDownload(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),slugName(name)+'-playground-template.json');
+};
 function syncThemeToggleUI(){
  const light=document.body.classList.contains('theme-light');
  const icon=document.getElementById('themeToggleIcon'),label=document.getElementById('themeToggleLabel');
