@@ -1329,7 +1329,7 @@ function persistSavedTemplates(){persistAllSavedItems();}
 // thumbnail) to localStorage, debounced so a drag doesn't write on every pointermove frame.
 const AUTOSAVE_KEY='pkmAutosaveV1';
 let autosaveTimer=null;
-function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,motifShapes,motifShapesThumb,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
+function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
 function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{try{localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(autosaveSnapshot()));}catch(e){console.warn('autosave failed',e);}},900);}
 function restoreAutosave(){
  let raw;try{raw=localStorage.getItem(AUTOSAVE_KEY);}catch(e){return false;}
@@ -1339,7 +1339,7 @@ function restoreAutosave(){
  current=data.current||'grid';currentTemplateBase=data.currentTemplateBase||null;
  blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};
  bricks=data.bricks;texture=data.texture?copyTexture(data.texture):blankTexture();
- motifShapes=data.motifShapes||{};motifShapesThumb=data.motifShapesThumb||{};shapeStyles=data.shapeStyles||{};styleAllLayouts=!!data.styleAllLayouts;showMotifs=data.showMotifs!==false;
+ motifShapes=data.motifShapes||{};shapeStyles=data.shapeStyles||{};styleAllLayouts=!!data.styleAllLayouts;showMotifs=data.showMotifs!==false;
  renderTextureUI();
  if(window.bgApplySnapshot)window.bgApplySnapshot(data.background||null);
  if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic||null);
@@ -1830,18 +1830,16 @@ function render(){const stage=document.getElementById('stage');stage.className='
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
 // b.motifUrl changes either way - this only affects how brickHTML/liveMiniHTML render it, so
 // switching back to motif mode always shows exactly what was placed. Off by default true (show
-// motifs); flip to false to see plain outline placeholders instead (e.g. to add a new placeholder
-// shape without a wall of real motifs in the way) - purely manual, this never changes on its own.
+// motifs); flip to false while dragging/rearranging several placed motifs, since redrawing full
+// <img> elements (times up to 9 for edge clones, times however many are placed) on every single
+// pointermove during a drag is what makes it feel laggy - a plain CSS-bordered div is far cheaper
+// to paint than any <img>, even a small one (tried swapping to a downscaled thumbnail instead of
+// hiding the image outright - still noticeably laggier than the outline on an iPad, since it's the
+// image decode/paint itself that's expensive, not its pixel dimensions). Also the manual toggle -
+// flip it to see plain outlines any time, e.g. to add a new placeholder shape without a wall of
+// real motifs in the way.
 let showMotifs=true;
-// True only for the duration of an active drag/resize/rotate gesture. brickHTML swaps to each
-// motif's small cached thumbnail (see makeMotifThumb) instead of its full-res image while this is
-// set, since redrawing full <img>s (times up to 9 for edge clones, times however many are placed)
-// on every single pointermove is what makes those gestures feel laggy - a thumbnail is far cheaper
-// to decode/paint. What's dragged still visibly reads as itself throughout, just softer/blurrier;
-// the full image is back the instant the gesture ends. Independent of showMotifs above - a brick
-// already showing as a plain outline (showMotifs off) has nothing to swap and is untouched by this.
-let dragFast=false;
-function brickHTML(b){ if(b.motifUrl&&showMotifs){const src=dragFast?(b.motifThumbUrl||b.motifUrl):b.motifUrl;return `<img class="motifImg" src="${src}" draggable="false">`;} if(['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type)){let cls=b.type;let content=b.type==='bowRow'?'🎀 🎀 🎀 🎀 🎀':'';return `<div class="shape ${cls}">${content}</div>`;} let shape=b.type==='arrowOval'?'oval':b.type; let sym=flowSymbol(b); let flow=sym?`<span class="flowArrow">${sym}</span>`:''; let inner=(b.type==='diamond')?`<span class="inner"></span>${flow}`:flow; return `<div class="shape outline ${shape}">${inner}</div>`;}
+function brickHTML(b){ if(b.motifUrl&&showMotifs){return `<img class="motifImg" src="${b.motifUrl}" draggable="false">`;} if(['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type)){let cls=b.type;let content=b.type==='bowRow'?'🎀 🎀 🎀 🎀 🎀':'';return `<div class="shape ${cls}">${content}</div>`;} let shape=b.type==='arrowOval'?'oval':b.type; let sym=flowSymbol(b); let flow=sym?`<span class="flowArrow">${sym}</span>`:''; let inner=(b.type==='diamond')?`<span class="inner"></span>${flow}`:flow; return `<div class="shape outline ${shape}">${inner}</div>`;}
 let motifTray=[];
 let activeMotifId=null;
 // Most motif PNGs (stock illustrations especially) ship with generous transparent padding
@@ -1861,19 +1859,6 @@ let activeMotifId=null;
 // needs to render larger than a fraction of an already-capped export tile, so
 // cap the stored size well above any real on-screen or export use.
 const MOTIF_MAX_DIM=1200;
-// A tiny, cheap-to-redraw copy of a motif used only while actively dragging/resizing/rotating a
-// brick that has it placed - swapping to this (instead of the full-res image) is what keeps those
-// gestures smooth with several motifs on the canvas, especially with edge clones multiplying each
-// one up to 9x. Full res comes back the instant the gesture ends (see startDrag/startResize/
-// startRotate's dragFast flag).
-function makeMotifThumb(source,maxDim=96){
- const w=source.naturalWidth||source.width,h=source.naturalHeight||source.height;
- const scale=Math.min(1,maxDim/Math.max(w,h));
- const out=document.createElement('canvas');out.width=Math.max(1,Math.round(w*scale));out.height=Math.max(1,Math.round(h*scale));
- const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='medium';
- ctx.drawImage(source,0,0,out.width,out.height);
- return out.toDataURL('image/png');
-}
 function downscaleMotifCanvas(canvas){
  const w=canvas.width,h=canvas.height;
  const scale=Math.min(1,MOTIF_MAX_DIM/Math.max(w,h));
@@ -1889,7 +1874,7 @@ function trimTransparentPadding(img){
  const ctx=canvas.getContext('2d');
  ctx.drawImage(img,0,0,w,h);
  let data;
- try{data=ctx.getImageData(0,0,w,h).data;}catch(e){return {dataUrl:downscaleMotifCanvas(canvas),thumbDataUrl:makeMotifThumb(canvas)};}
+ try{data=ctx.getImageData(0,0,w,h).data;}catch(e){return downscaleMotifCanvas(canvas);}
  let minX=w,minY=h,maxX=-1,maxY=-1;
  for(let y=0;y<h;y++){
   for(let x=0;x<w;x++){
@@ -1899,14 +1884,14 @@ function trimTransparentPadding(img){
    }
   }
  }
- if(maxX<0)return {dataUrl:downscaleMotifCanvas(canvas),thumbDataUrl:makeMotifThumb(canvas)};
+ if(maxX<0)return downscaleMotifCanvas(canvas);
  const pad=Math.round(Math.max(maxX-minX,maxY-minY)*0.04);
  minX=Math.max(0,minX-pad);minY=Math.max(0,minY-pad);
  maxX=Math.min(w-1,maxX+pad);maxY=Math.min(h-1,maxY+pad);
  const cw=maxX-minX+1,ch=maxY-minY+1;
  const out=document.createElement('canvas');out.width=cw;out.height=ch;
  out.getContext('2d').drawImage(canvas,minX,minY,cw,ch,0,0,cw,ch);
- return {dataUrl:downscaleMotifCanvas(out),thumbDataUrl:makeMotifThumb(out)};
+ return downscaleMotifCanvas(out);
 }
 function handleMotifUpload(e){
  const files=Array.from(e.target.files||[]);
@@ -1917,13 +1902,12 @@ function handleMotifUpload(e){
   reader.onload=ev=>{
    const img=new Image();
    img.onload=()=>{
-    const {dataUrl,thumbDataUrl}=trimTransparentPadding(img);
-    motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:file.name,dataUrl,thumbDataUrl});
+    motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:file.name,dataUrl:trimTransparentPadding(img)});
     if(!activeMotifId)activeMotifId=motifTray[motifTray.length-1].id;
     renderMotifTray();
    };
    img.onerror=()=>{
-    motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:file.name,dataUrl:ev.target.result,thumbDataUrl:ev.target.result});
+    motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:file.name,dataUrl:ev.target.result});
     if(!activeMotifId)activeMotifId=motifTray[motifTray.length-1].id;
     renderMotifTray();
    };
@@ -1966,17 +1950,13 @@ function renderMotifTray(){
 // flip through layouts and see how an already-chosen motif set would look in each one, without
 // reassigning it every time.
 let motifShapes={};
-// Small thumbnail counterpart to motifShapes, keyed the same way - brickHTML swaps to these while
-// a brick is actively being dragged/resized/rotated (see the dragFast flag) instead of the full
-// image, so that gets to stay cheap even with several motifs on the canvas.
-let motifShapesThumb={};
-function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(motifShapes[b.type]){b.motifUrl=motifShapes[b.type];b.motifThumbUrl=motifShapesThumb[b.type]||motifShapes[b.type];}else if(b.motifUrl){delete b.motifUrl;delete b.motifThumbUrl;}});}
+function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(motifShapes[b.type])b.motifUrl=motifShapes[b.type];else if(b.motifUrl)delete b.motifUrl;});}
 // motifShapes only lives in memory - a saved template's own bricks keep their motifUrl fine
 // (that's baked into the saved snapshot), but after a fresh page load motifShapes itself starts
 // empty, so every OTHER Live Preview thumbnail (which reads from motifShapes, not from this
 // template's bricks) has nothing to draw and shows placeholders instead of the motif. Reseed it
 // from whatever a loaded template actually has whenever bricks carrying motifs come in.
-function reseedMotifShapesFromBricks(list){(list||[]).forEach(b=>{if(b.motifUrl){motifShapes[b.type]=b.motifUrl;motifShapesThumb[b.type]=b.motifThumbUrl||b.motifUrl;}});}
+function reseedMotifShapesFromBricks(list){(list||[]).forEach(b=>{if(b.motifUrl)motifShapes[b.type]=b.motifUrl;});}
 // Same idea as motifShapes, for width/height/rotate: doesn't touch presets/blueprintStore
 // directly (those stay the untouched source of truth), just gets re-applied to whatever bricks
 // are currently loaded, on every layout switch and thumbnail preview - same non-destructive
@@ -1991,8 +1971,7 @@ function placeMotifOnSelected(){
  if(!b||!m)return;
  pushHistory();
  motifShapes[b.type]=m.dataUrl;
- motifShapesThumb[b.type]=m.thumbDataUrl||m.dataUrl;
- bricks.forEach(x=>{if(x.type===b.type){x.motifUrl=m.dataUrl;x.motifThumbUrl=m.thumbDataUrl||m.dataUrl;}});
+ bricks.forEach(x=>{if(x.type===b.type)x.motifUrl=m.dataUrl;});
  render();
  renderGrid();
  renderAssignedShapes();
@@ -2002,8 +1981,7 @@ function clearMotifFromSelected(){
  if(!b||!motifShapes[b.type])return;
  pushHistory();
  delete motifShapes[b.type];
- delete motifShapesThumb[b.type];
- bricks.forEach(x=>{if(x.type===b.type){delete x.motifUrl;delete x.motifThumbUrl;}});
+ bricks.forEach(x=>{if(x.type===b.type)delete x.motifUrl;});
  render();
  renderGrid();
  renderAssignedShapes();
@@ -2026,8 +2004,7 @@ function renderAssignedShapes(){
   d.onclick=()=>{
    pushHistory();
    delete motifShapes[type];
-   delete motifShapesThumb[type];
-   bricks.forEach(x=>{if(x.type===type){delete x.motifUrl;delete x.motifThumbUrl;}});
+   bricks.forEach(x=>{if(x.type===type)delete x.motifUrl;});
    render();
    renderGrid();
    renderAssignedShapes();
@@ -2074,21 +2051,21 @@ function renderUnassignedShapes(){
 // brick as "about to delete" partway through the hold so releasing early is a visible way to
 // back out; killTimer actually removes it. Either timer is cancelled the instant real movement
 // starts, so a normal drag is never mistaken for a hold.
-function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');let moved=false;
+function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;
  const pressEl=()=>document.querySelector('.brick[data-id="'+id+'"]:not(.clone)');
  const warnTimer=setTimeout(()=>{if(!moved)pressEl()?.classList.add('pressHold');},280);
  const killTimer=setTimeout(()=>{if(!moved){bricks=bricks.filter(x=>x.id!==id);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();}},650);
- const onMove=ev=>{if(!moved){moved=true;dragFast=true;clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');if(moved){dragFast=false;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
+ const onMove=ev=>{if(!moved){moved=true;showMotifs=false;clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
 // width/height sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and
 // shapeStyles + a throttled renderGrid() when "apply to all layouts" is on - dragging the handle
 // and dragging the slider are two input methods for the same thing, so they should behave
 // identically rather than the handle being a single-brick-only shortcut.
-function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');let moved=false;const onMove=ev=>{if(!moved){moved=true;dragFast=true;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));scopedBricks().forEach(x=>{x.w=nw;x.h=nh;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){dragFast=false;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
+function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));scopedBricks().forEach(x=>{x.w=nw;x.h=nh;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
 // Drag-to-rotate handle above the selected brick. Angle is measured from the brick's own screen
 // centre (via getBoundingClientRect, which stays correct through CSS rotation since the transform
 // origin is the element centre) so it works the same however the tile is currently scaled/rotated.
 // Reuses the same scope/styleAllLayouts rules the rotate slider already follows for consistency.
-function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);let moved=false;const onMove=ev=>{if(!moved){moved=true;dragFast=true;}const el=document.querySelector('.brick[data-id="'+id+'"].selected');if(!el)return;const r=el.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);while(angle>180)angle-=360;while(angle<-180)angle+=360;scopedBricks().forEach(x=>{x.rot=angle;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){dragFast=false;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
+function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const el=document.querySelector('.brick[data-id="'+id+'"].selected');if(!el)return;const r=el.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);while(angle>180)angle-=360;while(angle<-180)angle+=360;scopedBricks().forEach(x=>{x.rot=angle;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
 function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.innerHTML='';const textureLaunchers={stripe:'stripes',polka:'dots',gingham:'checks',plaid:'plaid'};skeletonOrder.forEach(key=>{const c=document.createElement('div');const isLive=key===current||key===currentTemplateBase;c.className='skelCard '+(isLive?'active':'');c.dataset.key=key;
  // Non-active layouts' thumbnails used to preview the current motifShapes assignments on a
  // throwaway copy, so every card side-by-side showed how the motif set would look there without
@@ -2182,8 +2159,7 @@ document.getElementById('clearAllMotifsBtn').onclick=()=>{
  if(!Object.keys(motifShapes).length)return;
  pushHistory();
  motifShapes={};
- motifShapesThumb={};
- bricks.forEach(x=>{if(x.motifUrl){delete x.motifUrl;delete x.motifThumbUrl;}});
+ bricks.forEach(x=>{if(x.motifUrl)delete x.motifUrl;});
  render();
  renderGrid();
  renderAssignedShapes();
@@ -2924,7 +2900,7 @@ function heroClipSelection(){
  octx.restore();
  const nameInput=document.getElementById('heroStudioMotifName');
  const name=(nameInput&&nameInput.value.trim())||('motif '+(motifTray.length+1));
- motifTray.push({id:'m'+Math.random().toString(36).slice(2),name,dataUrl:downscaleMotifCanvas(out),thumbDataUrl:makeMotifThumb(out)});
+ motifTray.push({id:'m'+Math.random().toString(36).slice(2),name,dataUrl:downscaleMotifCanvas(out)});
  activeMotifId=motifTray[motifTray.length-1].id;
  renderMotifTray();
  heroLassoPts=null;heroRedraw();
