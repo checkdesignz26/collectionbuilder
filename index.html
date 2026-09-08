@@ -1321,12 +1321,48 @@ function loadAllSavedItemsBlob(){
  try{backgrounds=JSON.parse(localStorage.getItem('pkmBackgroundStudioV34')||'[]');}catch(e){}
  return {templates,classics,backgrounds};
 }
+// A saved template's bricks each carry their own full-resolution motifUrl copy, but "place on
+// selected" (the only way motifUrl ever gets set) always assigns the SAME image to every brick of
+// a given shape type - so a template with, say, 6 same-shaped bricks sharing one motif was storing
+// that image 6 times over for no reason. That's what was quietly blowing past localStorage's quota
+// once a few motif-heavy templates piled up: the write would silently fail (see persistAllSavedItems
+// below), so the template LOOKED saved for the rest of that session but was never actually on disk,
+// and reappeared missing after the next reload. Deduplicating to one copy per shape type at the
+// serialisation boundary only - nothing else touches this shape, so filmstrip thumbnails, Live
+// Preview etc keep reading fully-populated bricks exactly as before - cuts that redundancy out
+// without changing any other code path.
+function compactTemplatesForStorage(templates){
+ return (templates||[]).map(t=>{
+  const motifMap={};
+  const bricks=(t.bricks||[]).map(b=>{
+   if(!b.motifUrl)return b;
+   motifMap[b.type]=b.motifUrl;
+   const {motifUrl,...rest}=b;
+   return rest;
+  });
+  return Object.keys(motifMap).length?{...t,bricks,motifMap}:t;
+ });
+}
+function expandTemplatesFromStorage(templates){
+ return (templates||[]).map(t=>{
+  if(!t.motifMap)return t;
+  const {motifMap,...rest}=t;
+  const bricks=(t.bricks||[]).map(b=>motifMap[b.type]?{...b,motifUrl:motifMap[b.type]}:b);
+  return {...rest,bricks};
+ });
+}
 window.__savedItemsBlob=loadAllSavedItemsBlob();
+window.__savedItemsBlob.templates=expandTemplatesFromStorage(window.__savedItemsBlob.templates);
+// Returns whether the write actually landed - localStorage.setItem throws (typically
+// QuotaExceededError) when the combined blob is too big for the browser's storage limit, which the
+// old version of this function swallowed silently: every caller went on to report "saved ✓"
+// regardless, so a save that never reached disk looked identical to one that had, until the next
+// reload made the difference obvious and confusing.
 function persistAllSavedItems(){
- try{localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates:savedTemplates,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[])}));}catch(e){}
+ try{localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates:compactTemplatesForStorage(savedTemplates),classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[])}));return true;}catch(e){console.warn('persistAllSavedItems failed',e);return false;}
 }
 function loadSavedTemplates(){savedTemplates=window.__savedItemsBlob.templates||[];}
-function persistSavedTemplates(){persistAllSavedItems();}
+function persistSavedTemplates(){return persistAllSavedItems();}
 // Autosave: the normal workflow here is redeploy-and-reload on an iPad, which used to throw
 // away whatever wasn't explicitly "saved as a template". This snapshots the full working state
 // (not just bricks - motifShapes/shapeStyles too, since those drive every other Live Preview
@@ -1356,7 +1392,7 @@ function restoreAutosave(){
  return true;
 }
 let saveBusy=false;
-function flashSaveStatus(msg,ok=true){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},1200);}
+function flashSaveStatus(msg,ok=true,duration=1200){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},duration);}
 // Filmstrip delete used to be a blocking confirm() dialog - the standard failure mode for those
 // is that people tap through them out of habit without reading, so a mis-tapped tiny delete
 // button (the "x" corner of a cramped filmstrip card) still ends up deleting the item anyway.
@@ -1701,8 +1737,8 @@ function saveTemplateToFilmstrip(){
  renderFilmstrip();
  // Let the new card appear immediately, then write to localStorage on the next tick.
  setTimeout(()=>{
-   try{persistSavedTemplates();flashSaveStatus('saved ✓');}
-   catch(e){flashSaveStatus('save failed',false);console.warn('PKM save failed',e);}
+   if(persistSavedTemplates()){flashSaveStatus('saved ✓');}
+   else{flashSaveStatus('save failed - storage is full, delete an old saved pattern or motif to free room',false,6000);}
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
