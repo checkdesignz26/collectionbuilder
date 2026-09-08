@@ -3420,18 +3420,26 @@ function selectLayerAtPoint(pt){
  (state.layers||[]).forEach((l,i)=>{if(l.visible===false)return; const d=layerDistance(l,pt); if(d<bd){bd=d;best=i;}});
  if(bd<18 || state.type==='dots'){selected=best; renderAll();}
 }
+// Dragging a stripe to sit exactly on the tile edge (a common way to build a seam stripe that lines
+// up across every repeat, and what distributeClassic's edge-pinning check looks for) is nearly
+// impossible to land on freehand - touch/pointer dragging almost never stops at exactly 0 or 100.
+// Snapping anything dragged within a few percent of either edge onto it exactly means "drag it to
+// the side" reliably produces a real edge-pinned stripe, instead of one a percent or two off that
+// silently falls outside the pinning check and drifts inward the next time distribute runs.
+const EDGE_SNAP=3;
+function snapStripeEdge(v){if(v<=EDGE_SNAP)return 0; if(v>=100-EDGE_SNAP)return 100; return v;}
 function moveSelectedToPoint(pt){
  const l=currentLayer(); if(!l)return;
  if(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'){
   l.x=pt.x; l.y=pt.y; l.pos=pt.x; l.rotate=pt.y;
  }else if(l.direction==='horizontal'){
-  l.pos=pt.y;
+  l.pos=snapStripeEdge(pt.y);
  }else if(l.direction==='diag1'){
   l.pos=clamp((pt.x+pt.y)/2,0,100);
  }else if(l.direction==='diag2'){
   l.pos=clamp((pt.x+(100-pt.y))/2,0,100);
  }else{
-  l.pos=pt.x;
+  l.pos=snapStripeEdge(pt.x);
  }
  renderAll(false);
 }
