@@ -1069,6 +1069,15 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <p class="tsHint" style="margin-top:0">Upload a hero pattern photo to pull its dominant colours.</p>
       <input id="cmImageFile" type="file" accept="image/*" style="display:none">
       <button id="cmImageUploadBtn" class="full">upload image</button>
+      <div id="cmImagePreviewBox" style="display:none;margin-top:9px">
+        <p class="tsHint" style="margin:0 0 6px">Drag on the image to select one motif, then clip it straight into your Motif Tray - saves downloading and cropping it elsewhere first.</p>
+        <div style="position:relative;display:inline-block;max-width:100%;line-height:0">
+          <canvas id="cmHeroCanvas" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair"></canvas>
+          <div id="cmCropBox" style="position:absolute;border:2px dashed var(--pink);background:rgba(255,142,214,.14);display:none;pointer-events:none"></div>
+        </div>
+        <button id="cmClipMotifBtn" class="full primary" style="margin-top:7px;display:none"><svg class="btnIcon"><use href="#i-sparkle"/></svg>clip selection into motif tray</button>
+        <p class="tsHint" style="margin-top:6px">Works best when the area you select has a plain/transparent background around the motif - a rectangular clip brings along whatever background is inside the box.</p>
+      </div>
       <div class="range" style="margin-top:7px"><label>colours</label><input id="cmImageCount" type="range" min="6" max="24" value="16"></div>
       <div class="grid2" style="margin-top:7px"><button id="cmImageModeHero" class="small active">tap to adjust</button><button id="cmImageModePalette" class="small">use all as palette</button></div>
       <div class="swatches" id="cmImageSwatches"><span class="footerNote">upload an image to pull its colours</span></div>
@@ -2357,6 +2366,7 @@ function cmHandleImageUpload(e){
    const count=+document.getElementById('cmImageCount').value||16;
    cmExtractedColours=cmExtractColoursFromImage(img,count);
    cmRenderExtractedSwatches();
+   cmDrawHeroPreview(img);
    cmFlashStatus(cmExtractedColours.length?'colours extracted ✓':'no colours found',!!cmExtractedColours.length);
   };
   img.onerror=()=>cmFlashStatus('could not read image',false);
@@ -2365,6 +2375,51 @@ function cmHandleImageUpload(e){
  reader.readAsDataURL(file);
  e.target.value='';
 }
+// Lets you lift one motif straight out of an uploaded hero/reference photo instead of having to
+// crop it in another app first and re-upload - draws the hero image into a canvas at a fixed
+// display size, tracks a drag-selected rectangle in that DISPLAY space, then scales the
+// rectangle back up to the image's real resolution when clipping so the result stays crisp
+// regardless of how small the preview itself is shown.
+let cmCropRect=null,cmCropDragging=false;
+function cmDrawHeroPreview(img){
+ const canvas=document.getElementById('cmHeroCanvas');if(!canvas)return;
+ const maxW=280,scale=Math.min(1,maxW/img.width);
+ canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+ canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+ document.getElementById('cmImagePreviewBox').style.display='';
+ cmCropRect=null;cmUpdateCropBox();
+ document.getElementById('cmClipMotifBtn').style.display='none';
+}
+function cmUpdateCropBox(){
+ const box=document.getElementById('cmCropBox');if(!box)return;
+ if(!cmCropRect||cmCropRect.w<4||cmCropRect.h<4){box.style.display='none';return;}
+ box.style.display='block';
+ box.style.left=cmCropRect.x+'px';box.style.top=cmCropRect.y+'px';
+ box.style.width=cmCropRect.w+'px';box.style.height=cmCropRect.h+'px';
+}
+(function wireHeroCrop(){
+ const canvas=document.getElementById('cmHeroCanvas');if(!canvas)return;
+ let start=null;
+ const ptFromEvent=e=>{const r=canvas.getBoundingClientRect();return {x:clampNum(e.clientX-r.left,0,r.width),y:clampNum(e.clientY-r.top,0,r.height)};};
+ function clampNum(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+ canvas.addEventListener('pointerdown',e=>{if(!cmLastUploadedImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);start=ptFromEvent(e);cmCropDragging=true;cmCropRect={x:start.x,y:start.y,w:0,h:0};cmUpdateCropBox();document.getElementById('cmClipMotifBtn').style.display='none';});
+ canvas.addEventListener('pointermove',e=>{if(!cmCropDragging)return;e.preventDefault();const p=ptFromEvent(e);cmCropRect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(p.x-start.x),h:Math.abs(p.y-start.y)};cmUpdateCropBox();});
+ window.addEventListener('pointerup',()=>{if(!cmCropDragging)return;cmCropDragging=false;const ok=cmCropRect&&cmCropRect.w>=6&&cmCropRect.h>=6;document.getElementById('cmClipMotifBtn').style.display=ok?'':'none';});
+})();
+document.getElementById('cmClipMotifBtn').onclick=()=>{
+ if(!cmLastUploadedImg||!cmCropRect||cmCropRect.w<6||cmCropRect.h<6)return;
+ const canvas=document.getElementById('cmHeroCanvas');
+ const scaleX=cmLastUploadedImg.width/canvas.width,scaleY=cmLastUploadedImg.height/canvas.height;
+ const sx=cmCropRect.x*scaleX,sy=cmCropRect.y*scaleY,sw=cmCropRect.w*scaleX,sh=cmCropRect.h*scaleY;
+ const out=document.createElement('canvas');out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
+ out.getContext('2d').drawImage(cmLastUploadedImg,sx,sy,sw,sh,0,0,out.width,out.height);
+ motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:'clipped motif '+(motifTray.length+1),dataUrl:downscaleMotifCanvas(out)});
+ activeMotifId=motifTray[motifTray.length-1].id;
+ renderMotifTray();
+ cmCropRect=null;cmUpdateCropBox();
+ document.getElementById('cmClipMotifBtn').style.display='none';
+ cmFlashStatus('✂️ clipped into motif tray ✓',true);
+};
 function cmRenderExtractedSwatches(){
  const box=document.getElementById('cmImageSwatches');if(!box)return;
  box.innerHTML='';
