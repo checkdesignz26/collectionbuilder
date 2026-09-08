@@ -952,7 +952,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>magic collection builder</h1><p>v62 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save template</button><button id="exportForPlayground" class="small" title="Export this template's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset template</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
+  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save template</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this template's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset template</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
 </header>
 <main>
   <aside class="side left">
@@ -1321,45 +1321,82 @@ function loadAllSavedItemsBlob(){
  try{backgrounds=JSON.parse(localStorage.getItem('pkmBackgroundStudioV34')||'[]');}catch(e){}
  return {templates,classics,backgrounds};
 }
-// A saved template's bricks each carry their own full-resolution motifUrl copy, but "place on
-// selected" (the only way motifUrl ever gets set) always assigns the SAME image to every brick of
-// a given shape type - so a template with, say, 6 same-shaped bricks sharing one motif was storing
-// that image 6 times over for no reason. That's what was quietly blowing past localStorage's quota
-// once a few motif-heavy templates piled up: the write would silently fail (see persistAllSavedItems
-// below), so the template LOOKED saved for the rest of that session but was never actually on disk,
-// and reappeared missing after the next reload. Deduplicating to one copy per shape type at the
-// serialisation boundary only - nothing else touches this shape, so filmstrip thumbnails, Live
-// Preview etc keep reading fully-populated bricks exactly as before - cuts that redundancy out
-// without changing any other code path.
-function compactTemplatesForStorage(templates){
- return (templates||[]).map(t=>{
-  const motifMap={};
-  const bricks=(t.bricks||[]).map(b=>{
-   if(!b.motifUrl)return b;
-   motifMap[b.type]=b.motifUrl;
-   const {motifUrl,...rest}=b;
-   return rest;
-  });
-  return Object.keys(motifMap).length?{...t,bricks,motifMap}:t;
+// A single content-addressed table of motif images, shared across everything being serialised
+// together (every saved template, or the live canvas plus every layout cached in blueprintStore) -
+// the same underlying image referenced from several templates/layouts (very common: "place on
+// selected" assigns identically to every brick sharing a shape, and that assignment carries across
+// every layout you flip through to compare - literally what the app's own hint text suggests doing)
+// then costs the size of ONE copy in storage, not one copy per place it's referenced. That
+// redundancy is what was quietly blowing past localStorage's quota once a few motifs/layouts piled
+// up: the write then failed, but silently (see persistAllSavedItems/scheduleAutosave below), so a
+// save or autosave LOOKED like it worked for the rest of that session and only turned out to have
+// never landed on the next reload, when everything reverted to whatever had last actually fit.
+// (Measured: one realistic motif + flipping through 8 of 13 layouts pushed the autosave blob to
+// 8.4MB before this - comfortably past what iOS Safari actually grants a page.)
+function newMotifDict(){
+ const dict=[],index=new Map();
+ return {dict,ref(url){if(index.has(url))return index.get(url);const id=dict.length;dict.push(url);index.set(url,id);return id;}};
+}
+function compactBricksWithDict(bricksArr,d){
+ return (bricksArr||[]).map(b=>{
+  if(!b.motifUrl)return b;
+  const {motifUrl,...rest}=b;
+  return {...rest,motifRef:d.ref(motifUrl)};
  });
 }
-function expandTemplatesFromStorage(templates){
- return (templates||[]).map(t=>{
-  if(!t.motifMap)return t;
-  const {motifMap,...rest}=t;
-  const bricks=(t.bricks||[]).map(b=>motifMap[b.type]?{...b,motifUrl:motifMap[b.type]}:b);
-  return {...rest,bricks};
+function expandBricksWithDict(bricksArr,dict){
+ return (bricksArr||[]).map(b=>{
+  if(b.motifRef==null)return b;
+  const {motifRef,...rest}=b;
+  return {...rest,motifUrl:dict[motifRef]};
  });
+}
+// Tolerates the older, less-deduplicated formats a key may still hold from before this dictionary
+// existed: a per-brick-array motifMap (one version back), or plain motifUrl on every brick (the
+// original, pre-dedup format) - so nothing already saved under either scheme is lost.
+function expandBricksLegacy(compact){
+ if(!compact)return [];
+ if(Array.isArray(compact))return compact;
+ if(!compact.motifMap)return compact.bricks||[];
+ const {bricks,motifMap}=compact;
+ return (bricks||[]).map(b=>motifMap[b.type]?{...b,motifUrl:motifMap[b.type]}:b);
+}
+function expandTemplatesFromBlob(blob){
+ const templates=(blob&&blob.templates)||[];
+ const dict=blob&&blob.motifDict;
+ return templates.map(t=>{
+  if(dict)return {...t,bricks:expandBricksWithDict(t.bricks,dict)};
+  if(t.motifMap)return {...t,bricks:expandBricksLegacy({bricks:t.bricks,motifMap:t.motifMap})};
+  return t;
+ });
+}
+// blueprintStore accumulates a full brick snapshot per layout the user has visited during the
+// session (see saveCurrentBlueprint) - same dictionary technique, shared across the live canvas AND
+// every cached layout together, applied at the same serialisation-only boundary.
+function expandSessionStateFromStorage(data){
+ if(!data)return data;
+ const dict=data.motifDict;
+ const bricks=dict?expandBricksWithDict(data.bricks,dict):(data.bricks||[]);
+ const blueprintStore={};
+ for(const k of Object.keys(data.blueprintStore||{})){
+  blueprintStore[k]=dict?expandBricksWithDict(data.blueprintStore[k],dict):expandBricksLegacy(data.blueprintStore[k]);
+ }
+ return {...data,bricks,blueprintStore};
 }
 window.__savedItemsBlob=loadAllSavedItemsBlob();
-window.__savedItemsBlob.templates=expandTemplatesFromStorage(window.__savedItemsBlob.templates);
+window.__savedItemsBlob.templates=expandTemplatesFromBlob(window.__savedItemsBlob);
 // Returns whether the write actually landed - localStorage.setItem throws (typically
 // QuotaExceededError) when the combined blob is too big for the browser's storage limit, which the
 // old version of this function swallowed silently: every caller went on to report "saved ✓"
 // regardless, so a save that never reached disk looked identical to one that had, until the next
 // reload made the difference obvious and confusing.
 function persistAllSavedItems(){
- try{localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates:compactTemplatesForStorage(savedTemplates),classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[])}));return true;}catch(e){console.warn('persistAllSavedItems failed',e);return false;}
+ try{
+  const d=newMotifDict();
+  const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
+  localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[])}));
+  return true;
+ }catch(e){console.warn('persistAllSavedItems failed',e);return false;}
 }
 function loadSavedTemplates(){savedTemplates=window.__savedItemsBlob.templates||[];}
 function persistSavedTemplates(){return persistAllSavedItems();}
@@ -1370,12 +1407,32 @@ function persistSavedTemplates(){return persistAllSavedItems();}
 const AUTOSAVE_KEY='pkmAutosaveV1';
 let autosaveTimer=null;
 function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
-function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{try{localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(autosaveSnapshot()));}catch(e){console.warn('autosave failed',e);}},900);}
-function restoreAutosave(){
- let raw;try{raw=localStorage.getItem(AUTOSAVE_KEY);}catch(e){return false;}
- if(!raw)return false;
- let data;try{data=JSON.parse(raw);}catch(e){return false;}
- if(!data||!Array.isArray(data.bricks)||!data.bricks.length)return false;
+// Surfaced at most once per session - autosave fires on a debounce after every edit, and a still-
+// oversized session (many distinct motifs across many layouts, even after the dedup above) would
+// otherwise fail and re-warn on every single one of those, which is just noise. One clear heads-up
+// is enough to tell someone to use "save template" (or quick save) as a deliberate checkpoint
+// instead of trusting silent autosave for that session.
+let autosaveFailWarned=false;
+// Shared by scheduleAutosave and quickSave - both hand it a fresh autosaveSnapshot() and get back
+// the same shape with bricks/blueprintStore run through one shared motif dictionary (see above).
+function compactSessionSnapshotForStorage(snap){
+ const d=newMotifDict();
+ const bricks=compactBricksWithDict(snap.bricks,d);
+ const blueprintStore={};
+ for(const k of Object.keys(snap.blueprintStore||{}))blueprintStore[k]=compactBricksWithDict(snap.blueprintStore[k],d);
+ return {...snap,bricks,blueprintStore,motifDict:d.dict};
+}
+function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{
+ try{localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(compactSessionSnapshotForStorage(autosaveSnapshot())));}
+ catch(e){
+  console.warn('autosave failed',e);
+  if(!autosaveFailWarned){autosaveFailWarned=true;flashSaveStatus("autosave couldn't fit in storage - use \"save template\" to keep this for sure",false,7000);}
+ }
+},900);}
+// Shared by restoreAutosave and quickLoad - both hand it a parsed snapshot of the same shape
+// (see autosaveSnapshot) and a status message to flash once it's live.
+function applySnapshotToLiveState(rawData,statusMsg){
+ const data=expandSessionStateFromStorage(rawData);
  current=data.current||'grid';currentTemplateBase=data.currentTemplateBase||null;
  blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};
  bricks=data.bricks;texture=data.texture?copyTexture(data.texture):blankTexture();
@@ -1388,8 +1445,37 @@ function restoreAutosave(){
  selected=bricks[0]?.id||null;
  document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;
  renderGrid();renderFilmstrip();render();syncControls();renderAssignedShapes();
- flashSaveStatus('restored last session ✓');
+ flashSaveStatus(statusMsg);
+}
+function restoreAutosave(){
+ let raw;try{raw=localStorage.getItem(AUTOSAVE_KEY);}catch(e){return false;}
+ if(!raw)return false;
+ let data;try{data=JSON.parse(raw);}catch(e){return false;}
+ if(!data||!Array.isArray(data.bricks)||!data.bricks.length)return false;
+ applySnapshotToLiveState(data,'restored last session ✓');
  return true;
+}
+// A deliberate, single-slot manual checkpoint - distinct from autosave (automatic, silent, and
+// still capable of failing if a session is genuinely enormous even after deduping) and from "save
+// template" (adds a new filmstrip card every time). One tap captures exactly where things are
+// right now; one tap jumps straight back to it, no filmstrip management needed.
+const QUICKSAVE_KEY='pkmQuickSaveV1';
+function quickSave(){
+ try{
+  localStorage.setItem(QUICKSAVE_KEY,JSON.stringify(compactSessionSnapshotForStorage(autosaveSnapshot())));
+  flashSaveStatus('quick saved ✓');
+ }catch(e){
+  console.warn('quick save failed',e);
+  flashSaveStatus('quick save failed - storage is full, delete an old saved pattern or motif to free room',false,6000);
+ }
+}
+function quickLoad(){
+ let raw;try{raw=localStorage.getItem(QUICKSAVE_KEY);}catch(e){flashSaveStatus('no quick save found',false);return;}
+ if(!raw){flashSaveStatus('no quick save found yet',false);return;}
+ let data;try{data=JSON.parse(raw);}catch(e){flashSaveStatus('quick save is corrupted',false);return;}
+ if(!data||!Array.isArray(data.bricks)||!data.bricks.length){flashSaveStatus('quick save is empty',false);return;}
+ pushHistory();
+ applySnapshotToLiveState(data,'quick loaded ✓');
 }
 let saveBusy=false;
 function flashSaveStatus(msg,ok=true,duration=1200){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},duration);}
@@ -2290,7 +2376,7 @@ function resetCurrentTemplate(){
   document.getElementById('currentName').textContent=presets[base].name;
   renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();
 }
-addRowBtn.onclick=()=>{pushHistory();[20,50,80].forEach(x=>bricks.push(p('oval',x,50,16,10,'filler')));render();renderUnassignedShapes();};addColBtn.onclick=()=>{pushHistory();[20,50,80].forEach(y=>bricks.push(p('oval',50,y,16,10,'filler')));render();renderUnassignedShapes();};resetBtn.onclick=()=>{pushHistory();resetCurrentTemplate();};undoBtn.onclick=undo;redoBtn.onclick=redo;saveBtn.onclick=()=>{saveTemplateToFilmstrip();};
+addRowBtn.onclick=()=>{pushHistory();[20,50,80].forEach(x=>bricks.push(p('oval',x,50,16,10,'filler')));render();renderUnassignedShapes();};addColBtn.onclick=()=>{pushHistory();[20,50,80].forEach(y=>bricks.push(p('oval',50,y,16,10,'filler')));render();renderUnassignedShapes();};resetBtn.onclick=()=>{pushHistory();resetCurrentTemplate();};undoBtn.onclick=undo;redoBtn.onclick=redo;saveBtn.onclick=()=>{saveTemplateToFilmstrip();};quickSaveBtn.onclick=quickSave;quickLoadBtn.onclick=quickLoad;
 // Exports just the current template's SKELETON (brick positions/sizes/rotation/role) as JSON -
 // not a texture/colour export, those already exist (download PNG). This is the layout half of
 // the Magic Builder <-> Pattern Playground bridge: Playground reads this file and turns each
