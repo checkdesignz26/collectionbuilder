@@ -969,11 +969,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <input id="motifHeroFile" type="file" accept="image/*" style="display:none">
       <button class="full" id="motifHeroUploadBtn" style="margin-top:7px"><svg class="btnIcon"><use href="#i-image"/></svg>clip motifs from a photo</button>
       <div id="motifHeroPreviewBox" style="display:none;margin-top:9px">
-        <p class="hint" style="margin:0 0 6px">Drag on the image to select one motif, then clip it into the tray below - saves downloading and cropping it elsewhere first. Works best where the selection has a plain/transparent background around the motif.</p>
-        <div style="position:relative;display:inline-block;max-width:100%;line-height:0">
-          <canvas id="motifHeroCanvas" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair"></canvas>
-          <div id="motifHeroCropBox" style="position:absolute;border:2px dashed var(--pink);background:rgba(255,142,214,.14);display:none;pointer-events:none"></div>
-        </div>
+        <p class="hint" style="margin:0 0 6px">Draw a lasso around one motif, then clip it into the tray below - saves downloading and cropping it elsewhere first. Only the traced outline comes across, so this works even with a busy background around the motif.</p>
+        <canvas id="motifHeroCanvas" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair"></canvas>
         <button id="motifHeroClipBtn" class="full primary" style="margin-top:7px;display:none"><svg class="btnIcon"><use href="#i-sparkle"/></svg>clip selection into tray</button>
       </div>
       <div class="swatches" id="motifTray" style="margin-top:9px"><span class="footerNote">no motifs uploaded yet</span></div>
@@ -1907,11 +1904,14 @@ function handleMotifUpload(e){
 }
 // Lets you lift one motif straight out of an uploaded reference/hero photo instead of having to
 // crop it in another app first and re-upload the crop - draws the photo into a canvas at a fixed
-// display size, tracks a drag-selected rectangle in that DISPLAY space, then scales the
-// rectangle back up to the image's real resolution when clipping so the result stays crisp
-// regardless of how small the preview itself is shown. Feeds the exact same motifTray array as
-// "upload motifs" above, just a different way to get a motif into it.
-let motifHeroImg=null,motifHeroCropRect=null,motifHeroCropDragging=false;
+// display size, tracks a freehand lasso path in that DISPLAY space (redrawn over the image on
+// every point so it always shows exactly what will be kept), then scales the path back up to the
+// image's real resolution when clipping. Using Canvas2D's own clip() against that path (rather
+// than a rectangle) means only what's actually inside the traced outline comes across - the rest
+// of the source image stays out, so this works even when the motif sits on a busy background,
+// not just a plain/transparent one. Feeds the exact same motifTray array as "upload motifs"
+// above, just a different way to get a motif into it.
+let motifHeroImg=null,motifHeroLassoPts=null,motifHeroLassoDrawing=false;
 function motifHeroHandleUpload(e){
  const file=e.target.files&&e.target.files[0];
  if(!file)return;
@@ -1929,38 +1929,57 @@ function motifHeroDrawPreview(img){
  const canvas=document.getElementById('motifHeroCanvas');if(!canvas)return;
  const maxW=280,scale=Math.min(1,maxW/img.width);
  canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
- canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
  document.getElementById('motifHeroPreviewBox').style.display='';
- motifHeroCropRect=null;motifHeroUpdateCropBox();
+ motifHeroLassoPts=null;
+ motifHeroRedraw();
  document.getElementById('motifHeroClipBtn').style.display='none';
 }
-function motifHeroUpdateCropBox(){
- const box=document.getElementById('motifHeroCropBox');if(!box)return;
- if(!motifHeroCropRect||motifHeroCropRect.w<4||motifHeroCropRect.h<4){box.style.display='none';return;}
- box.style.display='block';
- box.style.left=motifHeroCropRect.x+'px';box.style.top=motifHeroCropRect.y+'px';
- box.style.width=motifHeroCropRect.w+'px';box.style.height=motifHeroCropRect.h+'px';
+function motifHeroRedraw(){
+ const canvas=document.getElementById('motifHeroCanvas');if(!canvas||!motifHeroImg)return;
+ const ctx=canvas.getContext('2d');
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.drawImage(motifHeroImg,0,0,canvas.width,canvas.height);
+ if(motifHeroLassoPts&&motifHeroLassoPts.length>1){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(motifHeroLassoPts[0].x,motifHeroLassoPts[0].y);
+  for(let i=1;i<motifHeroLassoPts.length;i++)ctx.lineTo(motifHeroLassoPts[i].x,motifHeroLassoPts[i].y);
+  if(!motifHeroLassoDrawing)ctx.closePath();
+  ctx.fillStyle='rgba(255,142,214,.18)';ctx.fill();
+  ctx.strokeStyle='#ff8ed6';ctx.lineWidth=2.5;ctx.setLineDash([7,5]);ctx.stroke();
+  ctx.restore();
+ }
 }
-(function wireMotifHeroCrop(){
+(function wireMotifHeroLasso(){
  const canvas=document.getElementById('motifHeroCanvas');if(!canvas)return;
- let start=null;
  function clampNum(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
  const ptFromEvent=e=>{const r=canvas.getBoundingClientRect();return {x:clampNum(e.clientX-r.left,0,r.width),y:clampNum(e.clientY-r.top,0,r.height)};};
- canvas.addEventListener('pointerdown',e=>{if(!motifHeroImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);start=ptFromEvent(e);motifHeroCropDragging=true;motifHeroCropRect={x:start.x,y:start.y,w:0,h:0};motifHeroUpdateCropBox();document.getElementById('motifHeroClipBtn').style.display='none';});
- canvas.addEventListener('pointermove',e=>{if(!motifHeroCropDragging)return;e.preventDefault();const p=ptFromEvent(e);motifHeroCropRect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(p.x-start.x),h:Math.abs(p.y-start.y)};motifHeroUpdateCropBox();});
- window.addEventListener('pointerup',()=>{if(!motifHeroCropDragging)return;motifHeroCropDragging=false;const ok=motifHeroCropRect&&motifHeroCropRect.w>=6&&motifHeroCropRect.h>=6;document.getElementById('motifHeroClipBtn').style.display=ok?'':'none';});
+ canvas.addEventListener('pointerdown',e=>{if(!motifHeroImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);motifHeroLassoDrawing=true;motifHeroLassoPts=[ptFromEvent(e)];motifHeroRedraw();document.getElementById('motifHeroClipBtn').style.display='none';});
+ canvas.addEventListener('pointermove',e=>{if(!motifHeroLassoDrawing)return;e.preventDefault();const p=ptFromEvent(e);const last=motifHeroLassoPts[motifHeroLassoPts.length-1];if(Math.hypot(p.x-last.x,p.y-last.y)>=2){motifHeroLassoPts.push(p);motifHeroRedraw();}});
+ window.addEventListener('pointerup',()=>{if(!motifHeroLassoDrawing)return;motifHeroLassoDrawing=false;const ok=motifHeroLassoPts&&motifHeroLassoPts.length>=3;if(ok)motifHeroRedraw();document.getElementById('motifHeroClipBtn').style.display=ok?'':'none';});
 })();
 function motifHeroClipSelection(){
- if(!motifHeroImg||!motifHeroCropRect||motifHeroCropRect.w<6||motifHeroCropRect.h<6)return;
+ if(!motifHeroImg||!motifHeroLassoPts||motifHeroLassoPts.length<3)return;
  const canvas=document.getElementById('motifHeroCanvas');
  const scaleX=motifHeroImg.width/canvas.width,scaleY=motifHeroImg.height/canvas.height;
- const sx=motifHeroCropRect.x*scaleX,sy=motifHeroCropRect.y*scaleY,sw=motifHeroCropRect.w*scaleX,sh=motifHeroCropRect.h*scaleY;
- const out=document.createElement('canvas');out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
- out.getContext('2d').drawImage(motifHeroImg,sx,sy,sw,sh,0,0,out.width,out.height);
+ const scaled=motifHeroLassoPts.map(p=>({x:p.x*scaleX,y:p.y*scaleY}));
+ const xs=scaled.map(p=>p.x),ys=scaled.map(p=>p.y);
+ const minX=Math.min(...xs),minY=Math.min(...ys);
+ const w=Math.max(1,Math.round(Math.max(...xs)-minX)),h=Math.max(1,Math.round(Math.max(...ys)-minY));
+ const out=document.createElement('canvas');out.width=w;out.height=h;
+ const octx=out.getContext('2d');
+ octx.save();
+ octx.beginPath();
+ octx.moveTo(scaled[0].x-minX,scaled[0].y-minY);
+ for(let i=1;i<scaled.length;i++)octx.lineTo(scaled[i].x-minX,scaled[i].y-minY);
+ octx.closePath();
+ octx.clip();
+ octx.drawImage(motifHeroImg,-minX,-minY);
+ octx.restore();
  motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:'clipped motif '+(motifTray.length+1),dataUrl:downscaleMotifCanvas(out)});
  activeMotifId=motifTray[motifTray.length-1].id;
  renderMotifTray();
- motifHeroCropRect=null;motifHeroUpdateCropBox();
+ motifHeroLassoPts=null;motifHeroRedraw();
  document.getElementById('motifHeroClipBtn').style.display='none';
 }
 document.getElementById('motifHeroUploadBtn').onclick=()=>document.getElementById('motifHeroFile').click();
