@@ -966,7 +966,17 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Live Preview carries the same motifs over to whichever placeholders share those shapes in every other repeat layout, so you can flip through them to compare the placement.</p>
       <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
       <button class="full motifDropzone" id="motifUploadBtn"><svg><use href="#i-cloud"/></svg><b>upload motifs</b><span>PNG files with transparent backgrounds</span></button>
-      <div class="swatches" id="motifTray"><span class="footerNote">no motifs uploaded yet</span></div>
+      <input id="motifHeroFile" type="file" accept="image/*" style="display:none">
+      <button class="full" id="motifHeroUploadBtn" style="margin-top:7px"><svg class="btnIcon"><use href="#i-image"/></svg>clip motifs from a photo</button>
+      <div id="motifHeroPreviewBox" style="display:none;margin-top:9px">
+        <p class="hint" style="margin:0 0 6px">Drag on the image to select one motif, then clip it into the tray below - saves downloading and cropping it elsewhere first. Works best where the selection has a plain/transparent background around the motif.</p>
+        <div style="position:relative;display:inline-block;max-width:100%;line-height:0">
+          <canvas id="motifHeroCanvas" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair"></canvas>
+          <div id="motifHeroCropBox" style="position:absolute;border:2px dashed var(--pink);background:rgba(255,142,214,.14);display:none;pointer-events:none"></div>
+        </div>
+        <button id="motifHeroClipBtn" class="full primary" style="margin-top:7px;display:none"><svg class="btnIcon"><use href="#i-sparkle"/></svg>clip selection into tray</button>
+      </div>
+      <div class="swatches" id="motifTray" style="margin-top:9px"><span class="footerNote">no motifs uploaded yet</span></div>
       <div class="grid2" style="margin-top:7px">
         <button id="placeMotifBtn" class="primary"><svg class="btnIcon"><use href="#i-sparkle"/></svg>place on selected</button>
         <button id="clearMotifBtn"><svg class="btnIcon"><use href="#i-eraser"/></svg>clear from selected</button>
@@ -1895,6 +1905,67 @@ function handleMotifUpload(e){
  });
  e.target.value='';
 }
+// Lets you lift one motif straight out of an uploaded reference/hero photo instead of having to
+// crop it in another app first and re-upload the crop - draws the photo into a canvas at a fixed
+// display size, tracks a drag-selected rectangle in that DISPLAY space, then scales the
+// rectangle back up to the image's real resolution when clipping so the result stays crisp
+// regardless of how small the preview itself is shown. Feeds the exact same motifTray array as
+// "upload motifs" above, just a different way to get a motif into it.
+let motifHeroImg=null,motifHeroCropRect=null,motifHeroCropDragging=false;
+function motifHeroHandleUpload(e){
+ const file=e.target.files&&e.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=ev=>{
+  const img=new Image();
+  img.onload=()=>{motifHeroImg=img;motifHeroDrawPreview(img);};
+  img.onerror=()=>{};
+  img.src=ev.target.result;
+ };
+ reader.readAsDataURL(file);
+ e.target.value='';
+}
+function motifHeroDrawPreview(img){
+ const canvas=document.getElementById('motifHeroCanvas');if(!canvas)return;
+ const maxW=280,scale=Math.min(1,maxW/img.width);
+ canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+ canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+ document.getElementById('motifHeroPreviewBox').style.display='';
+ motifHeroCropRect=null;motifHeroUpdateCropBox();
+ document.getElementById('motifHeroClipBtn').style.display='none';
+}
+function motifHeroUpdateCropBox(){
+ const box=document.getElementById('motifHeroCropBox');if(!box)return;
+ if(!motifHeroCropRect||motifHeroCropRect.w<4||motifHeroCropRect.h<4){box.style.display='none';return;}
+ box.style.display='block';
+ box.style.left=motifHeroCropRect.x+'px';box.style.top=motifHeroCropRect.y+'px';
+ box.style.width=motifHeroCropRect.w+'px';box.style.height=motifHeroCropRect.h+'px';
+}
+(function wireMotifHeroCrop(){
+ const canvas=document.getElementById('motifHeroCanvas');if(!canvas)return;
+ let start=null;
+ function clampNum(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+ const ptFromEvent=e=>{const r=canvas.getBoundingClientRect();return {x:clampNum(e.clientX-r.left,0,r.width),y:clampNum(e.clientY-r.top,0,r.height)};};
+ canvas.addEventListener('pointerdown',e=>{if(!motifHeroImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);start=ptFromEvent(e);motifHeroCropDragging=true;motifHeroCropRect={x:start.x,y:start.y,w:0,h:0};motifHeroUpdateCropBox();document.getElementById('motifHeroClipBtn').style.display='none';});
+ canvas.addEventListener('pointermove',e=>{if(!motifHeroCropDragging)return;e.preventDefault();const p=ptFromEvent(e);motifHeroCropRect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(p.x-start.x),h:Math.abs(p.y-start.y)};motifHeroUpdateCropBox();});
+ window.addEventListener('pointerup',()=>{if(!motifHeroCropDragging)return;motifHeroCropDragging=false;const ok=motifHeroCropRect&&motifHeroCropRect.w>=6&&motifHeroCropRect.h>=6;document.getElementById('motifHeroClipBtn').style.display=ok?'':'none';});
+})();
+function motifHeroClipSelection(){
+ if(!motifHeroImg||!motifHeroCropRect||motifHeroCropRect.w<6||motifHeroCropRect.h<6)return;
+ const canvas=document.getElementById('motifHeroCanvas');
+ const scaleX=motifHeroImg.width/canvas.width,scaleY=motifHeroImg.height/canvas.height;
+ const sx=motifHeroCropRect.x*scaleX,sy=motifHeroCropRect.y*scaleY,sw=motifHeroCropRect.w*scaleX,sh=motifHeroCropRect.h*scaleY;
+ const out=document.createElement('canvas');out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
+ out.getContext('2d').drawImage(motifHeroImg,sx,sy,sw,sh,0,0,out.width,out.height);
+ motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:'clipped motif '+(motifTray.length+1),dataUrl:downscaleMotifCanvas(out)});
+ activeMotifId=motifTray[motifTray.length-1].id;
+ renderMotifTray();
+ motifHeroCropRect=null;motifHeroUpdateCropBox();
+ document.getElementById('motifHeroClipBtn').style.display='none';
+}
+document.getElementById('motifHeroUploadBtn').onclick=()=>document.getElementById('motifHeroFile').click();
+document.getElementById('motifHeroFile').addEventListener('change',motifHeroHandleUpload);
+document.getElementById('motifHeroClipBtn').onclick=motifHeroClipSelection;
 function renderMotifTray(){
  const box=document.getElementById('motifTray');if(!box)return;
  box.innerHTML='';
