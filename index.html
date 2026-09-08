@@ -2650,7 +2650,11 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
       <input id="heroStudioFile" type="file" accept="image/*" style="display:none">
       <button class="full motifDropzone" id="heroStudioUploadBtn" style="flex:0 0 auto"><svg><use href="#i-cloud"/></svg><b id="heroStudioUploadLabel">upload hero image</b><span>the photo you're building this collection from</span></button>
       <div id="heroStudioCanvasWrap" style="display:none;flex-direction:column;gap:10px;flex:1;min-height:0">
-        <p class="hint" style="margin:0;flex:0 0 auto">Draw a lasso around one motif, then name and clip it into your Motif Tray. Only the traced outline comes across, so this works even with a busy background around the motif.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex:0 0 auto">
+          <p class="hint" style="margin:0;flex:1">Pinch with two fingers to zoom in and pan, one finger to lasso a motif, then name and clip it into your Motif Tray. Only the traced outline comes across, so this works even with a busy background around the motif.</p>
+          <span class="pill" id="heroZoomPill" style="flex:0 0 auto">100%</span>
+          <button class="small" id="heroZoomReset" style="flex:0 0 auto">reset zoom</button>
+        </div>
         <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.03);border-radius:12px">
           <canvas id="heroStudioCanvas" style="max-width:100%;max-height:100%;border-radius:12px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair;background:#fff"></canvas>
         </div>
@@ -2678,6 +2682,13 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
 // after its own HTML, because it's mounted late in the document - a getElementById this early
 // for elements defined further down would just return null.
 let heroImg=null,heroImgDataUrl=null,heroLassoPts=null,heroLassoDrawing=false;
+let heroZoom=1,heroPanX=0,heroPanY=0,heroPointers=new Map(),heroPinchStart=null;
+function heroApplyTransform(){
+ const canvas=document.getElementById('heroStudioCanvas');if(!canvas)return;
+ canvas.style.transform=`translate(${heroPanX}px,${heroPanY}px) scale(${heroZoom})`;
+ const pill=document.getElementById('heroZoomPill');if(pill)pill.textContent=Math.round(heroZoom*100)+'%';
+}
+function heroResetZoom(){heroZoom=1;heroPanX=0;heroPanY=0;heroApplyTransform();}
 function heroHandleUpload(e){
  const file=e.target.files&&e.target.files[0];
  if(!file)return;
@@ -2705,6 +2716,7 @@ function heroDrawPreview(img){
  canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
  document.getElementById('heroStudioUploadLabel').textContent='change hero image';
  heroLassoPts=null;
+ heroResetZoom();
  heroRedraw();
  document.getElementById('heroStudioClipRow').style.display='none';
 }
@@ -2731,19 +2743,68 @@ function heroRedraw(){
 (function wireHeroLasso(){
  const canvas=document.getElementById('heroStudioCanvas');if(!canvas)return;
  function clampNum(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
- // Pointer coordinates arrive in DISPLAY space (whatever CSS is actually showing on screen), but
- // everything else here (heroRedraw, heroClipSelection) works in the canvas's own INTERNAL pixel
- // space - now that those two can differ (see heroDrawPreview), convert immediately so the rest
- // of the lasso code never has to think about display scale at all.
+ function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+ function mid(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2};}
+ // Pointer coordinates arrive in DISPLAY space (whatever CSS is actually showing on screen,
+ // including the current pinch-zoom/pan transform - getBoundingClientRect() already reflects
+ // that), but everything else here (heroRedraw, heroClipSelection) works in the canvas's own
+ // INTERNAL pixel space - convert immediately so the rest of the lasso code never has to think
+ // about display scale OR zoom/pan at all, they're the same adjustment either way.
  const ptFromEvent=e=>{
   const r=canvas.getBoundingClientRect();
   const dx=clampNum(e.clientX-r.left,0,r.width),dy=clampNum(e.clientY-r.top,0,r.height);
   return {x:dx*(canvas.width/r.width),y:dy*(canvas.height/r.height)};
  };
- canvas.addEventListener('pointerdown',e=>{if(!heroImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);heroLassoDrawing=true;heroLassoPts=[ptFromEvent(e)];heroRedraw();document.getElementById('heroStudioClipRow').style.display='none';});
- canvas.addEventListener('pointermove',e=>{if(!heroLassoDrawing)return;e.preventDefault();const p=ptFromEvent(e);const last=heroLassoPts[heroLassoPts.length-1];if(Math.hypot(p.x-last.x,p.y-last.y)>=2*(canvas.width/canvas.getBoundingClientRect().width)){heroLassoPts.push(p);heroRedraw();}});
- window.addEventListener('pointerup',()=>{if(!heroLassoDrawing)return;heroLassoDrawing=false;const ok=heroLassoPts&&heroLassoPts.length>=3;if(ok)heroRedraw();const row=document.getElementById('heroStudioClipRow');row.style.display=ok?'flex':'none';if(ok){const n=document.getElementById('heroStudioMotifName');n.value='motif '+(motifTray.length+1);n.focus();n.select();}});
+ // One finger (or mouse/pen) traces a lasso, same as before. A second finger landing mid-trace
+ // means "actually, I want to pinch/pan" - abandons whatever lasso was in progress (nothing
+ // committed yet, so nothing lost) and switches to zoom/pan, tracked by how many pointers are
+ // currently down rather than by pointer TYPE, so it works the same for touch, pen or a mouse
+ // with a second synthetic pointer in testing.
+ canvas.addEventListener('pointerdown',e=>{
+  if(!heroImg)return;
+  e.preventDefault();
+  try{canvas.setPointerCapture(e.pointerId);}catch(err){}
+  heroPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(heroPointers.size===1){
+   heroLassoDrawing=true;heroLassoPts=[ptFromEvent(e)];heroRedraw();
+   document.getElementById('heroStudioClipRow').style.display='none';
+  }else if(heroPointers.size===2){
+   heroLassoDrawing=false;heroLassoPts=null;heroRedraw();
+   const pts=[...heroPointers.values()];
+   heroPinchStart={dist:dist(pts[0],pts[1]),zoom:heroZoom,panX:heroPanX,panY:heroPanY,mid:mid(pts[0],pts[1])};
+  }
+ });
+ canvas.addEventListener('pointermove',e=>{
+  if(!heroPointers.has(e.pointerId))return;
+  e.preventDefault();
+  heroPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(heroPointers.size===2&&heroPinchStart){
+   const pts=[...heroPointers.values()];
+   const curDist=dist(pts[0],pts[1]),curMid=mid(pts[0],pts[1]);
+   heroZoom=Math.min(6,Math.max(1,heroPinchStart.zoom*(curDist/(heroPinchStart.dist||1))));
+   heroPanX=heroPinchStart.panX+(curMid.x-heroPinchStart.mid.x);
+   heroPanY=heroPinchStart.panY+(curMid.y-heroPinchStart.mid.y);
+   heroApplyTransform();
+  }else if(heroLassoDrawing&&heroPointers.size===1){
+   const p=ptFromEvent(e);const last=heroLassoPts[heroLassoPts.length-1];
+   if(Math.hypot(p.x-last.x,p.y-last.y)>=2*(canvas.width/canvas.getBoundingClientRect().width)){heroLassoPts.push(p);heroRedraw();}
+  }
+ });
+ function endPointer(e){
+  heroPointers.delete(e.pointerId);
+  if(heroPointers.size<2)heroPinchStart=null;
+  if(heroPointers.size===0&&heroLassoDrawing){
+   heroLassoDrawing=false;
+   const ok=heroLassoPts&&heroLassoPts.length>=3;
+   if(ok)heroRedraw();
+   const row=document.getElementById('heroStudioClipRow');row.style.display=ok?'flex':'none';
+   if(ok){const n=document.getElementById('heroStudioMotifName');n.value='motif '+(motifTray.length+1);n.focus();n.select();}
+  }
+ }
+ window.addEventListener('pointerup',endPointer);
+ window.addEventListener('pointercancel',endPointer);
 })();
+document.getElementById('heroZoomReset').onclick=heroResetZoom;
 function heroClipSelection(){
  if(!heroImg||!heroLassoPts||heroLassoPts.length<3)return;
  const canvas=document.getElementById('heroStudioCanvas');
