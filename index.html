@@ -2684,9 +2684,22 @@ function heroHandleUpload(e){
 }
 function heroDrawPreview(img){
  const canvas=document.getElementById('heroStudioCanvas');if(!canvas)return;
- const maxW=680,scale=Math.min(1,maxW/img.width);
+ const wrap=document.getElementById('heroStudioCanvasWrap');
+ wrap.style.display='';
+ // Cap BOTH dimensions, not just width - a portrait/tall reference photo scaled to fit a max
+ // width alone could still end up taller than the modal. The canvas has touch-action:none
+ // (needed so a lasso drag doesn't also scroll the page), which also blocks scrolling *through*
+ // the canvas to reach whatever the modal's own max-height/overflow clipped off below it - so an
+ // oversized canvas here isn't just cramped, it's unreachable. A fixed fraction of window height
+ // isn't reliable either, since it doesn't account for the header/upload button/hint text
+ // already taking up room above the canvas - measure what's actually left instead.
+ const modal=canvas.closest('.bgStudioModal');
+ const hintEl=wrap.querySelector('p');
+ const modalBottom=modal?modal.getBoundingClientRect().bottom:window.innerHeight;
+ const hintBottom=hintEl?hintEl.getBoundingClientRect().bottom:0;
+ const maxW=Math.min(680,window.innerWidth-80),maxH=Math.max(220,modalBottom-hintBottom-24);
+ const scale=Math.min(1,maxW/img.width,maxH/img.height);
  canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
- document.getElementById('heroStudioCanvasWrap').style.display='';
  document.getElementById('heroStudioUploadLabel').textContent='change hero image';
  heroLassoPts=null;
  heroRedraw();
