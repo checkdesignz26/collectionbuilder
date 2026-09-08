@@ -1280,7 +1280,7 @@ const presets={
  halfdrop:{name:'half drop',bricks:[p('arrowOval',50,20,24,15,'hero'),p('oval',20,50,20,13,'secondary'),p('oval',80,50,20,13,'secondary'),p('circle',50,80,10,10,'filler')]},
  halfbrick:{name:'half brick',bricks:[p('arrowOval',22,28,23,15,'hero'),p('arrowOval',78,28,23,15,'hero'),p('oval',50,62,20,13,'secondary'),p('circle',20,85,9,9,'filler'),p('circle',80,85,9,9,'filler')]},
  halfdropflip:{name:'half drop flip',bricks:[p('arrowOval',50,20,24,15,'hero',0,'→'),p('arrowOval',20,55,20,13,'secondary',-25,'→'),p('arrowOval',80,55,20,13,'secondary',25,'→'),p('diamond',50,82,12,12,'filler')]},
- diamond:{name:'diamond repeat',bricks:[p('oval',50,0,22,16,'hero'),p('oval',50,100,22,16,'hero'),p('oval',0,50,16,22,'secondary'),p('oval',100,50,16,22,'secondary'),p('circle',50,50,12,12,'filler'),p('circle',0,0,10,10,'accent'),p('circle',100,0,10,10,'accent'),p('circle',0,100,10,10,'accent'),p('circle',100,100,10,10,'accent')]},
+ diamond:{name:'diamond repeat',bricks:[p('triangle',25,50,18,18,'hero'),p('circle',75,50,16,16,'secondary')]},
  tossed:{name:'tossed',bricks:[p('arrowOval',30,24,22,14,'hero',-20,'→'),p('oval',72,30,18,12,'secondary',35,'→'),p('diamond',38,68,13,13,'filler',15),p('circle',78,78,10,10,'accent')]},
  ogee:{name:'ogee',bricks:[p('ogeeLens',0,25,30,54,'hero'),p('ogeeLens',50,25,30,54,'hero'),p('ogeeLens',100,25,30,54,'hero'),p('ogeeLens',25,75,30,54,'secondary'),p('ogeeLens',75,75,30,54,'secondary')]},
  hexagon:{name:'hexagon',bricks:[p('oval',0,25,30,26,'hero'),p('oval',50,25,30,26,'hero'),p('oval',100,25,30,26,'hero'),p('oval',25,75,30,26,'secondary'),p('oval',75,75,30,26,'secondary')]},
@@ -1855,7 +1855,10 @@ let repeatSpan=3;
 let stageZoom=1;
 function setStageZoom(z){stageZoom=Math.max(1,Math.min(2.5,z));document.getElementById('stageZoomPill').textContent=Math.round(stageZoom*100)+'%';render();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repeatSpan-1)/2;const out=[];for(let ty=-r;ty<=r;ty++)for(let tx=-r;tx<=r;tx++)out.push(tx===0&&ty===0?[0,0,'center']:[tx,ty]);return out;}
-function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
+// 'diamond' shares halfbrick's row-by-row horizontal stagger - with two alternating shapes placed
+// side by side in each tile (see the diamond preset below), that stagger is what turns them into a
+// true interlocking diamond/argyle checkerboard, not just a plain grid of the same two shapes.
+function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'||current==='diamond'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
 function getPatternScale(t=texture){return Math.max(25,Math.min(200,+(t&&t.patternScale!=null?t.patternScale:100)));}
