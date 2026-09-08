@@ -1721,7 +1721,20 @@ window.exportPatternPNG=async function(pxSize,dpi){
  return {width:dims.w,height:dims.h};
 };
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved templates yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';c.innerHTML=`<button class="filmDelete tsFilmDelete" title="delete">×</button><div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}loadSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
-function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const wasCurrent=current===t.key;savedTemplates.splice(i,1);persistSavedTemplates();if(wasCurrent){setPreset(t.base&&presets[t.base]?t.base:'grid');}else{renderFilmstrip();}
+function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const wasCurrent=current===t.key;savedTemplates.splice(i,1);persistSavedTemplates();
+ if(wasCurrent){
+  // Deleting the saved template you're currently looking at can't leave `current` pointing at a
+  // key that no longer exists in savedTemplates - but it must NOT discard whatever's actually on
+  // screen right now (including edits made since the last save) the way setPreset would. That's
+  // what the explicit "reset template" button is for; a delete on the filmstrip isn't that, and
+  // silently wiping the canvas out from under someone who just wanted to remove one saved copy
+  // reads exactly like an accidental reset. Just relabel current back to the base preset without
+  // touching bricks/texture/background at all.
+  current=t.base&&presets[t.base]?t.base:'grid';
+  currentTemplateBase=null;
+  document.getElementById('currentName').textContent=presets[current]?.name||current;
+ }
+ renderFilmstrip();
  showUndoToast('Deleted "'+t.name+'"',()=>{savedTemplates.splice(i,0,t);persistSavedTemplates();renderFilmstrip();});
 }
 function saveTemplateToFilmstrip(){
