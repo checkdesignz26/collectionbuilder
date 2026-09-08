@@ -3074,7 +3074,29 @@ function layerDistance(l,pt){
  }
  return 1e9;
 }
+// Approximate on-canvas hit radius for dot/diamond/square, expressed as a percentage of the
+// tile (matches how drawOneCell actually sizes each: dot radius = pxFromSlider(width,cell), i.e.
+// width/9 as a % of cell; diamond/square scale off the same width in their own way).
+function dotHitRadiusPct(l){
+ const wPct=(l.width||10)/9;
+ if(l.kind==='dot')return wPct;
+ if(l.kind==='diamond')return wPct*1.5;
+ if(l.kind==='square')return (l.width||10)/2*1.15;
+ return 0;
+}
 function selectLayerAtPoint(pt){
+ // Dots/diamonds/squares can sit on top of one another (e.g. after "scatter dots", or once a
+ // few have been dragged close together) - picking whichever's CENTRE is nearest could select
+ // one buried underneath instead of the one actually tapped. So first check every dot/diamond/
+ // square whose own hit radius genuinely contains the tap point, and among those prefer the one
+ // drawn on top (last in the layer list, same as z-order) - only falling back to nearest-centre
+ // for bands (stripes/checks), which don't have a meaningful "radius" the same way.
+ const hits=[];
+ (state.layers||[]).forEach((l,i)=>{
+  if(l.visible===false || !(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'))return;
+  if(layerDistance(l,pt)<=dotHitRadiusPct(l))hits.push(i);
+ });
+ if(hits.length){selected=hits[hits.length-1]; renderAll(); return;}
  let best=selected, bd=1e9;
  (state.layers||[]).forEach((l,i)=>{if(l.visible===false)return; const d=layerDistance(l,pt); if(d<bd){bd=d;best=i;}});
  if(bd<18 || state.type==='dots'){selected=best; renderAll();}
