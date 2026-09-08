@@ -889,7 +889,7 @@ body.theme-light .tsSw,body.theme-light .tsColourDot,body.theme-light .sw,body.t
 body.theme-light .tsToggle{background:rgba(58,46,38,.14)!important;border-color:rgba(58,46,38,.20)!important;}
 body.theme-light .tsToggle i{background:#fff!important;}
 body.theme-light .tsToggle.on{background:rgba(179,157,219,.55)!important;}
-body.theme-light .tsCanvasWrap,body.theme-light .bgCanvasWrap{background:#fbf5ea!important;border-color:rgba(58,46,38,.10)!important;box-shadow:none!important;}
+body.theme-light .tsCanvasWrap,body.theme-light .bgCanvasWrap,body.theme-light .stageOuter{background:#fbf5ea!important;border-color:rgba(58,46,38,.10)!important;box-shadow:none!important;}
 body.theme-light .tsScaleBox{background:rgba(232,130,159,.08)!important;border-color:rgba(232,130,159,.3)!important;}
 body.theme-light .tsBadge{background:rgba(232,130,159,.15)!important;border:1px solid rgba(232,130,159,.4)!important;color:var(--roseInk)!important;}
 body.theme-light .bgTypeBtn.active{outline-color:var(--coral)!important;background:rgba(240,145,122,.10)!important;}
@@ -984,6 +984,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         <button id="placeMotifBtn" class="primary"><svg class="btnIcon"><use href="#i-sparkle"/></svg>place on selected</button>
         <button id="clearMotifBtn"><svg class="btnIcon"><use href="#i-eraser"/></svg>clear from selected</button>
       </div>
+      <button id="placeMotifFreelyBtn" class="full" style="margin-top:7px"><svg class="btnIcon"><use href="#i-target"/></svg>place freely (independent)</button>
+      <p class="footerNote" style="margin-top:4px">Drops a standalone copy you can drag/resize/rotate on its own - not linked to any placeholder shape, and placing more motifs never changes it. For working without placeholders at all.</p>
       <p class="footerNote" style="margin-top:9px">Shapes with a motif assigned right now (tap one to clear just that shape) - a shape stays assigned across every layout until you clear it here, even ones you selected a while ago.</p>
       <div class="swatches" id="assignedShapesList"><span class="footerNote">none yet</span></div>
       <div id="unassignedShapesBox"></div>
@@ -2107,6 +2109,31 @@ let shapeStyles={};
 function applyShapeStylesToBricks(list){(list||[]).forEach(b=>{const s=shapeStyles[b.type];if(!s)return;if(s.w!=null)b.w=s.w;if(s.h!=null)b.h=s.h;if(s.rot!=null)b.rot=s.rot;});}
 let styleAllLayouts=false;
 function applyMotifShapesToCopy(list){const copy=(list||[]).map(b=>({...b}));applyMotifShapesToBricks(copy);applyShapeStylesToBricks(copy);return copy;}
+// "place on selected" is shape-first: pick a placeholder, then every brick sharing that shape gets
+// the motif. Some designers want the opposite - drop a motif straight onto the canvas as its own
+// thing and move it wherever, without every other oval/circle on the layout changing to match. A
+// brick's shape type is what "same shape" scope, alignment and clear-by-shape all key off (see
+// scopedBricks/motifShapes elsewhere), so giving each free-placed motif its own one-off type is
+// enough on its own to make it behave as an independent object - resize/rotate/align "same shape"
+// naturally only ever matches itself, and it never gets swept up by a later "place on selected"
+// aimed at an actual placeholder shape. It still fully supports drag/resize/rotate/duplicate/
+// delete - those don't care what b.type actually is.
+let freeMotifCount=0;
+function placeMotifFreely(){
+ const m=motifTray.find(x=>x.id===activeMotifId);
+ if(!m)return;
+ pushHistory();
+ const uniqueType='freemotif-'+Math.random().toString(36).slice(2);
+ const n=freeMotifCount%5;freeMotifCount++;
+ const b=p(uniqueType,50+n*5,50+n*5,22,22,activeColor);
+ b.motifUrl=m.dataUrl;
+ motifShapes[uniqueType]=m.dataUrl;
+ bricks.push(b);
+ selected=b.id;
+ render();
+ syncControls();
+ renderUnassignedShapes();
+}
 function placeMotifOnSelected(){
  const b=selectedBrick();
  const m=motifTray.find(x=>x.id===activeMotifId);
@@ -2290,6 +2317,7 @@ document.getElementById('stage').addEventListener('click',deselectBrick);
 document.getElementById('motifUploadBtn').onclick=()=>document.getElementById('motifFile').click();
 document.getElementById('motifFile').addEventListener('change',handleMotifUpload);
 document.getElementById('placeMotifBtn').onclick=placeMotifOnSelected;
+document.getElementById('placeMotifFreelyBtn').onclick=placeMotifFreely;
 document.getElementById('clearMotifBtn').onclick=clearMotifFromSelected;
 document.getElementById('clearBgBtn').onclick=()=>{
  pushHistory();
