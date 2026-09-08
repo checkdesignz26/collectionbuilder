@@ -966,12 +966,13 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Live Preview carries the same motifs over to whichever placeholders share those shapes in every other repeat layout, so you can flip through them to compare the placement.</p>
       <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
       <button class="full motifDropzone" id="motifUploadBtn"><svg><use href="#i-cloud"/></svg><b>upload motifs</b><span>PNG files with transparent backgrounds</span></button>
-      <input id="motifHeroFile" type="file" accept="image/*" style="display:none">
-      <button class="full" id="motifHeroUploadBtn" style="margin-top:7px"><svg class="btnIcon"><use href="#i-image"/></svg>clip motifs from a photo</button>
-      <div id="motifHeroPreviewBox" style="display:none;margin-top:9px">
-        <p class="hint" style="margin:0 0 6px">Draw a lasso around one motif, then clip it into the tray below - saves downloading and cropping it elsewhere first. Only the traced outline comes across, so this works even with a busy background around the motif.</p>
-        <canvas id="motifHeroCanvas" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair"></canvas>
-        <button id="motifHeroClipBtn" class="full primary" style="margin-top:7px;display:none"><svg class="btnIcon"><use href="#i-sparkle"/></svg>clip selection into tray</button>
+      <div style="margin-top:9px;padding:9px;border:1px solid rgba(255,235,250,.13);border-radius:12px;background:rgba(255,255,255,.03);display:flex;gap:9px;align-items:center">
+        <div class="heroThumb" style="width:44px;height:44px;border-radius:9px;background-color:rgba(255,255,255,.06);background-size:cover;background-position:center;flex:0 0 auto;border:1px solid rgba(255,235,250,.15)"></div>
+        <div style="flex:1;min-width:0">
+          <b style="font-size:13px">hero image</b>
+          <div class="heroStatus footerNote" style="margin-top:2px">not uploaded yet - visible from every studio</div>
+        </div>
+        <button class="small heroOpenBtn">open</button>
       </div>
       <div class="swatches" id="motifTray" style="margin-top:9px"><span class="footerNote">no motifs uploaded yet</span></div>
       <div class="grid2" style="margin-top:7px">
@@ -1902,89 +1903,6 @@ function handleMotifUpload(e){
  });
  e.target.value='';
 }
-// Lets you lift one motif straight out of an uploaded reference/hero photo instead of having to
-// crop it in another app first and re-upload the crop - draws the photo into a canvas at a fixed
-// display size, tracks a freehand lasso path in that DISPLAY space (redrawn over the image on
-// every point so it always shows exactly what will be kept), then scales the path back up to the
-// image's real resolution when clipping. Using Canvas2D's own clip() against that path (rather
-// than a rectangle) means only what's actually inside the traced outline comes across - the rest
-// of the source image stays out, so this works even when the motif sits on a busy background,
-// not just a plain/transparent one. Feeds the exact same motifTray array as "upload motifs"
-// above, just a different way to get a motif into it.
-let motifHeroImg=null,motifHeroLassoPts=null,motifHeroLassoDrawing=false;
-function motifHeroHandleUpload(e){
- const file=e.target.files&&e.target.files[0];
- if(!file)return;
- const reader=new FileReader();
- reader.onload=ev=>{
-  const img=new Image();
-  img.onload=()=>{motifHeroImg=img;motifHeroDrawPreview(img);};
-  img.onerror=()=>{};
-  img.src=ev.target.result;
- };
- reader.readAsDataURL(file);
- e.target.value='';
-}
-function motifHeroDrawPreview(img){
- const canvas=document.getElementById('motifHeroCanvas');if(!canvas)return;
- const maxW=280,scale=Math.min(1,maxW/img.width);
- canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
- document.getElementById('motifHeroPreviewBox').style.display='';
- motifHeroLassoPts=null;
- motifHeroRedraw();
- document.getElementById('motifHeroClipBtn').style.display='none';
-}
-function motifHeroRedraw(){
- const canvas=document.getElementById('motifHeroCanvas');if(!canvas||!motifHeroImg)return;
- const ctx=canvas.getContext('2d');
- ctx.clearRect(0,0,canvas.width,canvas.height);
- ctx.drawImage(motifHeroImg,0,0,canvas.width,canvas.height);
- if(motifHeroLassoPts&&motifHeroLassoPts.length>1){
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(motifHeroLassoPts[0].x,motifHeroLassoPts[0].y);
-  for(let i=1;i<motifHeroLassoPts.length;i++)ctx.lineTo(motifHeroLassoPts[i].x,motifHeroLassoPts[i].y);
-  if(!motifHeroLassoDrawing)ctx.closePath();
-  ctx.fillStyle='rgba(255,142,214,.18)';ctx.fill();
-  ctx.strokeStyle='#ff8ed6';ctx.lineWidth=2.5;ctx.setLineDash([7,5]);ctx.stroke();
-  ctx.restore();
- }
-}
-(function wireMotifHeroLasso(){
- const canvas=document.getElementById('motifHeroCanvas');if(!canvas)return;
- function clampNum(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
- const ptFromEvent=e=>{const r=canvas.getBoundingClientRect();return {x:clampNum(e.clientX-r.left,0,r.width),y:clampNum(e.clientY-r.top,0,r.height)};};
- canvas.addEventListener('pointerdown',e=>{if(!motifHeroImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);motifHeroLassoDrawing=true;motifHeroLassoPts=[ptFromEvent(e)];motifHeroRedraw();document.getElementById('motifHeroClipBtn').style.display='none';});
- canvas.addEventListener('pointermove',e=>{if(!motifHeroLassoDrawing)return;e.preventDefault();const p=ptFromEvent(e);const last=motifHeroLassoPts[motifHeroLassoPts.length-1];if(Math.hypot(p.x-last.x,p.y-last.y)>=2){motifHeroLassoPts.push(p);motifHeroRedraw();}});
- window.addEventListener('pointerup',()=>{if(!motifHeroLassoDrawing)return;motifHeroLassoDrawing=false;const ok=motifHeroLassoPts&&motifHeroLassoPts.length>=3;if(ok)motifHeroRedraw();document.getElementById('motifHeroClipBtn').style.display=ok?'':'none';});
-})();
-function motifHeroClipSelection(){
- if(!motifHeroImg||!motifHeroLassoPts||motifHeroLassoPts.length<3)return;
- const canvas=document.getElementById('motifHeroCanvas');
- const scaleX=motifHeroImg.width/canvas.width,scaleY=motifHeroImg.height/canvas.height;
- const scaled=motifHeroLassoPts.map(p=>({x:p.x*scaleX,y:p.y*scaleY}));
- const xs=scaled.map(p=>p.x),ys=scaled.map(p=>p.y);
- const minX=Math.min(...xs),minY=Math.min(...ys);
- const w=Math.max(1,Math.round(Math.max(...xs)-minX)),h=Math.max(1,Math.round(Math.max(...ys)-minY));
- const out=document.createElement('canvas');out.width=w;out.height=h;
- const octx=out.getContext('2d');
- octx.save();
- octx.beginPath();
- octx.moveTo(scaled[0].x-minX,scaled[0].y-minY);
- for(let i=1;i<scaled.length;i++)octx.lineTo(scaled[i].x-minX,scaled[i].y-minY);
- octx.closePath();
- octx.clip();
- octx.drawImage(motifHeroImg,-minX,-minY);
- octx.restore();
- motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:'clipped motif '+(motifTray.length+1),dataUrl:downscaleMotifCanvas(out)});
- activeMotifId=motifTray[motifTray.length-1].id;
- renderMotifTray();
- motifHeroLassoPts=null;motifHeroRedraw();
- document.getElementById('motifHeroClipBtn').style.display='none';
-}
-document.getElementById('motifHeroUploadBtn').onclick=()=>document.getElementById('motifHeroFile').click();
-document.getElementById('motifHeroFile').addEventListener('change',motifHeroHandleUpload);
-document.getElementById('motifHeroClipBtn').onclick=motifHeroClipSelection;
 function renderMotifTray(){
  const box=document.getElementById('motifTray');if(!box)return;
  box.innerHTML='';
@@ -2718,6 +2636,138 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
     </div>
   </div>
 </div>
+<div id="heroStudioOverlay" class="bgStudioOverlay" aria-hidden="true">
+  <div class="bgStudioModal" style="grid-template-rows:auto auto;height:auto;max-height:92vh;overflow:auto;width:min(760px,calc(100vw - 16px))">
+    <div class="bgStudioHeader">
+      <div><h2>hero image</h2><p>upload once, visible from every studio - lasso a motif here at full size</p></div>
+      <button id="heroStudioClose" class="small bgClose">×</button>
+    </div>
+    <div style="padding:16px 18px;display:grid;gap:12px">
+      <input id="heroStudioFile" type="file" accept="image/*" style="display:none">
+      <button class="full motifDropzone" id="heroStudioUploadBtn"><svg><use href="#i-cloud"/></svg><b id="heroStudioUploadLabel">upload hero image</b><span>the photo you're building this collection from</span></button>
+      <div id="heroStudioCanvasWrap" style="display:none">
+        <p class="hint" style="margin:0 0 8px">Draw a lasso around one motif, then clip it into your Motif Tray. Only the traced outline comes across, so this works even with a busy background around the motif.</p>
+        <canvas id="heroStudioCanvas" style="max-width:100%;border-radius:12px;border:1px solid rgba(255,235,250,.18);display:block;touch-action:none;cursor:crosshair;margin:0 auto;background:#fff"></canvas>
+        <button id="heroStudioClipBtn" class="full primary" style="margin-top:10px;display:none"><svg class="btnIcon"><use href="#i-sparkle"/></svg>clip selection into motif tray</button>
+        <p class="footerNote" id="heroStudioStatus" style="margin-top:8px"></p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+// The hero image: one shared reference photo, uploaded once, visible from the main canvas AND
+// from inside Classics/Background Studio (each shows a small thumbnail + "open" launcher that
+// all point at this same overlay). Lets you lift a motif straight out of it via lasso instead of
+// cropping it in another app first and re-uploading the crop - draws the photo into a canvas at
+// a fixed display size, tracks a freehand lasso path in that DISPLAY space (redrawn over the
+// image on every point so it always shows exactly what will be kept), then scales the path back
+// up to the image's real resolution when clipping. Using Canvas2D's own clip() against that path
+// (rather than a rectangle) means only what's actually inside the traced outline comes across -
+// the rest of the source image stays out, so this works even when the motif sits on a busy
+// background, not just a plain/transparent one. Feeds the exact same motifTray array as "upload
+// motifs" above, just a different way to get a motif into it. Lives in its own script tag,
+// after its own HTML, because it's mounted late in the document - a getElementById this early
+// for elements defined further down would just return null.
+let heroImg=null,heroImgDataUrl=null,heroLassoPts=null,heroLassoDrawing=false;
+function heroHandleUpload(e){
+ const file=e.target.files&&e.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=ev=>{
+  const img=new Image();
+  img.onload=()=>{heroImg=img;heroImgDataUrl=ev.target.result;heroDrawPreview(img);refreshHeroThumbs();};
+  img.onerror=()=>{};
+  img.src=ev.target.result;
+ };
+ reader.readAsDataURL(file);
+ e.target.value='';
+}
+function heroDrawPreview(img){
+ const canvas=document.getElementById('heroStudioCanvas');if(!canvas)return;
+ const maxW=680,scale=Math.min(1,maxW/img.width);
+ canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+ document.getElementById('heroStudioCanvasWrap').style.display='';
+ document.getElementById('heroStudioUploadLabel').textContent='change hero image';
+ heroLassoPts=null;
+ heroRedraw();
+ document.getElementById('heroStudioClipBtn').style.display='none';
+}
+function heroRedraw(){
+ const canvas=document.getElementById('heroStudioCanvas');if(!canvas||!heroImg)return;
+ const ctx=canvas.getContext('2d');
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.drawImage(heroImg,0,0,canvas.width,canvas.height);
+ if(heroLassoPts&&heroLassoPts.length>1){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(heroLassoPts[0].x,heroLassoPts[0].y);
+  for(let i=1;i<heroLassoPts.length;i++)ctx.lineTo(heroLassoPts[i].x,heroLassoPts[i].y);
+  if(!heroLassoDrawing)ctx.closePath();
+  ctx.fillStyle='rgba(255,142,214,.18)';ctx.fill();
+  ctx.strokeStyle='#ff8ed6';ctx.lineWidth=2.5;ctx.setLineDash([7,5]);ctx.stroke();
+  ctx.restore();
+ }
+}
+(function wireHeroLasso(){
+ const canvas=document.getElementById('heroStudioCanvas');if(!canvas)return;
+ function clampNum(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+ const ptFromEvent=e=>{const r=canvas.getBoundingClientRect();return {x:clampNum(e.clientX-r.left,0,r.width),y:clampNum(e.clientY-r.top,0,r.height)};};
+ canvas.addEventListener('pointerdown',e=>{if(!heroImg)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);heroLassoDrawing=true;heroLassoPts=[ptFromEvent(e)];heroRedraw();document.getElementById('heroStudioClipBtn').style.display='none';});
+ canvas.addEventListener('pointermove',e=>{if(!heroLassoDrawing)return;e.preventDefault();const p=ptFromEvent(e);const last=heroLassoPts[heroLassoPts.length-1];if(Math.hypot(p.x-last.x,p.y-last.y)>=2){heroLassoPts.push(p);heroRedraw();}});
+ window.addEventListener('pointerup',()=>{if(!heroLassoDrawing)return;heroLassoDrawing=false;const ok=heroLassoPts&&heroLassoPts.length>=3;if(ok)heroRedraw();document.getElementById('heroStudioClipBtn').style.display=ok?'':'none';});
+})();
+function heroClipSelection(){
+ if(!heroImg||!heroLassoPts||heroLassoPts.length<3)return;
+ const canvas=document.getElementById('heroStudioCanvas');
+ const scaleX=heroImg.width/canvas.width,scaleY=heroImg.height/canvas.height;
+ const scaled=heroLassoPts.map(p=>({x:p.x*scaleX,y:p.y*scaleY}));
+ const xs=scaled.map(p=>p.x),ys=scaled.map(p=>p.y);
+ const minX=Math.min(...xs),minY=Math.min(...ys);
+ const w=Math.max(1,Math.round(Math.max(...xs)-minX)),h=Math.max(1,Math.round(Math.max(...ys)-minY));
+ const out=document.createElement('canvas');out.width=w;out.height=h;
+ const octx=out.getContext('2d');
+ octx.save();
+ octx.beginPath();
+ octx.moveTo(scaled[0].x-minX,scaled[0].y-minY);
+ for(let i=1;i<scaled.length;i++)octx.lineTo(scaled[i].x-minX,scaled[i].y-minY);
+ octx.closePath();
+ octx.clip();
+ octx.drawImage(heroImg,-minX,-minY);
+ octx.restore();
+ motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:'clipped motif '+(motifTray.length+1),dataUrl:downscaleMotifCanvas(out)});
+ activeMotifId=motifTray[motifTray.length-1].id;
+ renderMotifTray();
+ heroLassoPts=null;heroRedraw();
+ document.getElementById('heroStudioClipBtn').style.display='none';
+ const status=document.getElementById('heroStudioStatus');if(status){status.textContent='✂️ clipped into motif tray ✓ - trace another, or close when done.';}
+}
+function openHeroStudio(){
+ const o=document.getElementById('heroStudioOverlay');if(!o)return;
+ o.classList.add('open');o.setAttribute('aria-hidden','false');
+ if(heroImg)heroDrawPreview(heroImg);
+}
+function closeHeroStudio(){
+ const o=document.getElementById('heroStudioOverlay');if(!o)return;
+ o.classList.remove('open');o.setAttribute('aria-hidden','true');
+}
+function refreshHeroThumbs(){
+ document.querySelectorAll('.heroThumb').forEach(el=>{el.style.backgroundImage=heroImgDataUrl?`url("${heroImgDataUrl}")`:'none';});
+ document.querySelectorAll('.heroStatus').forEach(el=>{el.textContent=heroImgDataUrl?'uploaded - tap open to view or clip more':'not uploaded yet - visible from every studio';});
+ document.querySelectorAll('.heroOpenBtn').forEach(el=>{el.textContent=heroImgDataUrl?'open':'upload';});
+}
+window.openHeroStudio=openHeroStudio;
+document.getElementById('heroStudioUploadBtn').onclick=()=>document.getElementById('heroStudioFile').click();
+document.getElementById('heroStudioFile').addEventListener('change',heroHandleUpload);
+document.getElementById('heroStudioClipBtn').onclick=heroClipSelection;
+document.getElementById('heroStudioClose').onclick=closeHeroStudio;
+document.getElementById('heroStudioOverlay').addEventListener('click',e=>{if(e.target.id==='heroStudioOverlay')closeHeroStudio();});
+// Delegated (not a direct per-button listener) because the Classics/Background Studio copies of
+// this launcher button live further down the document than this script tag - a querySelectorAll
+// here would run before those elements exist. Delegation is evaluated at click time instead, so
+// it doesn't matter when each button was added to the DOM.
+document.addEventListener('click',e=>{if(e.target.closest('.heroOpenBtn'))openHeroStudio();});
+refreshHeroThumbs();
+</script>
 <script>
 (function(){
  // Generic single-PNG download panel, reused by the main canvas, Classics Studio
@@ -2795,6 +2845,14 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
       </section>
       <aside class="tsPanel tsLayersPanel"><div class="tsBox"><h3>Layers / Items</h3><div class="tsPad"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px"><button id="tsAddLayer">+ add</button><button id="tsDuplicateTop">⧉ duplicate</button><button id="tsRemoveLayer">− remove</button></div><button id="tsScatterDots" style="display:none;width:100%;margin-top:7px">🔀 scatter dots</button><button id="tsUnlockAll" style="display:none;width:100%;margin-top:7px" title="Let colour-mode preview cycling recolour every layer again">🔓 unlock all colours</button><div id="tsLayerList" class="tsLayerList" style="margin-top:10px"></div></div></div></aside>
       <aside class="tsPanel right">
+        <div class="tsBox"><h3>Hero Image</h3><div class="tsPad">
+        <p class="tsHint" style="margin-top:0">One shared reference photo for the whole collection - upload once, visible from every studio.</p>
+        <div style="display:flex;gap:9px;align-items:center">
+          <div class="heroThumb" style="width:44px;height:44px;border-radius:9px;background-color:rgba(255,255,255,.06);background-size:cover;background-position:center;flex:0 0 auto;border:1px solid rgba(255,235,250,.15)"></div>
+          <div style="flex:1;min-width:0"><div class="heroStatus" style="font-size:12px;color:var(--muted)">not uploaded yet</div></div>
+          <button class="small heroOpenBtn">open</button>
+        </div>
+        </div></div>
         <div class="tsBox" id="tsHandDrawnBox"><h3>Hand-Drawn Look</h3><div class="tsPad">
         <p class="tsHint" style="margin-top:0">Give straight stripes and perfect dots a gentle hand-drawn wobble. The wobble is one exact repeat per tile, so it lines back up with itself at every seam - no visible joins at any repeat size.</p>
         <div class="tsToggleLine"><span>enable wobble</span><div class="tsToggle" id="tsWobbleToggle"><i></i></div></div>
@@ -3666,6 +3724,14 @@ window.addEventListener('load',()=>{
     </div>
     <div class="bgStudioBody">
       <section class="bgStudioPanel">
+        <div class="bgBox"><h3>hero image</h3><div class="bgPad">
+        <p class="bgHint">One shared reference photo for the whole collection - upload once, visible from every studio.</p>
+        <div style="display:flex;gap:9px;align-items:center">
+          <div class="heroThumb" style="width:44px;height:44px;border-radius:9px;background-color:rgba(255,255,255,.06);background-size:cover;background-position:center;flex:0 0 auto;border:1px solid rgba(255,235,250,.15)"></div>
+          <div style="flex:1;min-width:0"><div class="heroStatus" style="font-size:12px;color:var(--muted)">not uploaded yet</div></div>
+          <button class="small heroOpenBtn">open</button>
+        </div>
+        </div></div>
         <div class="bgBox"><h3>background type</h3><div class="bgPad" id="bgTypeList"></div></div>
         
         <div class="bgBox"><h3>gradient modes</h3><div class="bgPad"><p class="bgHint">These are tile-safe: the edges meet when repeated.</p><div class="bgGradModes"><button data-bggrad="wave">wave</button><button data-bggrad="cloud">cloud</button><button data-bggrad="radial">centre glow</button><button data-bggrad="corner">corner mirror</button></div></div></div>
