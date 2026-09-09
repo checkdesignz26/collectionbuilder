@@ -4663,7 +4663,15 @@ function makeEditableObjects(rec=bgRecipe){
  let dens=Math.max(5,rec.density||35), scale=Math.max(18,rec.scale||70), tex=rec.tex||'#222';
  function add(o){list.push({id:newObjId(),x:Math.round(o.x),y:Math.round(o.y),r:Math.round(o.r||scale/4),w:Math.round(o.w||scale/2),h:Math.round(o.h||scale/5),rot:Math.round(o.rot||0),type:o.type||type,color:o.color||tex,alpha:o.alpha==null?Math.max(.12,(rec.opacity||50)/100):o.alpha,seed:Math.floor(R()*999999)});}
  if(type==='watercolour'){
-   for(let i=0;i<8+dens/8;i++)add({type:'wash',x:R()*W,y:R()*H,r:scale*(.45+R()*1.25),alpha:.10+(rec.opacity||55)/520,color:tex});
+   // Alpha/gradient quality now matches drawWatercolour()'s non-editable blobs (see
+   // drawEditableOne) - this used to be a much fainter set of objects with no bloom structure, so
+   // switching into "picky designer edit mode" quietly swapped in a visibly weaker render than the
+   // type button's own preview promised. Count/size stay modest and non-overlapping-heavy on
+   // purpose though: these are individually selectable/draggable objects for hands-on editing, not
+   // the freely-generated 3-tier layering the non-editable version uses, so blanketing the whole
+   // tile in giant overlapping pools (tried first) just made an oversaturated mess with no bare
+   // paper showing through, and no fun to select any one blob out of.
+   for(let i=0;i<8+dens/10;i++)add({type:'wash',x:R()*W,y:R()*H,r:scale*(.35+R()*.5),alpha:.32+(rec.opacity||55)/280,color:tex});
  }else if(type==='splatter'){
    for(let i=0;i<12+dens/4;i++)add({type:'splat',x:R()*W,y:R()*H,r:scale*(.08+R()*.26),alpha:.25+(rec.opacity||60)/180,color:tex});
  }else if(type==='doodles'){
@@ -4684,7 +4692,22 @@ function drawEditableOne(ctx,o,selected=false){
  ctx.save(); ctx.translate(o.x,o.y); ctx.rotate((o.rot||0)*Math.PI/180); ctx.globalAlpha=Math.max(0,Math.min(1,o.alpha==null?.55:o.alpha)); ctx.strokeStyle=o.color||'#222'; ctx.fillStyle=o.color||'#222'; ctx.lineCap='round'; ctx.lineJoin='round';
  let R=rng(o.seed||1), r=o.r||20, w=o.w||r*2, h=o.h||r;
  if(o.type==='wash'){
-   ctx.globalAlpha=Math.max(.04,ctx.globalAlpha*.45); let g=ctx.createRadialGradient(0,0,0,0,0,r); g.addColorStop(0,rgba(o.color,.26)); g.addColorStop(.55,rgba(o.color,.10)); g.addColorStop(1,rgba(o.color,0)); ctx.fillStyle=g; ctx.beginPath(); for(let i=0;i<24;i++){let a=i/24*Math.PI*2, rr=r*(.68+R()*.34); ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);} ctx.closePath(); ctx.fill();
+   // Same bloom-ring gradient + organic harmonic wobble as the non-editable drawWatercolour()
+   // blobs (see bgOrganicEdge) - this used to be a flat 3-stop fade with a per-vertex-random
+   // (not harmonic) wobble and its alpha crushed by another 0.45x on top of an already-low o.alpha,
+   // so entering edit mode swapped the whole wash for a visibly flatter, fainter render.
+   let g=ctx.createRadialGradient(0,0,0,0,0,r);
+   g.addColorStop(0,rgba(o.color,.40));
+   g.addColorStop(.30,rgba(o.color,.50));
+   g.addColorStop(.58,rgba(o.color,.44));
+   g.addColorStop(.80,rgba(o.color,.62));
+   g.addColorStop(.94,rgba(o.color,.70));
+   g.addColorStop(1,rgba(o.color,0));
+   ctx.fillStyle=g;
+   ctx.beginPath();
+   for(let i=0;i<32;i++){let a=i/32*Math.PI*2, rr=r*(0.74+bgOrganicEdge(a,o.seed,0.34)); if(i===0)ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr); else ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}
+   ctx.closePath();
+   ctx.fill();
  }else if(o.type==='splat'){
    ctx.beginPath(); for(let i=0;i<18;i++){let a=i/18*Math.PI*2, rr=r*(.55+R()*.75); ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);} ctx.closePath(); ctx.fill(); for(let i=0;i<8;i++){ctx.beginPath(); ctx.arc((R()-.5)*r*5,(R()-.5)*r*5,r*(.08+R()*.18),0,Math.PI*2);ctx.fill();}
  }else if(o.type==='scribble'){
@@ -4717,7 +4740,13 @@ function applyPostContrast(ctx,rec){
  for(let i=0;i<d.length;i+=4){d[i]=Math.max(0,Math.min(255,factor*(d[i]-128)+128));d[i+1]=Math.max(0,Math.min(255,factor*(d[i+1]-128)+128));d[i+2]=Math.max(0,Math.min(255,factor*(d[i+2]-128)+128));}
  ctx.putImageData(img,0,0);
 }
-function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('2d');ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=rec.base||'#fff';ctx.fillRect(0,0,W,H);let useObj=rec.editable&&rec.objects&&rec.objects.length&&editableKinds(rec.type);if(rec.type==='gradient')drawGradient(ctx,rec);if(rec.type==='paper')drawPaper(ctx,rec);if(rec.type==='linen')drawLinen(ctx,rec);if(rec.type==='speckles')drawSpeckles(ctx,rec);if(rec.type==='watercolour'&&!useObj)drawWatercolour(ctx,rec);if(rec.type==='chalk'&&!useObj)drawChalk(ctx,rec);if(rec.type==='vintage')drawVintage(ctx,rec);if(rec.type==='splatter'&&!useObj)drawSplatter(ctx,rec);if(rec.type==='sprinkles'&&!useObj)drawSprinkles(ctx,rec);if(rec.type==='doodles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(25,rec.density),scale:Math.max(65,rec.scale)});if(rec.type==='scribbles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(30,rec.density),scale:Math.max(90,rec.scale)});if(rec.type==='crosshatch'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(45,rec.density),scale:Math.max(70,rec.scale)});if(useObj)drawEditableObjects(ctx,rec,true);applyPostContrast(ctx,rec);ctx.restore();return canvas}
+function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('2d');ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=rec.base||'#fff';ctx.fillRect(0,0,W,H);let useObj=rec.editable&&rec.objects&&rec.objects.length&&editableKinds(rec.type);if(rec.type==='gradient')drawGradient(ctx,rec);if(rec.type==='paper')drawPaper(ctx,rec);if(rec.type==='linen')drawLinen(ctx,rec);if(rec.type==='speckles')drawSpeckles(ctx,rec);
+ // "Picky designer edit mode" (useObj) swaps in individually-selectable/draggable objects instead
+ // of the generative blob painter above - for watercolour specifically it used to skip straight to
+ // bare colour with no paper tooth underneath at all, on top of the flatter wash objects fixed in
+ // drawEditableOne, so switching into edit mode for watercolour lost its texture twice over.
+ if(rec.type==='watercolour'&&useObj)drawPaper(ctx,{...rec,opacity:Math.min(12,Math.max(4,(rec.opacity||45)*.12)),density:12,scale:Math.max(35,(rec.scale||120)*.45),contrast:22});
+ if(rec.type==='watercolour'&&!useObj)drawWatercolour(ctx,rec);if(rec.type==='chalk'&&!useObj)drawChalk(ctx,rec);if(rec.type==='vintage')drawVintage(ctx,rec);if(rec.type==='splatter'&&!useObj)drawSplatter(ctx,rec);if(rec.type==='sprinkles'&&!useObj)drawSprinkles(ctx,rec);if(rec.type==='doodles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(25,rec.density),scale:Math.max(65,rec.scale)});if(rec.type==='scribbles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(30,rec.density),scale:Math.max(90,rec.scale)});if(rec.type==='crosshatch'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(45,rec.density),scale:Math.max(70,rec.scale)});if(useObj)drawEditableObjects(ctx,rec,true);applyPostContrast(ctx,rec);ctx.restore();return canvas}
 function recipeToUrl(rec=bgRecipe){let cn=document.createElement('canvas');cn.width=W;cn.height=H;drawBackgroundToCanvas(cn,rec);return cn.toDataURL('image/png')}
 function renderBgPreview(){bgScheduleWipAutosave();let can=q('bgPreviewCanvas'); if(!can)return; drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
  q('bgPreviewName').textContent=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
