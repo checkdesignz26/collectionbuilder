@@ -1005,9 +1005,9 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     </div></div>
 
     <div class="box"><h2>repeat layouts <span class="livePreviewBadge">Live Preview</span></h2><div class="body">
-      <p class="hint">All normal repeat layouts are back here. Pick one without opening Background Studio. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
+      <p class="hint">Pick a STRUCTURE - where placeholder shapes sit and how the tile repeats (grid, half drop, hexagon...). This is not the same as "saved patterns" below, which are your own saved snapshots - switching structure here doesn't touch those. "blank canvas" skips structure entirely so you can place motifs freely instead (see "place freely" above). Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
       <div class="grid2">
-        <button onclick="setPreset('blank',true)">blank canvas</button>
+        <button onclick="setPreset('blank',true)">blank canvas (free layout)</button>
         <button onclick="setPreset('grid',true)">grid</button>
         <button onclick="setPreset('halfdrop',true)">half drop</button>
         <button onclick="setPreset('halfbrick',true)">half brick</button>
@@ -1017,9 +1017,6 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         <button onclick="setPreset('ogee',true)">ogee</button>
         <button onclick="setPreset('hexagon',true)">hexagon</button>
         <button onclick="setPreset('polka',true)">polka layout</button>
-        <button onclick="setPreset('gingham',true)">gingham</button>
-        <button onclick="setPreset('plaid',true)">plaid</button>
-        <button onclick="setPreset('chevron',true)">chevron</button>
         <button onclick="setPreset('scallop',true)">scallop</button>
       </div>
       <p class="hint" style="margin-top:9px">Tiling style - independent of the layout above, so you can try a different repeat stagger on whatever's currently on the canvas (handy on blank canvas + freely-placed motifs). Remembers its own choice per layout.</p>
@@ -1028,7 +1025,9 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         <button data-tiling="halfdrop">half drop</button>
         <button data-tiling="halfdropflip">half drop flip</button>
         <button data-tiling="halfbrick">half brick</button>
-        <button data-tiling="diamond" style="grid-column:1/-1">diamond stagger</button>
+        <button data-tiling="diamond">diamond stagger</button>
+        <button data-tiling="hexagon">hexagon stagger</button>
+        <button data-tiling="ogee" style="grid-column:1/-1">ogee stagger</button>
       </div>
     </div></div>
 
@@ -1306,7 +1305,7 @@ let classicStore={};
 // named layout's own bricks.
 let tilingEngine='grid';
 let tilingEngineStore={};
-const TILING_ENGINE_TYPES=['grid','halfdrop','halfdropflip','halfbrick','diamond'];
+const TILING_ENGINE_TYPES=['grid','halfdrop','halfdropflip','halfbrick','diamond','hexagon','ogee'];
 let history=[], redoStack=[];
 let savedTemplates=[];
 const presets={
@@ -1322,8 +1321,15 @@ const presets={
  // "diamond in the square", not two shapes side by side pretending to checkerboard.
  diamond:{name:'diamond repeat',bricks:[p('diamond',50,50,70.7,70.7,'hero')]},
  tossed:{name:'tossed',bricks:[p('arrowOval',30,24,22,14,'hero',-20,'→'),p('oval',72,30,18,12,'secondary',35,'→'),p('diamond',38,68,13,13,'filler',15),p('circle',78,78,10,10,'accent')]},
- ogee:{name:'ogee',bricks:[p('ogeeLens',0,25,30,54,'hero'),p('ogeeLens',50,25,30,54,'hero'),p('ogeeLens',100,25,30,54,'hero'),p('ogeeLens',25,75,30,54,'secondary'),p('ogeeLens',75,75,30,54,'secondary')]},
- hexagon:{name:'hexagon',bricks:[p('oval',0,25,30,26,'hero'),p('oval',50,25,30,26,'hero'),p('oval',100,25,30,26,'hero'),p('oval',25,75,30,26,'secondary'),p('oval',75,75,30,26,'secondary')]},
+ // A single ogeeLens (pointed lens/quatrefoil), sized so its tip-to-tip height and widest-point
+ // width exactly match the ogee tiling engine's row/column spacing (see engineOffset) - so each
+ // copy's top/bottom tips touch the copies above/below in the same column, and its widest point
+ // touches the offset neighbouring columns' widest points, weaving into a continuous ogee trellis
+ // instead of 5 lenses scattered on a plain grid.
+ ogee:{name:'ogee',bricks:[p('ogeeLens',50,50,40,72,'hero')]},
+ // A single flat-top hexagon, sized so its point-to-point width and flat-to-flat height match the
+ // hexagon tiling engine's spacing - true honeycomb, not 5 ovals standing in for hexagons.
+ hexagon:{name:'hexagon',bricks:[p('hexagon',50,50,60,51.96,'hero')]},
  polka:{name:'polka',bricks:[p('circle',20,20,10,10,'black'),p('circle',70,20,10,10,'black'),p('circle',45,50,10,10,'black'),p('circle',20,80,10,10,'black'),p('circle',70,80,10,10,'black')]},
  gingham:{name:'gingham',bricks:[p('gingham',50,50,100,100,'grey')]},
  plaid:{name:'plaid',bricks:[p('stripeRow',50,25,100,8,'black'),p('stripeRow',50,70,100,8,'grey'),p('stripeRow',25,50,8,100,'black',90),p('stripeRow',70,50,8,100,'grey',90)]},
@@ -1332,7 +1338,11 @@ const presets={
  blank:{name:'blank canvas',bricks:[]}
 };
 function p(type,x,y,w,h,role='hero',rot=0,flow=''){return {id:'b'+Math.random().toString(36).slice(2),type,x,y,w,h,role,rot,flow};}
-const skeletonOrder=['blank','grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','ogee','hexagon','polka','gingham','plaid','chevron','scallop'];
+// gingham/plaid/chevron dropped from here - Classics Studio already builds those properly
+// (structural, colour-editable layers) rather than as a single flat-fill placeholder brick, so
+// having flatter copies of the same three names in the repeat-layout picker just duplicated them
+// with no real benefit.
+const skeletonOrder=['blank','grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','ogee','hexagon','polka','scallop'];
 function copyBricks(arr){return JSON.parse(JSON.stringify(arr)).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
 // 'blank canvas' never saves its bricks/texture into blueprintStore/textureStore - unlike every
 // named preset (which is meant to remember your edits when you switch away and back), "blank" is
@@ -2010,7 +2020,20 @@ function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repea
 // plain grid, which is exactly what makes a single motif (placed as a diamond inscribed in the
 // square tile - see the diamond preset) interlock edge-to-edge with its neighbours into a
 // continuous diamond trellis, instead of just repeating in an offset grid.
-function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} return {x:tx*STAGE,y:ty*STAGE};}
+// Hexagon and ogee are the same kind of fix diamond got: the old presets placed 5 oval/ogeeLens
+// bricks in a row/offset arrangement that was never actually sized to touch edge-to-edge, so it
+// rendered as scattered shapes on a plain grid, not a real tessellation. Both true tessellations
+// share one structure - columns of shapes stacked tip-to-tip (or edge-to-edge) vertically, with
+// alternating columns offset vertically by half a shape's height and spaced horizontally by the
+// shape's own width so the widest points of neighbouring columns touch - so one shared formula
+// covers both, just with each shape's own width:height ratio plugged in (a flat-top hexagon's
+// point-to-point width vs. flat-to-flat height; an ogee lens's tip-to-tip height vs. its widest
+// point). engineOffset can't reuse the other engines' fixed STAGE-per-step spacing here since
+// neither shape naturally repeats at a 1:1 square-tile step - unlike grid/halfdrop/halfbrick, these
+// two get their own real (non-STAGE-based) column/row spacing derived straight from the brick's own
+// w/h below, same in spirit to how diamond gets its own diagonal-lattice half-step.
+function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y:ty*rowSpacing+(tx%2!==0?rowSpacing/2:0)};}
+function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,STAGE*.45,STAGE*.5196);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,STAGE*.40,STAGE*.72);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
 function getPatternScale(t=texture){return Math.max(25,Math.min(200,+(t&&t.patternScale!=null?t.patternScale:100)));}
