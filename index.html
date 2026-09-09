@@ -2256,11 +2256,30 @@ function renderUnassignedShapes(){
 // brick as "about to delete" partway through the hold so releasing early is a visible way to
 // back out; killTimer actually removes it. Either timer is cancelled the instant real movement
 // starts, so a normal drag is never mistaken for a hold.
-function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;
+// Used to hide real motif <img>s behind their placeholder outline during a drag, because the old
+// code called the full render() (bricksLayer.innerHTML='' + rebuild every brick and every edge
+// clone from scratch) on every single pointermove - real images were never actually the expensive
+// part, tearing down and recreating ~dozens of DOM elements every frame was. Moving the SAME
+// elements via a CSS transform instead (compositor-only, no layout/paint recalc for anything else
+// on screen) is cheap regardless of what's inside them, so real motifs can now just stay visible
+// and moving/still stay smooth. bricks[] only gets its real x/y - and a single reconciling
+// render() - once the gesture actually ends; a plain tap never touches the DOM at all here.
+function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');let moved=false;
  const pressEl=()=>document.querySelector('.brick[data-id="'+id+'"]:not(.clone)');
  const warnTimer=setTimeout(()=>{if(!moved)pressEl()?.classList.add('pressHold');},280);
  const killTimer=setTimeout(()=>{if(!moved){bricks=bricks.filter(x=>x.id!==id);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();}},650);
- const onMove=ev=>{if(!moved){moved=true;showMotifs=false;clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));b.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/tilePx*100));render();syncControls(false);};const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
+ let liveEls=null;
+ const onMove=ev=>{
+  if(!moved){moved=true;clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');liveEls=document.querySelectorAll('.brick[data-id="'+id+'"]');}
+  const dx=ev.clientX-sx,dy=ev.clientY-sy;
+  liveEls.forEach(el=>{el.style.transform=`translate(${dx}px,${dy}px) rotate(${b.rot}deg)`;});
+  const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));
+  b.x=Math.max(-20,Math.min(120,ox+dx/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+dy/tilePx*100));
+  syncControls(false);
+ };
+ const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
+ window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
+}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
 // width/height sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and
 // shapeStyles + a throttled renderGrid() when "apply to all layouts" is on - dragging the handle
 // and dragging the slider are two input methods for the same thing, so they should behave
