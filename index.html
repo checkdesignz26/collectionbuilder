@@ -1321,7 +1321,16 @@ function sourceBricksFor(key){return blueprintStore[key]?copyBricks(blueprintSto
 function sourceTextureFor(key){if(textureStore[key])return copyTexture(textureStore[key]);if(key==='stripe')return stripeDefaultTexture();return blankTexture();}
 function sourceBackgroundFor(key){return backgroundStore[key]!==undefined?backgroundStore[key]:null;}
 function sourceClassicFor(key){return classicStore[key]!==undefined?classicStore[key]:null;}
-function sourceTilingEngineFor(key){if(tilingEngineStore[key])return tilingEngineStore[key];return TILING_ENGINE_TYPES.includes(key)?key:'grid';}
+// Named built-in layouts (grid, half drop, tossed, ...) have a fixed, predictable tiling identity
+// - clicking "grid" must always give plain grid tiling, never whatever stagger was last tried while
+// grid happened to be open, so these ignore tilingEngineStore entirely. Blank canvas and saved
+// templates have no such inherent identity, so remembering their last-chosen tiling style is
+// exactly the point there.
+function sourceTilingEngineFor(key){
+ if(presets[key]&&key!=='blank')return TILING_ENGINE_TYPES.includes(key)?key:'grid';
+ if(tilingEngineStore[key])return tilingEngineStore[key];
+ return 'grid';
+}
 function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
 function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
