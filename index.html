@@ -968,18 +968,22 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       </div>
     </div></div>
 
-    <div class="box"><h2>motifs 🌸</h2><div class="body">
-      <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Live Preview carries the same motifs over to whichever placeholders share those shapes in every other repeat layout, so you can flip through them to compare the placement.</p>
-      <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
-      <button class="full motifDropzone" id="motifUploadBtn"><svg><use href="#i-cloud"/></svg><b>upload motifs</b><span>PNG files with transparent backgrounds</span></button>
-      <div style="margin-top:9px;padding:9px;border:1px solid rgba(255,235,250,.13);border-radius:12px;background:rgba(255,255,255,.03);display:flex;gap:9px;align-items:center">
+    <div class="box"><h2>hero image 🖼️</h2><div class="body">
+      <p class="hint">Upload the reference photo you're building this collection from, once. It stays visible from every studio so you can lasso individual motifs out of it any time - tap "open" below to view it full size and trace one out.</p>
+      <div style="padding:9px;border:1px solid rgba(255,235,250,.13);border-radius:12px;background:rgba(255,255,255,.03);display:flex;gap:9px;align-items:center">
         <div class="heroThumb"></div>
         <div style="flex:1;min-width:0">
-          <b class="heroLabel" style="font-size:13px">hero image</b>
+          <b class="heroLabel" style="font-size:13px">reference photo</b>
           <div class="heroStatus footerNote" style="margin-top:2px">not uploaded yet - visible from every studio</div>
         </div>
         <button class="small heroOpenBtn">open</button>
       </div>
+    </div></div>
+
+    <div class="box"><h2>motifs 🌸</h2><div class="body">
+      <p class="hint">Upload your motif PNGs into the tray. Tap a placeholder on the canvas, tap a motif below, then "place on selected" swaps every placeholder of that same shape (e.g. all ovals) for the real motif - not just the one you tapped. Live Preview carries the same motifs over to whichever placeholders share those shapes in every other repeat layout, so you can flip through them to compare the placement.</p>
+      <input id="motifFile" type="file" accept="image/*" multiple style="display:none">
+      <button class="full motifDropzone" id="motifUploadBtn"><svg><use href="#i-cloud"/></svg><b>upload motifs</b><span>PNG files with transparent backgrounds</span></button>
       <div class="swatches" id="motifTray" style="margin-top:9px"><span class="footerNote">no motifs uploaded yet</span></div>
       <div class="grid2" style="margin-top:7px">
         <button id="placeMotifBtn" class="primary"><svg class="btnIcon"><use href="#i-sparkle"/></svg>place on selected</button>
@@ -1323,9 +1327,16 @@ const presets={
 function p(type,x,y,w,h,role='hero',rot=0,flow=''){return {id:'b'+Math.random().toString(36).slice(2),type,x,y,w,h,role,rot,flow};}
 const skeletonOrder=['blank','grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','ogee','hexagon','polka','gingham','plaid','chevron','scallop'];
 function copyBricks(arr){return JSON.parse(JSON.stringify(arr)).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
-function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;tilingEngineStore[current]=tilingEngine;}}
-function sourceBricksFor(key){return blueprintStore[key]?copyBricks(blueprintStore[key]):copyBricks(presets[key].bricks);}
-function sourceTextureFor(key){if(textureStore[key])return copyTexture(textureStore[key]);if(key==='stripe')return stripeDefaultTexture();return blankTexture();}
+// 'blank canvas' never saves its bricks/texture into blueprintStore/textureStore - unlike every
+// named preset (which is meant to remember your edits when you switch away and back), "blank" is
+// a scratch space: clicking it should always hand you a genuinely empty canvas, matching what
+// a "blank"/"new" button means everywhere else. Without this, placing even one free motif there
+// got remembered forever, so re-selecting "blank canvas" quietly reloaded your last scratch work
+// instead of actually clearing it - the tiling engine choice still persists (sourceTilingEngineFor
+// below), since a "which stagger to preview" choice isn't the same kind of state as canvas content.
+function saveCurrentBlueprint(){if(current&&current!=='blank'){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;}if(current)tilingEngineStore[current]=tilingEngine;}
+function sourceBricksFor(key){if(key==='blank')return copyBricks(presets.blank.bricks);return blueprintStore[key]?copyBricks(blueprintStore[key]):copyBricks(presets[key].bricks);}
+function sourceTextureFor(key){if(key==='blank')return blankTexture();if(textureStore[key])return copyTexture(textureStore[key]);if(key==='stripe')return stripeDefaultTexture();return blankTexture();}
 function sourceBackgroundFor(key){return backgroundStore[key]!==undefined?backgroundStore[key]:null;}
 function sourceClassicFor(key){return classicStore[key]!==undefined?classicStore[key]:null;}
 // Named built-in layouts (grid, half drop, tossed, ...) have a fixed, predictable tiling identity
@@ -2285,7 +2296,7 @@ function renderUnassignedShapes(){
 // finger getting replaced by the initial render() below between the two taps, which a native
 // dblclick's own event correlation is liable to lose.
 let lastTapId=null,lastTapTime=0;
-const DOUBLE_TAP_MS=350;
+const DOUBLE_TAP_MS=450;
 function startDrag(e,id){e.preventDefault();
  const now=Date.now();
  if(lastTapId===id && now-lastTapTime<DOUBLE_TAP_MS){
@@ -2310,17 +2321,57 @@ function startDrag(e,id){e.preventDefault();
  };
  const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
-}// Dragging the on-canvas resize handle now follows the exact same rules as the sidebar
-// width/height sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and
-// shapeStyles + a throttled renderGrid() when "apply to all layouts" is on - dragging the handle
-// and dragging the slider are two input methods for the same thing, so they should behave
-// identically rather than the handle being a single-brick-only shortcut.
-function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));scopedBricks().forEach(x=>{x.w=nw;x.h=nh;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
+}// Dragging the on-canvas resize handle follows the exact same rules as the sidebar width/height
+// sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and shapeStyles when
+// "apply to all layouts" is on - dragging the handle and dragging the slider are two input methods
+// for the same thing, so they should behave identically rather than the handle being a
+// single-brick-only shortcut.
+// Used to call the full render() (bricksLayer.innerHTML='' + rebuild every brick and clone from
+// scratch) on every single pointermove, same root cause as the old drag lag - and since resize/
+// rotate mutate every scoped brick's clones too (up to 9x per brick), it was worse per frame, not
+// better, which is why it never felt like the drag fix changed anything: this handle was still on
+// the old path the whole time. Both now update the SAME already-existing elements directly with
+// plain style writes instead: resize recomputes left/top/width/height from each element's own
+// (rotation-and-size-independent) centre point, rotate just swaps the transform's angle - neither
+// needs engineOffset/tile math at all, since every scoped brick ends up at the identical new
+// w/h or rot regardless of its own tile position. render() only runs once, to reconcile, when the
+// gesture actually ends.
+function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');let moved=false;
+ let scope=null,liveGroups=null;
+ const onMove=ev=>{
+  if(!moved){moved=true;scope=scopedBricks();liveGroups=[];scope.forEach(x=>{document.querySelectorAll('.brick[data-id="'+x.id+'"]').forEach(el=>{liveGroups.push({el,cx:parseFloat(el.style.left)+parseFloat(el.style.width)/2,cy:parseFloat(el.style.top)+parseFloat(el.style.height)/2});});});}
+  const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));
+  const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;
+  const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));
+  scope.forEach(x=>{x.w=nw;x.h=nh;});
+  const sf=getPatternScale(texture)/100;const scale=(mode==='repeat'?Math.min(r.width,r.height)/(STAGE*repeatSpan):Math.min(r.width,r.height)/STAGE);
+  const wPx=nw*sf*10*scale,hPx=nh*sf*10*scale;
+  liveGroups.forEach(({el,cx,cy})=>{el.style.left=(cx-wPx/2)+'px';el.style.top=(cy-hPx/2)+'px';el.style.width=wPx+'px';el.style.height=hPx+'px';});
+  if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;}
+  syncControls(false);
+ };
+ const onUp=()=>{if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};
+ window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
+}
 // Drag-to-rotate handle above the selected brick. Angle is measured from the brick's own screen
-// centre (via getBoundingClientRect, which stays correct through CSS rotation since the transform
-// origin is the element centre) so it works the same however the tile is currently scaled/rotated.
+// centre - captured once at gesture start rather than re-measured via getBoundingClientRect() every
+// frame, since a pure rotation around transform-origin:center never actually moves that centre
+// point, only the corners swing around it, so re-measuring it repeatedly was redundant layout work.
 // Reuses the same scope/styleAllLayouts rules the rotate slider already follows for consistency.
-function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const hadMotifs=showMotifs;let moved=false;const onMove=ev=>{if(!moved){moved=true;showMotifs=false;}const el=document.querySelector('.brick[data-id="'+id+'"].selected');if(!el)return;const r=el.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);while(angle>180)angle-=360;while(angle<-180)angle+=360;scopedBricks().forEach(x=>{x.rot=angle;});if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;renderGrid();}render();syncControls(false);};const onUp=()=>{if(moved){showMotifs=hadMotifs;render();}window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();}
+function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);let moved=false;
+ let scope=null,liveEls=null,cx=0,cy=0;
+ const onMove=ev=>{
+  if(!moved){moved=true;scope=scopedBricks();liveEls=[];scope.forEach(x=>{document.querySelectorAll('.brick[data-id="'+x.id+'"]').forEach(el=>liveEls.push(el));});const el=document.querySelector('.brick[data-id="'+id+'"].selected');const r=(el||liveEls[0]).getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;}
+  let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);
+  while(angle>180)angle-=360;while(angle<-180)angle+=360;
+  scope.forEach(x=>{x.rot=angle;});
+  liveEls.forEach(el=>{el.style.transform=`rotate(${angle}deg)`;});
+  if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;}
+  syncControls(false);
+ };
+ const onUp=()=>{if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};
+ window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
+}
 function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.innerHTML='';const textureLaunchers={stripe:'stripes',polka:'dots',gingham:'checks',plaid:'plaid'};skeletonOrder.forEach(key=>{const c=document.createElement('div');const isLive=key===current||key===currentTemplateBase;c.className='skelCard '+(isLive?'active':'');c.dataset.key=key;
  // Non-active layouts' thumbnails used to preview the current motifShapes assignments on a
  // throwaway copy, so every card side-by-side showed how the motif set would look there without
