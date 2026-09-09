@@ -2017,7 +2017,7 @@ function render(){const stage=document.getElementById('stage');stage.className='
  // the wider view now shows, not just the original fixed 3x3 window.
  const cloneHalf=mode==='repeat'?repeatHalf:1;const cloneRange=Array.from({length:cloneHalf*2+1},(_,i)=>i-cloneHalf);
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRange.forEach(tx=>cloneRange.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
- drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); el.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();selected=b.id;const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);const rh=document.createElement('div');rh.className='rotHandle';rh.addEventListener('pointerdown',e=>startRotate(e,b.id));el.appendChild(rh);['dot-tl','dot-tr','dot-bl'].forEach(pos=>{const d=document.createElement('div');d.className='handleDot '+pos;el.appendChild(d);});}} bricksLayer.appendChild(el);});
+ drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);const rh=document.createElement('div');rh.className='rotHandle';rh.addEventListener('pointerdown',e=>startRotate(e,b.id));el.appendChild(rh);['dot-tl','dot-tr','dot-bl'].forEach(pos=>{const d=document.createElement('div');d.className='handleDot '+pos;el.appendChild(d);});}} bricksLayer.appendChild(el);});
 }
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
 // b.motifUrl changes either way - this only affects how brickHTML/liveMiniHTML render it, so
@@ -2276,7 +2276,26 @@ function renderUnassignedShapes(){
 // on screen) is cheap regardless of what's inside them, so real motifs can now just stay visible
 // and moving/still stay smooth. bricks[] only gets its real x/y - and a single reconciling
 // render() - once the gesture actually ends; a plain tap never touches the DOM at all here.
-function startDrag(e,id){e.preventDefault();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');let moved=false;
+// Double-tap-to-duplicate used to rely on the browser's native 'dblclick' event, which never
+// actually fired on iPad: e.preventDefault() on pointerdown (needed below to stop iOS turning a
+// drag into a text-selection/page-zoom gesture) also suppresses the synthetic mouse events iOS
+// derives from touch, and dblclick is one of them - so that duplicate gesture only ever worked
+// with a real mouse. Detecting the double-tap ourselves at the pointerdown level sidesteps that
+// entirely (works identically for touch and mouse), and also survives the DOM node under the
+// finger getting replaced by the initial render() below between the two taps, which a native
+// dblclick's own event correlation is liable to lose.
+let lastTapId=null,lastTapTime=0;
+const DOUBLE_TAP_MS=350;
+function startDrag(e,id){e.preventDefault();
+ const now=Date.now();
+ if(lastTapId===id && now-lastTapTime<DOUBLE_TAP_MS){
+  lastTapId=null;lastTapTime=0;
+  pushHistory();const b=bricks.find(x=>x.id===id);if(!b)return;
+  const n=cloneBrick(b,6,6);bricks.push(n);selected=n.id;render();syncControls();renderUnassignedShapes();
+  return;
+ }
+ lastTapId=id;lastTapTime=now;
+ pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');let moved=false;
  const pressEl=()=>document.querySelector('.brick[data-id="'+id+'"]:not(.clone)');
  const warnTimer=setTimeout(()=>{if(!moved)pressEl()?.classList.add('pressHold');},280);
  const killTimer=setTimeout(()=>{if(!moved){bricks=bricks.filter(x=>x.id!==id);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();}},650);
