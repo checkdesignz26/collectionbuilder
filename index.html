@@ -2036,7 +2036,7 @@ function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repea
 // two get their own real (non-STAGE-based) column/row spacing derived straight from the brick's own
 // w/h below, same in spirit to how diamond gets its own diagonal-lattice half-step.
 function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y:ty*rowSpacing+(tx%2!==0?rowSpacing/2:0)};}
-function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,STAGE*.45,STAGE*.5196);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,STAGE*.40,STAGE*.72);} return {x:tx*STAGE,y:ty*STAGE};}
+function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,STAGE*.45,STAGE*.5196);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,STAGE*.48,STAGE*.72);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
 function getPatternScale(t=texture){return Math.max(25,Math.min(200,+(t&&t.patternScale!=null?t.patternScale:100)));}
@@ -2128,9 +2128,10 @@ let lastBgSnap=null,lastClassicSnap=null;
 function renderTessGuide(backdrop,scale,origin,stagePx){
  if(tilingEngine!=='hexagon'&&tilingEngine!=='ogee')return;
  const isHex=tilingEngine==='hexagon';
- const colSpacing=isHex?STAGE*.45:STAGE*.40;
+ const colSpacing=isHex?STAGE*.45:STAGE*.48;
  const rowSpacing=isHex?STAGE*.5196:STAGE*.72;
- const wUnits=(isHex?60:40)*10,hUnits=(isHex?51.96:72)*10;
+ const wUnits=(isHex?60:64)*10,hUnits=(isHex?51.96:72)*10;
+ const guideColor=isHex?'rgba(30,30,40,.14)':'rgba(30,30,40,.30)';
  const range=Math.max(6,Math.ceil((repeatSpan||3)*1.6));
  for(let tx=-range;tx<=range;tx++){
   for(let ty=-range;ty<=range;ty++){
@@ -2141,7 +2142,7 @@ function renderTessGuide(backdrop,scale,origin,stagePx){
    if(leftPx+wPx<-40||topPx+hPx<-40||leftPx>stagePx+40||topPx>stagePx+40)continue;
    const g=document.createElement('div');
    g.className='tessGuide';
-   g.style.cssText=`position:absolute;left:${leftPx}px;top:${topPx}px;width:${wPx}px;height:${hPx}px;color:rgba(30,30,40,.30)`;
+   g.style.cssText=`position:absolute;left:${leftPx}px;top:${topPx}px;width:${wPx}px;height:${hPx}px;color:${guideColor}`;
    g.innerHTML=`<div class="shape outline ${isHex?'hexagon':'ogeeLens'}" style="width:100%;height:100%"></div>`;
    backdrop.appendChild(g);
   }
