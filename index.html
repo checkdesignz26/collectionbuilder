@@ -995,6 +995,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     <div class="box"><h2>repeat layouts <span class="livePreviewBadge">Live Preview</span></h2><div class="body">
       <p class="hint">All normal repeat layouts are back here. Pick one without opening Background Studio. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
       <div class="grid2">
+        <button onclick="setPreset('blank',true)">blank canvas</button>
         <button onclick="setPreset('grid',true)">grid</button>
         <button onclick="setPreset('halfdrop',true)">half drop</button>
         <button onclick="setPreset('halfbrick',true)">half brick</button>
@@ -1008,6 +1009,14 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         <button onclick="setPreset('plaid',true)">plaid</button>
         <button onclick="setPreset('chevron',true)">chevron</button>
         <button onclick="setPreset('scallop',true)">scallop</button>
+      </div>
+      <p class="hint" style="margin-top:9px">Tiling style - independent of the layout above, so you can try a different repeat stagger on whatever's currently on the canvas (handy on blank canvas + freely-placed motifs). Remembers its own choice per layout.</p>
+      <div class="grid2" id="tilingEngineRow">
+        <button data-tiling="grid">grid</button>
+        <button data-tiling="halfdrop">half drop</button>
+        <button data-tiling="halfdropflip">half drop flip</button>
+        <button data-tiling="halfbrick">half brick</button>
+        <button data-tiling="diamond" style="grid-column:1/-1">diamond stagger</button>
       </div>
     </div></div>
 
@@ -1275,6 +1284,17 @@ let bricks=[];
 let blueprintStore={};
 let backgroundStore={};
 let classicStore={};
+// Which of the 5 tiling behaviours engineOffset uses (grid/halfdrop/halfdropflip/halfbrick/
+// diamond) - independent of `current` (which bricks/preset is loaded). Named presets that ARE one
+// of those 5 styles set this to match themselves so nothing about their look changes; every other
+// preset (including blank canvas) defaults to plain grid. tilingEngineStore remembers each
+// preset/template's own choice the same way textureStore etc do, so picking a different tiling
+// style for one layout doesn't leak into another - the whole point being a "blank canvas, place
+// motifs freely, then try different repeat styles on them" workflow that isn't tied to a specific
+// named layout's own bricks.
+let tilingEngine='grid';
+let tilingEngineStore={};
+const TILING_ENGINE_TYPES=['grid','halfdrop','halfdropflip','halfbrick','diamond'];
 let history=[], redoStack=[];
 let savedTemplates=[];
 const presets={
@@ -1290,18 +1310,20 @@ const presets={
  gingham:{name:'gingham',bricks:[p('gingham',50,50,100,100,'grey')]},
  plaid:{name:'plaid',bricks:[p('stripeRow',50,25,100,8,'black'),p('stripeRow',50,70,100,8,'grey'),p('stripeRow',25,50,8,100,'black',90),p('stripeRow',70,50,8,100,'grey',90)]},
  chevron:{name:'chevron',bricks:[p('chevron',50,50,100,100,'black')]},
- scallop:{name:'scallop',bricks:[p('scallopRow',50,35,100,18,'black'),p('scallopRow',50,70,100,18,'grey')]}
+ scallop:{name:'scallop',bricks:[p('scallopRow',50,35,100,18,'black'),p('scallopRow',50,70,100,18,'grey')]},
+ blank:{name:'blank canvas',bricks:[]}
 };
 function p(type,x,y,w,h,role='hero',rot=0,flow=''){return {id:'b'+Math.random().toString(36).slice(2),type,x,y,w,h,role,rot,flow};}
-const skeletonOrder=['grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','ogee','hexagon','polka','gingham','plaid','chevron','scallop'];
+const skeletonOrder=['blank','grid','halfdrop','halfbrick','halfdropflip','diamond','tossed','ogee','hexagon','polka','gingham','plaid','chevron','scallop'];
 function copyBricks(arr){return JSON.parse(JSON.stringify(arr)).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
-function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;}}
+function saveCurrentBlueprint(){if(current){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);backgroundStore[current]=window.bgGetSnapshot?window.bgGetSnapshot():null;classicStore[current]=window.tsGetSnapshot?window.tsGetSnapshot():null;tilingEngineStore[current]=tilingEngine;}}
 function sourceBricksFor(key){return blueprintStore[key]?copyBricks(blueprintStore[key]):copyBricks(presets[key].bricks);}
 function sourceTextureFor(key){if(textureStore[key])return copyTexture(textureStore[key]);if(key==='stripe')return stripeDefaultTexture();return blankTexture();}
 function sourceBackgroundFor(key){return backgroundStore[key]!==undefined?backgroundStore[key]:null;}
 function sourceClassicFor(key){return classicStore[key]!==undefined?classicStore[key]:null;}
-function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
-function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
+function sourceTilingEngineFor(key){if(tilingEngineStore[key])return tilingEngineStore[key];return TILING_ENGINE_TYPES.includes(key)?key:'grid';}
+function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
+function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
 function undo(){if(!history.length)return;redoStack.push(capture());restore(history.pop());}
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
@@ -1408,7 +1430,7 @@ function persistSavedTemplates(){return persistAllSavedItems();}
 // thumbnail) to localStorage, debounced so a drag doesn't write on every pointermove frame.
 const AUTOSAVE_KEY='pkmAutosaveV1';
 let autosaveTimer=null;
-function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
+function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
 // Surfaced at most once per session - autosave fires on a debounce after every edit, and a still-
 // oversized session (many distinct motifs across many layouts, even after the dedup above) would
 // otherwise fail and re-warn on every single one of those, which is just noise. One clear heads-up
@@ -1436,12 +1458,14 @@ function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout
 function applySnapshotToLiveState(rawData,statusMsg){
  const data=expandSessionStateFromStorage(rawData);
  current=data.current||'grid';currentTemplateBase=data.currentTemplateBase||null;
- blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};
+ blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};
  bricks=data.bricks;texture=data.texture?copyTexture(data.texture):blankTexture();
  motifShapes=data.motifShapes||{};shapeStyles=data.shapeStyles||{};styleAllLayouts=!!data.styleAllLayouts;showMotifs=data.showMotifs!==false;
  renderTextureUI();
  if(window.bgApplySnapshot)window.bgApplySnapshot(data.background||null);
  if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic||null);
+ tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);
+ syncTilingEngineButtons();
  const motifBtn=document.getElementById('motifDisplayModeBtn');if(motifBtn){motifBtn.textContent='showing: '+(showMotifs?'motifs':'placeholders');motifBtn.classList.toggle('active',!showMotifs);}
  const styleBtn=document.getElementById('styleAllLayoutsBtn');if(styleBtn){styleBtn.textContent='apply to all layouts: '+(styleAllLayouts?'on':'off');styleBtn.classList.toggle('active',styleAllLayouts);}
  selected=bricks[0]?.id||null;
@@ -1834,7 +1858,7 @@ function saveTemplateToFilmstrip(){
  const count=savedTemplates.length+1;
  const name=(presets[current]?.name||'layout')+' '+count;
  const key='saved_'+Date.now();
- savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,colourways:[],activeColourwayId:null});
+ savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,tilingEngine,colourways:[],activeColourwayId:null});
  renderFilmstrip();
  // Let the new card appear immediately, then write to localStorage on the next tick.
  setTimeout(()=>{
@@ -1843,8 +1867,8 @@ function saveTemplateToFilmstrip(){
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
-function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // repeatSpan is always odd (3/5/7/9, driven by the "zoom out" slider) so there's a true centre
 // tile. tileOffsets()/the brick edge-clone range below both walk the same -(n/2)..+(n/2) square, so
 // "zoomed out" just means a bigger square of the same tiles rather than a different code path.
@@ -1857,10 +1881,12 @@ let repeatSpan=3;
 let stageZoom=1;
 function setStageZoom(z){stageZoom=Math.max(1,Math.min(2.5,z));document.getElementById('stageZoomPill').textContent=Math.round(stageZoom*100)+'%';render();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repeatSpan-1)/2;const out=[];for(let ty=-r;ty<=r;ty++)for(let tx=-r;tx<=r;tx++)out.push(tx===0&&ty===0?[0,0,'center']:[tx,ty]);return out;}
-// 'diamond' shares halfbrick's row-by-row horizontal stagger - with two alternating shapes placed
-// side by side in each tile (see the diamond preset below), that stagger is what turns them into a
-// true interlocking diamond/argyle checkerboard, not just a plain grid of the same two shapes.
-function engineOffset(tx,ty){ if(current==='halfdrop'||current==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(current==='halfbrick'||current==='diamond'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
+// Reads tilingEngine, not `current` - decoupled so a blank canvas of freely-placed motifs (or any
+// preset) can preview any of the 5 stagger styles, not just whichever one its own name implies. See
+// tilingEngine's declaration above. 'diamond' shares halfbrick's row-by-row horizontal stagger -
+// with two alternating shapes placed side by side (see the diamond preset), that stagger is what
+// turns them into a true interlocking diamond/argyle checkerboard, not just a plain grid.
+function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'||tilingEngine==='diamond'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
 function getPatternScale(t=texture){return Math.max(25,Math.min(200,+(t&&t.patternScale!=null?t.patternScale:100)));}
@@ -2337,6 +2363,9 @@ document.getElementById('clearAllMotifsBtn').onclick=()=>{
 renderAssignedShapes();
 renderMotifTray();
 function syncZoomOutVisibility(){document.getElementById('zoomOutRow').style.display=mode==='repeat'?'grid':'none';}
+function syncTilingEngineButtons(){document.querySelectorAll('#tilingEngineRow [data-tiling]').forEach(btn=>btn.classList.toggle('active',btn.dataset.tiling===tilingEngine));}
+document.querySelectorAll('#tilingEngineRow [data-tiling]').forEach(btn=>btn.onclick=()=>{pushHistory();tilingEngine=btn.dataset.tiling;syncTilingEngineButtons();render();renderGrid();});
+syncTilingEngineButtons();
 document.getElementById('repeatBtn').onclick=()=>{mode='repeat';repeatBtn.classList.add('active');singleBtn.classList.remove('active');syncZoomOutVisibility();render();};document.getElementById('singleBtn').onclick=()=>{mode='single';singleBtn.classList.add('active');repeatBtn.classList.remove('active');syncZoomOutVisibility();render();};
 syncZoomOutVisibility();
 // Zoom out grows the same live, editable grid rather than opening a separate preview: each step
@@ -2395,13 +2424,15 @@ addDotBtn.onclick=()=>{pushHistory();const b=selectedBrick();const base=b&&b.typ
 function resetCurrentTemplate(){
   const saved=savedTemplates.find(t=>t.key===current);
   const base=(presets[current]?current:(saved&&saved.base)||'grid');
-  if(presets[current]){delete blueprintStore[current]; delete textureStore[current]; delete backgroundStore[current]; delete classicStore[current];}
+  if(presets[current]){delete blueprintStore[current]; delete textureStore[current]; delete backgroundStore[current]; delete classicStore[current]; delete tilingEngineStore[current];}
   current=base;
   bricks=copyBricks(presets[base].bricks||[]);
   texture=(base==='stripe')?stripeDefaultTexture():blankTexture();
   if(base==='stripe')texture.enabled=true;
   if(window.bgApplySnapshot)window.bgApplySnapshot(null);
   if(window.tsApplySnapshot)window.tsApplySnapshot(null);
+  tilingEngine=TILING_ENGINE_TYPES.includes(base)?base:'grid';
+  syncTilingEngineButtons();
   cmResetPanelControls();
   selected=bricks[0]?.id||null;
   document.getElementById('currentName').textContent=presets[base].name;
