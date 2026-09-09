@@ -4507,9 +4507,15 @@ function bgOrganicEdge(t,seed,amp){
  return (v/BG_EDGE_WSUM)*amp;
 }
 function drawWatercolour(ctx,rec){
-  // v68: unmistakable soft watercolour wash.
-  // Broad overlapping pigment pools with enough tonal variation to read
-  // clearly in the greyscale thumbnail and the main preview.
+  // v69: the old version's blobs were sized 2-4.8x scale (up to 860px radius on a 720px canvas at
+  // default settings) with a slow, evenly-fading gradient - a single blob's core could cover most
+  // of the tile, and a dozen overlapping ones like that in 'multiply' just averaged into one flat
+  // soft vignette with no visible pool boundaries anywhere, which read as "foggy gradient" rather
+  // than "watercolour blobs" however saturated the colour was. Real washes look the way they do
+  // because of two things this lacked: pools stay small enough relative to the page that you can
+  // actually see several of them, and pigment migrates outward as the water dries, concentrating
+  // into a visibly darker ring right at each pool's edge (the classic "bloom"/cauliflower marking)
+  // instead of just fading smoothly to nothing.
   let R=rng((rec.seed||1)+6363);
   const strength=Math.max(0,Math.min(1,(rec.opacity==null?82:rec.opacity)/100));
   const soft=Math.max(.30,Math.min(1,(rec.softness==null?72:rec.softness)/100));
@@ -4519,7 +4525,7 @@ function drawWatercolour(ctx,rec){
   ctx.save();
   ctx.globalCompositeOperation='multiply';
 
-  function blob(cx,cy,r,a,edge=false){
+  function blob(cx,cy,r,a,bloom){
     const bumps=48;
     // Each blob gets its own edge-noise seed from its centre, so neighbouring blobs bleed
     // differently rather than all wobbling in lockstep.
@@ -4527,50 +4533,56 @@ function drawWatercolour(ctx,rec){
     for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
       const x=cx+ox,y=cy+oy;
       const g=ctx.createRadialGradient(x,y,0,x,y,r);
-      // Strong central pigment, soft diluted middle, feathered edge.
-      g.addColorStop(0,rgba(wash,a*(.72+.10*soft)));
-      g.addColorStop(.22,rgba(wash,a*(.52+.08*soft)));
-      g.addColorStop(.50,rgba(wash,a*(.28+.06*soft)));
-      g.addColorStop(.76,rgba(wash,a*.10));
+      // Thinner, water-diluted centre; pigment builds outward and peaks in a visible bloom ring
+      // just inside the edge (bloom, 0-1, how pronounced that ring is) before a sharp cutoff -
+      // rather than the old version's monotonic centre-out fade, which read as a soft blur.
+      g.addColorStop(0,rgba(wash,a*(.38+.10*soft)));
+      g.addColorStop(.30,rgba(wash,a*(.48+.08*soft)));
+      g.addColorStop(.58,rgba(wash,a*(.42+.06*soft)));
+      g.addColorStop(.80,rgba(wash,a*(.55+.35*bloom)));
+      g.addColorStop(.94,rgba(wash,a*(.62+.38*bloom)));
       g.addColorStop(1,rgba(wash,0));
       ctx.fillStyle=g;
       ctx.beginPath();
       for(let i=0;i<bumps;i++){
         const t=i/bumps*Math.PI*2;
-        const rr=r*(0.78+bgOrganicEdge(t,edgeSeed,0.26));
+        const rr=r*(0.74+bgOrganicEdge(t,edgeSeed,0.36));
         if(i===0)ctx.moveTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
         else ctx.lineTo(x+Math.cos(t)*rr,y+Math.sin(t)*rr);
       }
       ctx.closePath();ctx.fill();
-      if(edge){
-        ctx.strokeStyle=rgba(wash,a*.16);
-        ctx.lineWidth=Math.max(1.5,r*.012);
-        ctx.stroke();
-      }
     }}
   }
 
-  // Large pools cover the tile so the preview never looks blank.
-  const largeCount=10+Math.round(dens/14);
+  // Large pools, sized so several stay individually visible on the tile instead of one blob's
+  // core swallowing the whole canvas - fewer of them, but each with real presence.
+  const largeCount=5+Math.round(dens/16);
   for(let i=0;i<largeCount;i++){
-    blob(R()*W,R()*H,scale*(2.0+R()*2.8),strength*(.28+R()*.14),i%3===0);
+    blob(R()*W,R()*H,scale*(.45+R()*.55),strength*(.55+R()*.35),.55+R()*.4);
   }
 
-  // Medium blooms create the characteristic layered wash variation.
-  const mediumCount=14+Math.round(dens/4);
+  // Medium blooms fill the gaps between the large pools with the same bloom-ring structure at a
+  // smaller size, so the tile doesn't read as isolated dots on bare paper.
+  const mediumCount=10+Math.round(dens/5);
   for(let i=0;i<mediumCount;i++){
-    blob(R()*W,R()*H,scale*(.75+R()*1.5),strength*(.12+R()*.08),false);
+    blob(R()*W,R()*H,scale*(.16+R()*.28),strength*(.35+R()*.30),.4+R()*.4);
   }
 
-  // A few very pale lifted areas keep it painterly rather than a flat fill.
+  // Small droplets add the fine granulation real pigment leaves as it settles unevenly.
+  const smallCount=16+Math.round(dens/2);
+  for(let i=0;i<smallCount;i++){
+    blob(R()*W,R()*H,scale*(.045+R()*.09),strength*(.30+R()*.30),.2+R()*.3);
+  }
+
+  // A few pale lifted areas keep it painterly rather than a flat fill.
   ctx.globalCompositeOperation='screen';
-  for(let i=0;i<6+Math.round(dens/15);i++){
-    const cx=R()*W,cy=R()*H,r=scale*(1.0+R()*1.6);
+  for(let i=0;i<5+Math.round(dens/18);i++){
+    const cx=R()*W,cy=R()*H,r=scale*(.5+R()*.9);
     for(let ox=-W;ox<=W;ox+=W){for(let oy=-H;oy<=H;oy+=H){
       const x=cx+ox,y=cy+oy;
       const g=ctx.createRadialGradient(x,y,0,x,y,r);
-      g.addColorStop(0,rgba(rec.base||'#f2f2f2',.13));
-      g.addColorStop(.65,rgba(rec.base||'#f2f2f2',.045));
+      g.addColorStop(0,rgba(rec.base||'#f2f2f2',.16));
+      g.addColorStop(.65,rgba(rec.base||'#f2f2f2',.05));
       g.addColorStop(1,rgba(rec.base||'#f2f2f2',0));
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
     }}
