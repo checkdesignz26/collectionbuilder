@@ -1321,15 +1321,15 @@ const presets={
  // "diamond in the square", not two shapes side by side pretending to checkerboard.
  diamond:{name:'diamond repeat',bricks:[p('diamond',50,50,70.7,70.7,'hero')]},
  tossed:{name:'tossed',bricks:[p('arrowOval',30,24,22,14,'hero',-20,'→'),p('oval',72,30,18,12,'secondary',35,'→'),p('diamond',38,68,13,13,'filler',15),p('circle',78,78,10,10,'accent')]},
- // A single ogeeLens (pointed lens/quatrefoil), sized so its tip-to-tip height and widest-point
- // width exactly match the ogee tiling engine's row/column spacing (see engineOffset) - so each
- // copy's top/bottom tips touch the copies above/below in the same column, and its widest point
- // touches the offset neighbouring columns' widest points, weaving into a continuous ogee trellis
- // instead of 5 lenses scattered on a plain grid.
- ogee:{name:'ogee',bricks:[p('ogeeLens',50,50,40,72,'hero')]},
- // A single flat-top hexagon, sized so its point-to-point width and flat-to-flat height match the
- // hexagon tiling engine's spacing - true honeycomb, not 5 ovals standing in for hexagons.
- hexagon:{name:'hexagon',bricks:[p('hexagon',50,50,60,51.96,'hero')]},
+ // Ogee is a fixed structural lattice, not a placeable brick - see renderTessGuide, which draws
+ // the whole trellis straight into the non-interactive backdrop. No starter brick here (same as
+ // blank canvas): pick "ogee stagger" to see the trellis, then place your own motifs on top with
+ // "place freely" and they'll repeat across the same lattice.
+ ogee:{name:'ogee',bricks:[]},
+ // Hexagon is a fixed structural honeycomb, not a placeable brick - see renderTessGuide. No
+ // starter brick (same as blank canvas): pick "hexagon stagger" to see the honeycomb, then place
+ // your own motifs on top with "place freely" and they'll repeat across the same lattice.
+ hexagon:{name:'hexagon',bricks:[]},
  polka:{name:'polka',bricks:[p('circle',20,20,10,10,'black'),p('circle',70,20,10,10,'black'),p('circle',45,50,10,10,'black'),p('circle',20,80,10,10,'black'),p('circle',70,80,10,10,'black')]},
  gingham:{name:'gingham',bricks:[p('gingham',50,50,100,100,'grey')]},
  plaid:{name:'plaid',bricks:[p('stripeRow',50,25,100,8,'black'),p('stripeRow',50,70,100,8,'grey'),p('stripeRow',25,50,8,100,'black',90),p('stripeRow',70,50,8,100,'grey',90)]},
@@ -2117,6 +2117,36 @@ let lastBackdropSig=null;
 // the render wrapper below) instead of asking Background/Classics Studio to
 // clone their recipe a second time for the exact same frame.
 let lastBgSnap=null,lastClassicSnap=null;
+// Hexagon/ogee are fixed structural repeats, not a "brick" the way every other layout's shapes
+// are - the whole point of a honeycomb/ogee tile is that the cells stay put, so nothing can drag
+// or resize one cell out of the tessellation and leave a gap behind. They render entirely in the
+// non-interactive backdrop layer instead (tileGuide/texture tiles already live here for the same
+// reason - see ensureStageLayers above), using the exact same shape + spacing already verified
+// gap-free. The hexagon/ogee PRESETS themselves carry no bricks at all (see presets.hexagon/ogee) -
+// place your own motifs with "place freely", and while this tiling style is active they'll repeat
+// across the same honeycomb/ogee lattice the guide is showing, landing on top of it.
+function renderTessGuide(backdrop,scale,origin,stagePx){
+ if(tilingEngine!=='hexagon'&&tilingEngine!=='ogee')return;
+ const isHex=tilingEngine==='hexagon';
+ const colSpacing=isHex?STAGE*.45:STAGE*.40;
+ const rowSpacing=isHex?STAGE*.5196:STAGE*.72;
+ const wUnits=(isHex?60:40)*10,hUnits=(isHex?51.96:72)*10;
+ const range=Math.max(6,Math.ceil((repeatSpan||3)*1.6));
+ for(let tx=-range;tx<=range;tx++){
+  for(let ty=-range;ty<=range;ty++){
+   const off=tessColRowOffset(tx,ty,colSpacing,rowSpacing);
+   const centerX=off.x+500,centerY=off.y+500;
+   const leftPx=(centerX-wUnits/2+origin)*scale,topPx=(centerY-hUnits/2+origin)*scale;
+   const wPx=wUnits*scale,hPx=hUnits*scale;
+   if(leftPx+wPx<-40||topPx+hPx<-40||leftPx>stagePx+40||topPx>stagePx+40)continue;
+   const g=document.createElement('div');
+   g.className='tessGuide';
+   g.style.cssText=`position:absolute;left:${leftPx}px;top:${topPx}px;width:${wPx}px;height:${hPx}px;color:rgba(30,30,40,.30)`;
+   g.innerHTML=`<div class="shape outline ${isHex?'hexagon':'ogeeLens'}" style="width:100%;height:100%"></div>`;
+   backdrop.appendChild(g);
+  }
+ }
+}
 function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');const viewport=document.getElementById('stageViewport');viewport.className='stageViewport '+(mode==='repeat'?'repeat':'single');const vpRect=viewport.getBoundingClientRect();const baseSize=Math.min(vpRect.width||720, vpRect.height||720);const zoomedPx=Math.round(baseSize*stageZoom);stage.style.width=zoomedPx+'px';stage.style.height=zoomedPx+'px';const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const repeatHalf=(repeatSpan-1)/2; const scale=(mode==='repeat'?size/(STAGE*repeatSpan):size/STAGE); const origin=mode==='repeat'?repeatHalf*STAGE:0;
  const {backdrop,bricksLayer}=ensureStageLayers(stage);
  // Belt-and-braces: the bricks below are the one thing that must always redraw
@@ -2133,6 +2163,7 @@ function render(){const stage=document.getElementById('stage');stage.className='
    backdrop.innerHTML='';
    renderTextureTiles(backdrop,scale,origin);
    tileOffsets().forEach(([tx,ty,center])=>{const off=engineOffset(tx,ty);const guide=document.createElement('div');guide.className='tileGuide '+(center?'center':'');guide.style.left=((off.x+origin)*scale)+'px';guide.style.top=((off.y+origin)*scale)+'px';guide.style.width=(STAGE*scale)+'px';guide.style.height=(STAGE*scale)+'px';if(tilingEngine==='diamond'){const dg=document.createElement('div');dg.className='diamondGuide';guide.appendChild(dg);}backdrop.appendChild(guide);});
+   renderTessGuide(backdrop,scale,origin,size);
    lastBackdropSig=backdropSig;
   }
  }catch(e){
