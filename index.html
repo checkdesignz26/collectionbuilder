@@ -4025,7 +4025,14 @@ function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.
  // Sizing the texture tile to the SHAPE's own footprint instead means the same blobs repeat
  // several times across that shape, so the actual multi-blob texture is visible again.
  const shapeFootprint = l.kind==='dot' ? ww*2 : l.kind==='square' ? (l.width/100)*cell : l.kind==='diamond' ? ww*2.2 : ww;
- ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',Math.min(cell,200,Math.max(shapeFootprint*1.2,40)),st)||(l.color||'#000');
+ // Watercolour specifically needs a bigger floor than the other texture types: its blobs are drawn
+ // with several size tiers so a big background canvas always shows a handful of them, but squeezing
+ // that whole multi-tier pattern down into a tile as small as 40px crushed everything but one
+ // oversized blob per repeat, reading as a tight repeating blotch/marble pattern rather than
+ // watercolour. Other texture types (paper grain, speckles, chalk) are fine-grained by design and
+ // still want that small floor, so this only raises it for watercolour.
+ const texFloor=(st&&st.surfaceTexture&&st.surfaceTexture.type==='watercolour')?110:40;
+ ctx.fillStyle=tsGetSurfaceTexturePattern(ctx,l.color||'#000',Math.min(cell,200,Math.max(shapeFootprint*1.2,texFloor)),st)||(l.color||'#000');
  let pos=(l.pos||0)/100*cell;if(l.kind==='dot'){
  // v56: one layer = one big polka dot. Mirror copies around the tile edges make it seamless
  // without turning the starter into one big grouped dot field.
