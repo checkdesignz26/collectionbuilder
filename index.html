@@ -1301,12 +1301,14 @@ const presets={
  halfbrick:{name:'half brick',bricks:[p('arrowOval',22,28,23,15,'hero'),p('arrowOval',78,28,23,15,'hero'),p('oval',50,62,20,13,'secondary'),p('circle',20,85,9,9,'filler'),p('circle',80,85,9,9,'filler')]},
  halfdropflip:{name:'half drop flip',bricks:[p('arrowOval',50,20,24,15,'hero',0,'→'),p('arrowOval',20,55,20,13,'secondary',-25,'→'),p('arrowOval',80,55,20,13,'secondary',25,'→'),p('diamond',50,82,12,12,'filler')]},
  // A single diamond shape sized so it's inscribed in the square tile - its 4 points touch the
- // midpoints of the tile's 4 edges (w=h=100/sqrt(2)=~70.7%, which after the diamond shape's own
- // 45deg CSS rotation gives a tip-to-tip span of exactly 100%, i.e. one full tile). Combined with
- // the diagonal-lattice diamond tiling engine (see engineOffset), each copy's points land exactly
- // on its diagonal neighbour's points, interlocking into a continuous diamond trellis - a real
- // "diamond in the square", not two shapes side by side pretending to checkerboard.
- diamond:{name:'diamond repeat',bricks:[p('diamond',50,50,70.7,70.7,'hero')]},
+ // midpoints of the tile's 4 edges. w=h=100 here means exactly what it means for every other
+ // shape (its own tip-to-tip footprint) - drawBrickShape compensates for the diamond's internal
+ // 45deg rotation internally now, so this preset doesn't need to pre-shrink by 1/sqrt(2) itself
+ // the way the old CSS-rotated-square version did. Combined with the diagonal-lattice diamond
+ // tiling engine (see engineOffset), each copy's points land exactly on its diagonal neighbour's
+ // points, interlocking into a continuous diamond trellis - a real "diamond in the square", not
+ // two shapes side by side pretending to checkerboard.
+ diamond:{name:'diamond repeat',bricks:[p('diamond',50,50,100,100,'hero')]},
  tossed:{name:'tossed',bricks:[p('arrowOval',30,24,22,14,'hero',-20,'→'),p('oval',72,30,18,12,'secondary',35,'→'),p('diamond',38,68,13,13,'filler',15),p('circle',78,78,10,10,'accent')]},
  // Ogee is a fixed structural lattice, not a placeable brick - see renderTessGuide, which draws
  // the whole trellis straight into the non-interactive backdrop. No starter brick here (same as
@@ -1635,10 +1637,18 @@ function drawHeartPath(ctx,bw,bh){
 // ogeeLens use a coloured-shape-with-white-inset trick for their outline look
 // (matching their :before/:after CSS); star/heart are solid fills.
 function drawBrickShape(ctx,type,bwPx,bhPx,color){
- const hw=bwPx/2,hh=bhPx/2;
+ // A brick's own w/h means its actual on-screen footprint everywhere else (selection box,
+ // click/drag hit-testing, resize handles all use bwPx/bhPx directly, with no idea a rotation is
+ // about to happen here) - but 'diamond' draws a SQUARE then rotates it 45deg, and a square's own
+ // corner-to-corner reach after that rotation is sqrt(2) times its side length. Left uncompensated,
+ // the diamond's rendered tips end up ~41% past its own selection box/hit box on every side.
+ // Shrinking the square by 1/sqrt(2) before rotating makes its rotated reach land exactly on bwPx/
+ // bhPx instead, so the diamond's true footprint finally matches what everything else thinks it is.
+ const isDiamond=type==='diamond';
+ const hw=(isDiamond?bwPx/Math.SQRT2:bwPx)/2,hh=(isDiamond?bhPx/Math.SQRT2:bhPx)/2;
  const strokeW=Math.max(1,Math.min(bwPx,bhPx)*0.045);
  ctx.save();
- if(type==='diamond')ctx.rotate(Math.PI/4);
+ if(isDiamond)ctx.rotate(Math.PI/4);
  if(type==='star'||type==='heart'){
   ctx.fillStyle=color;
   if(type==='heart')drawHeartPath(ctx,bwPx,bhPx);else fillPolyPath(ctx,pctPoly(SHAPE_POLY_PCT.star,bwPx,bhPx));
