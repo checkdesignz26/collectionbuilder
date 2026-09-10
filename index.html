@@ -2333,6 +2333,22 @@ function render(){const stage=document.getElementById('stage');stage.className='
   if(!clone&&selected===b.id)selGeom=g;
  });
  if(selGeom)drawSelectionUI(ctx,bricks.find(x=>x.id===selected),selGeom.cx,selGeom.cy,selGeom.bwPx,selGeom.bhPx);
+ // An empty canvas (freshest on "free layout", but also reachable by deleting every brick from
+ // any other layout) used to just be a plain white square - indistinguishable from something
+ // broken. A centred hint makes it read as an intentional starting point instead, and disappears
+ // the moment the first brick lands (this whole block is skipped once bricks.length>0).
+ if(!bricks.length){
+  ctx.save();
+  ctx.fillStyle='rgba(120,108,96,.4)';
+  const fontPx=Math.max(11,Math.min(16,size*0.022));
+  ctx.font=`600 ${fontPx}px -apple-system,BlinkMacSystemFont,sans-serif`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  const lines=['empty canvas','add a placeholder shape, or','place a motif freely, to start'];
+  const lineH=fontPx*1.5;
+  const startY=size/2-(lines.length-1)*lineH/2;
+  lines.forEach((line,i)=>ctx.fillText(line,size/2,startY+i*lineH));
+  ctx.restore();
+ }
 }
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
 // b.motifUrl changes either way - this only affects how brickHTML/liveMiniHTML render it, so
