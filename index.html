@@ -2003,7 +2003,15 @@ function saveTemplateToFilmstrip(){
  },0);
 }
 function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+// Diamond/hexagon/ogee tessellate on their own offset lattice rather than a plain square grid,
+// so their one "live" tile reads noticeably smaller in the default 3x3 repeat view than a
+// grid/halfdrop tile does at the same zoom - there's more surrounding tessellation to fit in the
+// same space. Single-tile mode shows that same square at full canvas size (edge-clone slivers
+// still hint at the neighbours), so jumping to it automatically when one of these three becomes
+// active gives you the bigger working square without an extra tap, while every other layout's
+// mode preference is left alone.
+function autoSingleTileFor(engine){if(engine==='diamond'||engine==='hexagon'||engine==='ogee')mode='single';}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);autoSingleTileFor(tilingEngine);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // The "repeat layouts" grid used to be three separate pieces (a standalone "free layout" button, the
 // layout grid itself, and a whole second "tiling style" grid) because picking a repeat structure and
 // deciding whether to fill it with that layout's placeholder shapes were bundled into one action -
@@ -2022,6 +2030,7 @@ function selectLayout(key){
  if(current!=='blank')setPreset('blank',true);
  else pushHistory();
  tilingEngine=newTiling;
+ autoSingleTileFor(tilingEngine);
  syncTilingEngineButtons();
  render();renderGrid();
 }
