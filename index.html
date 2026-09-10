@@ -1904,9 +1904,21 @@ function slugName(s){return (String(s||'pattern').replace(/[^a-z0-9]+/gi,'-').re
 // (name-dedup, the download panel, bundling into one ZIP) only exist once -
 // each caller just supplies its own list, which indices are selected, how to
 // render one item to a canvas at a given size, and a label for the toast/names.
+// Full-res zip batches are what actually blow the memory budget (dozens of large
+// canvases rendered back to back), not the per-tile export size - and the export size
+// is the one thing designers need left alone for real print use. So instead of shrinking
+// dimensions further, cap how many patterns a single zip run can take at once; past that,
+// ask the user to zip in smaller batches rather than silently dropping most of a big
+// selection (which is what used to happen - a "52 selected" export that quietly produced
+// a 4-file zip with no error, because most of them failed under memory pressure).
+const MAX_ZIP_BATCH=20;
 async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
  const count=selectedIdx.size;
  if(!count)return;
+ if(count>MAX_ZIP_BATCH){
+  alert(`You've selected ${count} ${label}s. To keep large ZIP exports from failing on memory-constrained devices (like an iPad), please select ${MAX_ZIP_BATCH} or fewer at a time - download in a few smaller batches instead.`);
+  return;
+ }
  window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
   const files=[],used=new Set(),failed=[];
   // Bulk exports can mean dozens of large canvases rendered back to back - on a
