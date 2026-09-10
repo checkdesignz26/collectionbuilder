@@ -209,7 +209,16 @@ body.theme-light .tsLockBtn{background:rgba(232,130,159,.14)!important;border-co
   .tsHeader{padding:8px 10px!important;}
   .tsHeader h2{font-size:18px!important;}
   .tsHeader p{display:none!important;}
-  .tsBody{grid-template-columns:180px minmax(380px,1fr) 220px 235px!important;overflow-x:auto!important;}
+  /* At this width the header's buttons (apply/save/download/undo/redo/reset/background
+     studio/back) don't fit on one line, so .topActions used to wrap onto a second line - but
+     .tsModal's grid "auto" row-sizing kept sizing the header row to just the title's single
+     line (a real mismatch between a wrapping flex child's true height and what the ancestor
+     grid measured for it), so the wrapped second line overflowed upward past the header's own
+     box and the modal's overflow:hidden silently clipped the top of the title and first button
+     row. Keeping the header single-line and letting the button row scroll horizontally instead
+     of wrapping sidesteps that mismatch entirely - the header's height stays exactly what it
+     always was, nothing is clipped, and every button is still one swipe away. */
+  .tsHeader .topActions{flex-wrap:nowrap!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;justify-content:flex-start!important;max-width:100%!important;}
   .tsPanel{padding:7px!important;}
   .tsPreviewPanel{padding:8px!important;}
   #tsPreview{width:min(100%,460px)!important;max-width:460px!important;max-height:calc(100dvh - 310px)!important;}
@@ -3770,7 +3779,7 @@ refreshHeroThumbs();
         </div>
         </div></div>
         <div class="tsBox" id="tsHandDrawnBox"><h3>Hand-Drawn Look</h3><div class="tsPad">
-        <p class="tsHint" style="margin-top:0">Give straight stripes and perfect dots a gentle hand-drawn wobble. The wobble is one exact repeat per tile, so it lines back up with itself at every seam - no visible joins at any repeat size.</p>
+        <p class="tsHint" style="margin-top:0">Give straight stripes, perfect dots and chevron zigzags a gentle hand-drawn wobble. The wobble is one exact repeat per tile, so it lines back up with itself at every seam - no visible joins at any repeat size.</p>
         <div class="tsToggleLine"><span>enable wobble</span><div class="tsToggle" id="tsWobbleToggle"><i></i></div></div>
         <div class="tsRow" id="tsWobbleIntensityRow" style="display:none"><label>wobble</label><input id="tsWobbleAmount" type="range" min="5" max="100" value="35"></div>
         </div></div>
@@ -4388,10 +4397,17 @@ function tsChevronWave(phase,round){
 // by the same zigzag offset (a chevron band keeps a constant thickness as it snakes back and
 // forth) rather than wobbling independently. periodPx is the on-screen length of one full zigzag
 // cycle; amp is how far the band swings side to side.
-function tsChevronBandPath(ctx,center,halfWidth,yFrom,yTo,periodPx,amp,round){
+function tsChevronBandPath(ctx,center,halfWidth,yFrom,yTo,periodPx,amp,round,wobSeed,wobAmp){
  const steps=Math.max(48,Math.round((yTo-yFrom)/Math.max(1,periodPx)*24));
  const left=[],right=[];
- for(let i=0;i<=steps;i++){const y=yFrom+(yTo-yFrom)*i/steps;const off=tsChevronWave(y/periodPx,round)*amp;left.push([center-halfWidth+off,y]);right.push([center+halfWidth+off,y]);}
+ // The zigzag itself (tsChevronWave) stays a clean, regular wave - that's what reads as an
+ // intentional chevron rather than noise. Hand-drawn wobble is a SEPARATE perturbation added on
+ // top, exactly like tsWobblyBandPath does for a straight stripe: a shared "wander" term (both
+ // edges move together, so the band keeps its width) plus a smaller independent "breathe" term
+ // per edge. t runs in cell units (y/yTo's cell, via the caller's period-derived phase already
+ // folding into tsChevronWave) so it stays seamless at every tile seam, same guarantee as stripe.
+ const breatheAmp=wobAmp?Math.min(wobAmp*0.35,halfWidth*0.4):0;
+ for(let i=0;i<=steps;i++){const y=yFrom+(yTo-yFrom)*i/steps;const off=tsChevronWave(y/periodPx,round)*amp;const t=y/periodPx;const wander=wobAmp?tsWobbleValue(t,wobSeed,wobAmp):0;const breatheL=wobAmp?tsWobbleValue(t,wobSeed+97,breatheAmp):0;const breatheR=wobAmp?tsWobbleValue(t,wobSeed+197,breatheAmp):0;left.push([center-halfWidth+off+wander-breatheL,y]);right.push([center+halfWidth+off+wander+breatheR,y]);}
  ctx.beginPath();
  ctx.moveTo(left[0][0],left[0][1]);
  for(let i=1;i<left.length;i++)ctx.lineTo(left[i][0],left[i][1]);
@@ -4483,7 +4499,7 @@ else{
    // that case, so -cell..cell gives a comfortable 2x margin without sampling 6 cells' worth of
    // path that can never be seen (the straight fillRect below keeps the old generous span since
    // its cost is negligible either way).
-   if(isChevron){tsChevronBandPath(ctx,offset+dx,ww/2,-cell,cell,chevronPeriod,chevronAmp,chevronRound);ctx.fill();}
+   if(isChevron){tsChevronBandPath(ctx,offset+dx,ww/2,-cell,cell,chevronPeriod,chevronAmp,chevronRound,idx*31+11,wobAmp);ctx.fill();}
    else if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2,-cell,cell,cell,idx*31+11,wobAmp);ctx.fill();}
    else ctx.fillRect(offset + dx - ww/2, -cell*3, ww, cell*6);
    if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>{
@@ -4491,7 +4507,7 @@ else{
     // (widened by the margin) rather than a straight rectangle, or the highlight reads as a stray
     // straight line cutting across a wavy/zigzag stripe - especially glaring on a white/near-
     // invisible layer, where that straight highlight becomes the only visible trace of the layer.
-    if(isChevron){tsChevronBandPath(ctx,offset+dx,ww/2+m,-cell,cell,chevronPeriod,chevronAmp,chevronRound);}
+    if(isChevron){tsChevronBandPath(ctx,offset+dx,ww/2+m,-cell,cell,chevronPeriod,chevronAmp,chevronRound,idx*31+11,wobAmp);}
     else if(wobAmp){tsWobblyBandPath(ctx,offset+dx,ww/2+m,-cell,cell,cell,idx*31+11,wobAmp);}else{ctx.beginPath();ctx.rect(offset+dx-ww/2-m,-cell*3,ww+m*2,cell*6);}
     ctx.stroke();
    });}
@@ -5572,11 +5588,16 @@ window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercol
   width:calc(100vw - 8px)!important;
   height:calc(100dvh - 8px)!important;
   border-radius:18px!important;
-  grid-template-rows:46px minmax(0,1fr) 152px!important;
+  grid-template-rows:auto minmax(0,1fr) 152px!important;
 }
+/* v49 pinned this to a fixed 46px (height, not just min-height) to steal room back for the
+   preview canvas - a since-added header button ("background studio", 58px tall with its icon)
+   now overflows that fixed box, and since .tsModal clips overflow, its top few pixels were
+   silently cut off along with the header title's. min-height alone keeps the same compact
+   default whenever content fits in 46px, but lets the row grow instead of clipping when it
+   doesn't. */
 #textureStudioOverlay .tsHeader{
   min-height:46px!important;
-  height:46px!important;
   padding:5px 12px!important;
 }
 #textureStudioOverlay .tsHeader h2{font-size:22px!important;}
