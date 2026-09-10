@@ -1013,24 +1013,6 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <button id="clearAllMotifsBtn" class="full" style="margin-top:7px"><svg class="btnIcon"><use href="#i-trash"/></svg>clear all motif assignments</button>
     </div></div>
 
-    <div class="box"><h2>repeat layouts <span class="livePreviewBadge">Live Preview</span></h2><div class="body">
-      <p class="hint" style="margin:0 0 7px">Pick a repeat structure - where placeholder shapes sit and how the tile repeats (grid, half drop, hexagon...). This is not the same as "saved patterns" below, which are your own saved snapshots - picking a layout here doesn't touch those. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
-      <label style="display:flex;align-items:center;gap:8px;margin:0 0 9px;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)">
-        <input type="checkbox" id="layoutPlaceholdersToggle" checked style="width:16px;height:16px">
-        add this layout's placeholder shapes (uncheck to just set the repeat structure and leave the canvas empty for "place freely" above)
-      </label>
-      <div class="grid2">
-        <button onclick="selectLayout('grid')">grid</button>
-        <button onclick="selectLayout('halfdrop')">half drop</button>
-        <button onclick="selectLayout('halfbrick')">half brick</button>
-        <button onclick="selectLayout('halfdropflip')">half drop flip</button>
-        <button onclick="selectLayout('diamond')">diamond repeat</button>
-        <button onclick="selectLayout('tossed')">tossed</button>
-        <button onclick="selectLayout('ogee')">ogee</button>
-        <button onclick="selectLayout('hexagon')">hexagon</button>
-      </div>
-    </div></div>
-
     <div class="box"><h2>textures</h2><div class="body">
       <p class="hint">Open the shared Classics Studio for stripes, dots, checks, plaid, madras and argyle. Background Studio is separate now.</p>
       <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" id="clearBgBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>clear background</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
@@ -1057,6 +1039,10 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <div class="stageZoomRow"><button class="small" id="stageZoomOut">−</button><span class="pill" id="stageZoomPill">100%</span><button class="small" id="stageZoomIn">+</button><button class="small" id="motifDisplayModeBtn" style="margin-left:auto">showing: motifs</button><button class="small" id="stageZoomResetBtn">reset zoom</button></div>
       <div class="stageOuter"><div class="stageViewport repeat" id="stageViewport"><div id="stage" class="repeatStage repeat"></div></div></div>
       <div class="livePreviewHeader"><span class="livePreviewBadge">Live Preview</span><span class="footerNote">every thumbnail below stays in sync with your motifs and sizing as you edit</span></div>
+      <label style="display:flex;align-items:center;gap:8px;margin:9px 0;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)">
+        <input type="checkbox" id="layoutPlaceholdersToggle" checked style="width:16px;height:16px">
+        add this layout's placeholder shapes (uncheck to just set the repeat structure and leave the canvas empty for "place freely")
+      </label>
       <div class="skeletonGrid" id="skeletonGrid"></div>
       <div class="filmstripBlock">
         <div class="filmstripHead"><b>🎞️ saved patterns</b><span class="footerNote" id="savedFilmHint">tap to load · save pattern drops a live preview here</span><button id="savedSelectMode" class="small">select</button><button id="savedSelectAll" class="small hidden">select all</button><button id="savedSelectNone" class="small hidden">deselect all</button><button id="savedDownloadSelected" class="small primary hidden">download selected (zip)</button></div>
@@ -2026,6 +2012,19 @@ function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurr
 // layout at all.
 function selectLayout(key){
  if(document.getElementById('layoutPlaceholdersToggle').checked){setPreset(key,true);return;}
+ // "free layout" itself isn't a tiling engine (it's not in TILING_ENGINE_TYPES) - tapping it
+ // unchecked just means "clear to blank", same as unchecking the box directly below, and must
+ // keep whichever tiling engine was already active rather than falling back to the TILING_ENGINE_
+ // TYPES.includes(key) check further down (which would silently reset it to plain grid).
+ if(key==='blank'){
+  if(current==='blank')return;
+  const keepTiling=tilingEngine;
+  setPreset('blank',true);
+  tilingEngine=keepTiling;
+  syncTilingEngineButtons();
+  render();renderGrid();
+  return;
+ }
  const newTiling=TILING_ENGINE_TYPES.includes(key)?key:'grid';
  if(current!=='blank')setPreset('blank',true);
  else pushHistory();
@@ -2880,7 +2879,7 @@ function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.in
   const classicRec=isLive?(window.tsGetSnapshot?window.tsGetSnapshot():null):sourceClassicFor(key);
   bgClassicHTML=bgClassicMiniLayers(bgRec,classicRec);
  }catch(e){console.warn('thumbnail backdrop failed for',key,e);}
- c.innerHTML=`<div class="mini">${bgClassicHTML}${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{setPreset(key,true);};grid.appendChild(c);});}
+ c.innerHTML=`<div class="mini">${bgClassicHTML}${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{selectLayout(key);};grid.appendChild(c);});}
 // updateLiveMini() used to run its full body - including re-serialising bricks (motifUrl and
 // all) via copyBricks/copyTexture, and rebuilding the mini/filmstrip thumbnails as an HTML string
 // with a real <img src=motifUrl> per brick, then writing it via innerHTML - synchronously on
