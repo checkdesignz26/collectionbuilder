@@ -1719,7 +1719,8 @@ async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx){
 }
 // Vertical/horizontal/diagonal repeating stripe layers from the "texture" panel -
 // a canvas equivalent of stripeGradient()'s repeating-linear-gradient CSS, drawn
-// fresh within each tile's own local box exactly like renderTextureTiles() does.
+// fresh within each tile's own local box. Shared by PNG export and the live stage's
+// backdrop (see renderBackdropOffscreen).
 function drawTextureLayersToCanvas(ctx,textureObj,tilePx){
  if(!textureObj)return;
  if(textureObj.bgEnabled){ctx.fillStyle=hexToRgba(textureObj.bgColor,textureObj.bgOpacity);ctx.fillRect(0,0,tilePx,tilePx);}
@@ -1746,7 +1747,7 @@ function drawTextureLayersToCanvas(ctx,textureObj,tilePx){
 // stripes, every brick) straight onto the export canvas. Background/classic
 // layers are rendered by their own studios (window.bgRenderToTileCanvas /
 // window.tsRenderToTileCanvas) at native resolution and drawn in per tile,
-// same as renderTextureTiles() already does for the on-screen canvas.
+// same as renderBackdropOffscreen() already does for the on-screen canvas.
 async function renderPatternToCanvas(canvas,pxW,pxH,tilePx){
  const ctx=canvas.getContext('2d');
  ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);
@@ -2069,7 +2070,6 @@ function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); i
 function getPatternScale(t=texture){return Math.max(25,Math.min(200,+(t&&t.patternScale!=null?t.patternScale:100)));}
 function stripeGradient(layer,t=texture){const c=hexToRgba(layer.color,layer.opacity);const sf=getPatternScale(t)/100;const w=Math.max(.2,(+layer.width||1)*sf);const g=Math.max(.2,(+layer.gap||1)*sf);const angle=layer.direction==='horizontal'?'0deg':layer.direction==='diagRight'?'45deg':layer.direction==='diagLeft'?'135deg':'90deg';return `repeating-linear-gradient(${angle}, ${c} 0 ${w}%, transparent ${w}% ${w+g}%)`;}
 function textureBackgroundCSS(t){t=t||texture;const parts=[];(t.layers||[]).filter(l=>l.visible!==false).forEach(l=>parts.push(stripeGradient(l,t)));if(t.bgEnabled)parts.push(`linear-gradient(${hexToRgba(t.bgColor,t.bgOpacity)},${hexToRgba(t.bgColor,t.bgOpacity)})`);return parts.length?parts.join(','):'';}
-function renderTextureTiles(stage,scale,origin){if(!texture||(!texture.enabled&&!texture.bgEnabled))return;tileOffsets().forEach(([tx,ty])=>{const off=engineOffset(tx,ty);const tile=document.createElement('div');tile.className='textureTile';tile.style.left=((off.x+origin)*scale)+'px';tile.style.top=((off.y+origin)*scale)+'px';tile.style.width=(STAGE*scale)+'px';tile.style.height=(STAGE*scale)+'px';if(texture.bgEnabled)tile.style.background=hexToRgba(texture.bgColor,texture.bgOpacity);if(texture.enabled){(texture.layers||[]).filter(l=>l.visible!==false).forEach(layer=>{const d=document.createElement('div');d.className='textureLayer';d.style.background=stripeGradient(layer,texture);d.style.backgroundPosition=`${layer.offset||0}% 0`;d.style.mixBlendMode=layer.blend||'normal';tile.appendChild(d);});}stage.appendChild(tile);});}
 function renderTexturePalette(){const box=document.getElementById('texturePalette');if(!box)return;box.innerHTML='';texturePalette.forEach(([name,col])=>{const b=document.createElement('button');b.className='palBtn '+(activeTextureColor===col?'active':'');b.title=name;b.style.background=col;b.onclick=()=>{activeTextureColor=col;document.querySelectorAll('#texturePalette .palBtn').forEach(x=>x.classList.remove('active'));b.classList.add('active');};box.appendChild(b);});}
 function stripeLayerSummary(l,i){const dir={vertical:'vertical',horizontal:'horizontal',diagRight:'diagonal /',diagLeft:'diagonal \\'}[l.direction]||'vertical';return `w:${l.width} gap:${l.gap} · ${dir}`;}
 function stripeLayerPreview(l){return `background:${stripeGradient(l,texture)};background-position:${l.offset||0}% 0;`;}
@@ -2133,13 +2133,60 @@ function bgClassicMiniLayers(bgRec,classicRec){
 // They now live in their own "backdrop" layer that's only rebuilt when a cheap
 // signature of their actual inputs changes, while the (cheaper) bricks layer
 // still rebuilds every render() call as before.
-function ensureStageLayers(stage){
- let backdrop=stage.querySelector(':scope > .stageBackdrop'),bricksLayer=stage.querySelector(':scope > .stageBricks');
- if(!backdrop){backdrop=document.createElement('div');backdrop.className='stageBackdrop';backdrop.style.cssText='position:absolute;inset:0;pointer-events:none;';stage.appendChild(backdrop);}
- if(!bricksLayer){bricksLayer=document.createElement('div');bricksLayer.className='stageBricks';bricksLayer.style.cssText='position:absolute;inset:0;';stage.appendChild(bricksLayer);}
- return {backdrop,bricksLayer};
+// Stage rendering switched from many DOM nodes (a real <div> per brick, times up to 9 for edge
+// clones, torn down and rebuilt via innerHTML='' on every render()) to a single <canvas>. A large
+// uploaded motif PNG used to mean the browser decoding/compositing several full-size <img>
+// elements every drag frame - drawImage from an already-decoded Image is a cheap GPU blit
+// regardless of how many times or how large, which is the whole performance win. The bricks[]
+// data model, engineOffset/tileOffsets tiling math, and every panel/slider that mutates bricks[]
+// are all unchanged - only how the current state gets PAINTED and how taps get HIT-TESTED changed.
+function ensureStageCanvas(stage){
+ let canvas=stage.querySelector(':scope > canvas.stageCanvas');
+ if(!canvas){
+  canvas=document.createElement('canvas');
+  canvas.className='stageCanvas';
+  canvas.style.cssText='position:absolute;inset:0;touch-action:none;';
+  stage.appendChild(canvas);
+  canvas.addEventListener('pointerdown',stageOnPointerDown);
+ }
+ return canvas;
 }
-let lastBackdropSig=null;
+// Background/classic-pattern tile rendering (window.bgRenderToTileCanvas/tsRenderToTileCanvas) and
+// the tessellation guide's edge computation are the expensive part of the backdrop, not the
+// bricks - both get redrawn from scratch on every call with no caching of their own. The old DOM
+// version only ever rebuilt the backdrop when backdropSig changed (mode/scale/texture/tiling
+// engine, NOT bricks) and just left the existing divs alone otherwise; dragging a brick never
+// touched any of that. Reproducing the same caching boundary here - onto an offscreen canvas,
+// blitted into the visible one every frame - is what keeps a drag cheap: recompute the backdrop
+// only when something backdrop-relevant actually changed, then every render() call is just one
+// drawImage of the cached result plus the (also cheap) brick draws on top.
+let _backdropCanvas=null,_backdropSig=null;
+let _lastScale=1,_lastOrigin=0,_lastStageSize=720;
+function renderBackdropOffscreen(scale,origin,size){
+ if(!_backdropCanvas)_backdropCanvas=document.createElement('canvas');
+ if(_backdropCanvas.width!==size||_backdropCanvas.height!==size){_backdropCanvas.width=size;_backdropCanvas.height=size;}
+ const bctx=_backdropCanvas.getContext('2d');
+ bctx.clearRect(0,0,size,size);
+ bctx.fillStyle='#fff';bctx.fillRect(0,0,size,size);
+ const tilePx=STAGE*scale;
+ let bgTile=null,classicTile=null;
+ if(lastBgSnap&&window.bgRenderToTileCanvas)bgTile=window.bgRenderToTileCanvas(lastBgSnap,tilePx);
+ if(window.tsRenderToTileCanvas)classicTile=window.tsRenderToTileCanvas(tilePx);
+ tileOffsets().forEach(([tx,ty,center])=>{
+  const off=engineOffset(tx,ty);
+  const leftPx=(off.x+origin)*scale,topPx=(off.y+origin)*scale;
+  if(bgTile)bctx.drawImage(bgTile,leftPx,topPx,tilePx,tilePx);
+  if(classicTile)bctx.drawImage(classicTile,leftPx,topPx,tilePx,tilePx);
+  if(texture&&(texture.enabled||texture.bgEnabled)){bctx.save();bctx.translate(leftPx,topPx);drawTextureLayersToCanvas(bctx,texture,tilePx);bctx.restore();}
+  bctx.save();
+  bctx.strokeStyle=center?'rgba(155,107,255,.45)':'rgba(30,30,40,.23)';
+  bctx.lineWidth=center?2:1;
+  if(!center)bctx.setLineDash([5,4]);
+  bctx.strokeRect(leftPx+bctx.lineWidth/2,topPx+bctx.lineWidth/2,tilePx-bctx.lineWidth,tilePx-bctx.lineWidth);
+  bctx.restore();
+ });
+ drawTessGuideCanvas(bctx,scale,origin,size);
+}
 // Cached once per render() call and reused by updateLiveMini() right after (see
 // the render wrapper below) instead of asking Background/Classics Studio to
 // clone their recipe a second time for the exact same frame.
@@ -2164,7 +2211,7 @@ let lastBgSnap=null,lastClassicSnap=null;
 // place your own motifs with "place freely", and while one of these tiling styles is active
 // they'll repeat across the same lattice the guide is showing, landing on top of it.
 const GUIDE_SHAPE_POLY={diamond:[[50,0],[100,50],[50,100],[0,50]],hexagon:SHAPE_POLY_PCT.hexagon,ogeeLens:SHAPE_POLY_PCT.ogeeLens};
-function renderTessGuide(backdrop,scale,origin,stagePx){
+function drawTessGuideCanvas(ctx,scale,origin,stagePx){
  if(tilingEngine!=='diamond'&&tilingEngine!=='hexagon'&&tilingEngine!=='ogee')return;
  const isDiamond=tilingEngine==='diamond',isHex=tilingEngine==='hexagon';
  const polyKey=isDiamond?'diamond':(isHex?'hexagon':'ogeeLens');
@@ -2183,8 +2230,11 @@ function renderTessGuide(backdrop,scale,origin,stagePx){
  // TWICE - once from each side. Two overlapping dashed copies of the same edge fill in each
  // other's gaps and read as one solid line (this is what made the hexagon/diamond guide look
  // solid despite stroke-dasharray being set correctly). Dedupe at the edge level - keyed by its
- // rounded endpoints so both directions collide - so every edge is drawn exactly once.
- const edgeMap=new Map();
+ // rounded endpoints so both directions collide - so every edge is drawn exactly once, as a
+ // single Path2D (a canvas path can't ever double up against itself the way two independently
+ // rounded elements could).
+ const edgeSet=new Set();
+ const path=new Path2D();
  for(let tx=-range;tx<=range;tx++){
   for(let ty=-range;ty<=range;ty++){
    const off=isDiamond?engineOffset(tx,ty):tessColRowOffset(tx,ty,colSpacing,rowSpacing);
@@ -2197,25 +2247,27 @@ function renderTessGuide(backdrop,scale,origin,stagePx){
     const a=abs[i],b=abs[(i+1)%abs.length];
     const ak=a[0].toFixed(1)+','+a[1].toFixed(1),bk=b[0].toFixed(1)+','+b[1].toFixed(1);
     const key=ak<bk?ak+'|'+bk:bk+'|'+ak;
-    if(!edgeMap.has(key))edgeMap.set(key,`M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`);
+    if(edgeSet.has(key))continue;
+    edgeSet.add(key);
+    path.moveTo(a[0],a[1]);path.lineTo(b[0],b[1]);
    }
   }
  }
- if(!edgeMap.size)return;
- const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
- svg.setAttribute('width',stagePx);svg.setAttribute('height',stagePx);
- svg.style.cssText='position:absolute;left:0;top:0;pointer-events:none;overflow:visible';
- const path=document.createElementNS('http://www.w3.org/2000/svg','path');
- path.setAttribute('d',[...edgeMap.values()].join(' '));
- path.setAttribute('fill','none');
- path.setAttribute('stroke',strokeColor);
- path.setAttribute('stroke-width','1.5');
- path.setAttribute('stroke-dasharray','4,3');
- svg.appendChild(path);
- backdrop.appendChild(svg);
+ if(!edgeSet.size)return;
+ ctx.save();
+ ctx.strokeStyle=strokeColor;
+ ctx.lineWidth=1.5;
+ ctx.setLineDash([4,3]);
+ ctx.stroke(path);
+ ctx.restore();
 }
 function render(){const stage=document.getElementById('stage');stage.className='repeatStage '+(mode==='repeat'?'repeat':'single');const viewport=document.getElementById('stageViewport');viewport.className='stageViewport '+(mode==='repeat'?'repeat':'single');const vpRect=viewport.getBoundingClientRect();const baseSize=Math.min(vpRect.width||720, vpRect.height||720);const zoomedPx=Math.round(baseSize*stageZoom);stage.style.width=zoomedPx+'px';stage.style.height=zoomedPx+'px';const rect=stage.getBoundingClientRect();const size=Math.min(rect.width||720, rect.height||720); const repeatHalf=(repeatSpan-1)/2; const scale=(mode==='repeat'?size/(STAGE*repeatSpan):size/STAGE); const origin=mode==='repeat'?repeatHalf*STAGE:0;
- const {backdrop,bricksLayer}=ensureStageLayers(stage);
+ const canvas=ensureStageCanvas(stage);
+ if(canvas.width!==size||canvas.height!==size){canvas.width=size;canvas.height=size;}
+ canvas.style.width=size+'px';canvas.style.height=size+'px';
+ _lastScale=scale;_lastOrigin=origin;_lastStageSize=size;
+ const ctx=canvas.getContext('2d');
+ ctx.clearRect(0,0,size,size);
  // Belt-and-braces: the bricks below are the one thing that must always redraw
  // on every call, no matter what. If anything in the backdrop/signature step
  // throws (a corrupted recipe, anything unforeseen in Background/Classics
@@ -2225,25 +2277,28 @@ function render(){const stage=document.getElementById('stage');stage.className='
  try{
   lastBgSnap=window.bgGetSnapshot?window.bgGetSnapshot():null;
   lastClassicSnap=window.tsGetSnapshot?window.tsGetSnapshot():null;
-  const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,lastBgSnap,lastClassicSnap,tilingEngine]);
-  if(backdropSig!==lastBackdropSig){
-   backdrop.innerHTML='';
-   renderTextureTiles(backdrop,scale,origin);
-   tileOffsets().forEach(([tx,ty,center])=>{const off=engineOffset(tx,ty);const guide=document.createElement('div');guide.className='tileGuide '+(center?'center':'');guide.style.left=((off.x+origin)*scale)+'px';guide.style.top=((off.y+origin)*scale)+'px';guide.style.width=(STAGE*scale)+'px';guide.style.height=(STAGE*scale)+'px';backdrop.appendChild(guide);});
-   renderTessGuide(backdrop,scale,origin,size);
-   lastBackdropSig=backdropSig;
+  const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,lastBgSnap,lastClassicSnap,tilingEngine,size]);
+  if(backdropSig!==_backdropSig){
+   renderBackdropOffscreen(scale,origin,size);
+   _backdropSig=backdropSig;
   }
+  if(_backdropCanvas)ctx.drawImage(_backdropCanvas,0,0);
  }catch(e){
   console.warn('backdrop render failed, will retry next frame',e);
-  lastBackdropSig=null;
+  _backdropSig=null;
  }
- bricksLayer.innerHTML='';
  // In single-tile mode the clone range stays a fixed immediate-neighbour ring (just enough to
  // preview edge wrap); in repeat mode it grows with the zoom-out slider so clones fill every tile
  // the wider view now shows, not just the original fixed 3x3 window.
  const cloneHalf=mode==='repeat'?repeatHalf:1;const cloneRange=Array.from({length:cloneHalf*2+1},(_,i)=>i-cloneHalf);
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRange.forEach(tx=>cloneRange.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
- drawList.forEach(({b,tx,ty,clone})=>{const off=engineOffset(tx,ty);const sf=getPatternScale(texture)/100;const bw=b.w*sf,bh=b.h*sf;const el=document.createElement('div');el.className='brick '+(clone?'clone ':'')+(selected===b.id&&!clone?'selected':'');el.dataset.id=b.id;el.style.left=((off.x+(b.x-bw/2)*10+origin)*scale)+'px';el.style.top=((off.y+(b.y-bh/2)*10+origin)*scale)+'px';el.style.width=(bw*10*scale)+'px';el.style.height=(bh*10*scale)+'px';el.style.color=colorForBrick(b);el.style.transform=`rotate(${b.rot}deg)`;el.innerHTML=brickHTML(b); if(!clone){el.addEventListener('pointerdown',e=>startDrag(e,b.id));el.addEventListener('click',e=>{e.stopPropagation();selected=b.id;render();syncControls();}); if(selected===b.id){const h=document.createElement('div');h.className='handle';h.addEventListener('pointerdown',e=>startResize(e,b.id));el.appendChild(h);const rh=document.createElement('div');rh.className='rotHandle';rh.addEventListener('pointerdown',e=>startRotate(e,b.id));el.appendChild(rh);['dot-tl','dot-tr','dot-bl'].forEach(pos=>{const d=document.createElement('div');d.className='handleDot '+pos;el.appendChild(d);});}} bricksLayer.appendChild(el);});
+ let selGeom=null;
+ drawList.forEach(({b,tx,ty,clone})=>{
+  const g=brickScreenGeom(b,tx,ty,scale,origin);
+  drawBrickSync(ctx,b,g.cx,g.cy,g.bwPx,g.bhPx);
+  if(!clone&&selected===b.id)selGeom=g;
+ });
+ if(selGeom)drawSelectionUI(ctx,bricks.find(x=>x.id===selected),selGeom.cx,selGeom.cy,selGeom.bwPx,selGeom.bhPx);
 }
 // Toggle between showing real motif PNGs and their plain placeholder outline. Nothing about
 // b.motifUrl changes either way - this only affects how brickHTML/liveMiniHTML render it, so
@@ -2257,7 +2312,162 @@ function render(){const stage=document.getElementById('stage');stage.className='
 // flip it to see plain outlines any time, e.g. to add a new placeholder shape without a wall of
 // real motifs in the way.
 let showMotifs=true;
-function brickHTML(b){ if(b.motifUrl&&showMotifs){return `<img class="motifImg" src="${b.motifUrl}" draggable="false">`;} if(['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type)){let cls=b.type;let content=b.type==='bowRow'?'🎀 🎀 🎀 🎀 🎀':'';return `<div class="shape ${cls}">${content}</div>`;} let shape=b.type==='arrowOval'?'oval':b.type; let sym=flowSymbol(b); let flow=sym?`<span class="flowArrow">${sym}</span>`:''; let inner=(b.type==='diamond')?`<span class="inner"></span>${flow}`:flow; return `<div class="shape outline ${shape}">${inner}</div>`;}
+// Live-stage image cache: a synchronous read on top of loadImageCached's promise cache. Bricks
+// draw nothing for a motif until its Image has actually decoded once (same as a real <img> would),
+// then render() gets called again to paint it - after that every further draw of the same url,
+// however many times (edge clones included), is a plain synchronous drawImage from the cached
+// Image, never a re-decode.
+const _liveImageReady=new Map();
+function getLiveImage(url){
+ if(!url)return null;
+ if(_liveImageReady.has(url))return _liveImageReady.get(url);
+ _liveImageReady.set(url,null);
+ loadImageCached(url).then(img=>{_liveImageReady.set(url,img);render();}).catch(()=>{});
+ return null;
+}
+// A full-res upload (up to MOTIF_MAX_DIM=1200px) drawn onto a ~50px brick is a huge downscale
+// ratio - drawImage has to sample/average that many source pixels on every single draw call
+// (x9 with edge clones), which is what made drag-frame render() cost ~150ms. Downscaling once
+// into a small cached canvas (cheap, happens once per url) means every later drawImage - however
+// many times per frame - samples a source that's already close to on-screen size instead.
+const _liveThumbReady=new Map();
+function getLiveThumb(url,img){
+ if(_liveThumbReady.has(url))return _liveThumbReady.get(url);
+ const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+ const maxDim=320;
+ const fit=Math.min(1,maxDim/Math.max(iw||1,ih||1));
+ const tw=Math.max(1,Math.round((iw||maxDim)*fit)),th=Math.max(1,Math.round((ih||maxDim)*fit));
+ const c=document.createElement('canvas');c.width=tw;c.height=th;
+ const tctx=c.getContext('2d');tctx.imageSmoothingEnabled=true;tctx.imageSmoothingQuality='medium';
+ tctx.drawImage(img,0,0,tw,th);
+ _liveThumbReady.set(url,c);
+ return c;
+}
+// One brick's on-screen centre + pixel size at a given tile offset (tx,ty) - shared by the draw
+// loop and by hit-testing (tx=0,ty=0 only; edge clones are visual previews, never interactive,
+// same as they were as DOM elements before).
+function brickScreenGeom(b,tx,ty,scale,origin){
+ const off=engineOffset(tx,ty);
+ const sf=getPatternScale(texture)/100;
+ const bw=b.w*sf,bh=b.h*sf;
+ return {cx:(off.x+b.x*10+origin)*scale,cy:(off.y+b.y*10+origin)*scale,bwPx:bw*10*scale,bhPx:bh*10*scale};
+}
+// Maps a screen point into the brick's own unrotated local frame (inverse of the rotation
+// render()/drawBrickSync applies), so hit-testing a rotated brick is just an axis-aligned box
+// check in that frame - the same trick reference canvas editors use instead of a polygon test.
+function brickLocalPoint(b,cx,cy,px,py){
+ const dx=px-cx,dy=py-cy;
+ const rad=-(b.rot||0)*Math.PI/180;
+ const cos=Math.cos(rad),sin=Math.sin(rad);
+ return {x:dx*cos-dy*sin,y:dx*sin+dy*cos};
+}
+function pointInBrick(local,bwPx,bhPx){return Math.abs(local.x)<=bwPx/2&&Math.abs(local.y)<=bhPx/2;}
+const HANDLE_SIZE=18,ROT_HANDLE_SIZE=16,ROT_OFFSET=30,DOT_SIZE=12;
+// Hit radius is deliberately larger than the visual handle (touch target, not just the drawn
+// pixels) - matches how a real finger is far less precise than a mouse cursor.
+function getHandleForLocalPoint(lx,ly,bwPx,bhPx){
+ const hw=bwPx/2,hh=bhPx/2;
+ const rx=hw,ry=hh;
+ if(Math.hypot(lx-rx,ly-ry)<=HANDLE_SIZE*1.1)return 'resize';
+ const rotX=0,rotY=-hh-ROT_OFFSET;
+ if(Math.hypot(lx-rotX,ly-rotY)<=ROT_HANDLE_SIZE*1.4)return 'rotate';
+ return null;
+}
+// Mirrors brickHTML()'s old CSS exactly (see drawBrickShape/drawStructureBrick, already shared
+// with PNG export) - real motif images draw via the live image cache; everything else is either
+// a "structure" brick's approximated fill or an outline placeholder shape, with a flow-direction
+// arrow overlaid the same way the CSS .flowArrow span used to.
+function drawBrickSync(ctx,b,cx,cy,bwPx,bhPx){
+ ctx.save();
+ ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);
+ if(b.motifUrl&&showMotifs){
+  const img=getLiveImage(b.motifUrl);
+  if(img){
+   const src=getLiveThumb(b.motifUrl,img);
+   const iw=src.width,ih=src.height;
+   const fit=iw&&ih?Math.min(bwPx/iw,bhPx/ih):1;
+   const dw=iw?iw*fit:bwPx,dh=ih?ih*fit:bhPx;
+   ctx.drawImage(src,-dw/2,-dh/2,dw,dh);
+  }
+ }else if(['stripeRow','scallopRow','bowRow','laceRow','polkaRow','gingham','chevron'].includes(b.type)){
+  drawStructureBrick(ctx,b,bwPx,bhPx,colorForBrick(b));
+ }else{
+  const color=colorForBrick(b);
+  drawBrickShape(ctx,b.type==='arrowOval'?'oval':b.type,bwPx,bhPx,color);
+  const sym=flowSymbol(b);
+  if(sym){
+   ctx.save();
+   if(b.type==='diamond')ctx.rotate(-Math.PI/4);
+   ctx.globalAlpha=.52;ctx.fillStyle=color;
+   ctx.font=`900 ${Math.max(8,Math.min(15,bwPx*.145))}px -apple-system,BlinkMacSystemFont,sans-serif`;
+   ctx.textAlign='center';ctx.textBaseline='middle';
+   ctx.fillText(sym,0,0);
+   ctx.restore();
+  }
+ }
+ ctx.restore();
+}
+// Replaces .brick.selected/.pressHold's outline + the .handle/.rotHandle/.handleDot elements -
+// drawn in the SAME rotated local frame as the brick itself so the handles rotate with it exactly
+// like the old CSS children did (a rotated parent's absolutely-positioned children inherit its
+// transform).
+function drawSelectionUI(ctx,b,cx,cy,bwPx,bhPx){
+ if(!b)return;
+ ctx.save();
+ ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);
+ const hw=bwPx/2,hh=bhPx/2;
+ const held=pressHoldId===b.id;
+ const pink='rgba(255,142,214,.98)';
+ if(held){
+  ctx.save();ctx.strokeStyle='rgba(255,90,90,.22)';ctx.lineWidth=7;ctx.strokeRect(-hw-2-3.5,-hh-2-3.5,bwPx+2*2+7,bhPx+2*2+7);ctx.restore();
+ }
+ ctx.strokeStyle=held?'rgba(255,90,90,.9)':pink;
+ ctx.lineWidth=held?3:2;
+ const off=held?2:3;
+ ctx.strokeRect(-hw-off,-hh-off,bwPx+off*2,bhPx+off*2);
+ ctx.fillStyle='#1a1420';ctx.strokeStyle=pink;ctx.lineWidth=2;
+ [[-hw,-hh],[hw,-hh],[-hw,hh]].forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,DOT_SIZE/2,0,Math.PI*2);ctx.fill();ctx.stroke();});
+ roundRectPath(ctx,hw-HANDLE_SIZE/2,hh-HANDLE_SIZE/2,HANDLE_SIZE,HANDLE_SIZE,6);
+ ctx.fillStyle=pink;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+ ctx.beginPath();ctx.moveTo(0,-hh);ctx.lineTo(0,-hh-ROT_OFFSET+ROT_HANDLE_SIZE/2);ctx.strokeStyle=pink;ctx.lineWidth=2;ctx.stroke();
+ ctx.beginPath();ctx.arc(0,-hh-ROT_OFFSET,ROT_HANDLE_SIZE/2,0,Math.PI*2);ctx.fillStyle=pink;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+ ctx.restore();
+}
+function stageCanvasEl(){return document.querySelector('#stage canvas.stageCanvas');}
+function hitTestBrickAt(px,py){
+ for(let i=bricks.length-1;i>=0;i--){
+  const b=bricks[i];
+  const g=brickScreenGeom(b,0,0,_lastScale,_lastOrigin);
+  const local=brickLocalPoint(b,g.cx,g.cy,px,py);
+  if(pointInBrick(local,g.bwPx,g.bhPx))return b;
+ }
+ return null;
+}
+// Single entry point replacing the old per-brick DOM pointerdown/click listeners: check the
+// selected brick's handles first (they visually float outside its own box), then hit-test all
+// bricks topmost-first, then fall back to deselecting - same net behaviour as the old
+// bricksLayer-click-per-element wiring plus the two separate "click empty stage to deselect"
+// listeners, now all decided in one place since there's only one element to listen on.
+// Set on every pointerdown so the global 2/3-finger undo/redo tap-counter (see the pointerup
+// listener near the bottom of this script) can tell a brick tap/drag from an empty-canvas tap
+// without a DOM element to check .closest('.brick') on any more.
+let _pointerHitBrickOrHandle=false;
+function stageOnPointerDown(e){
+ const r=stageCanvasEl().getBoundingClientRect();
+ const px=e.clientX-r.left,py=e.clientY-r.top;
+ const sel=selectedBrick();
+ if(sel){
+  const g=brickScreenGeom(sel,0,0,_lastScale,_lastOrigin);
+  const local=brickLocalPoint(sel,g.cx,g.cy,px,py);
+  const handle=getHandleForLocalPoint(local.x,local.y,g.bwPx,g.bhPx);
+  if(handle==='resize'){_pointerHitBrickOrHandle=true;startResize(e,sel.id);return;}
+  if(handle==='rotate'){_pointerHitBrickOrHandle=true;startRotate(e,sel.id);return;}
+ }
+ const hit=hitTestBrickAt(px,py);
+ if(hit){_pointerHitBrickOrHandle=true;startDrag(e,hit.id);return;}
+ _pointerHitBrickOrHandle=false;
+ if(selected!==null){selected=null;render();syncControls();}
+}
 let motifTray=[];
 let activeMotifId=null;
 // Most motif PNGs (stock illustrations especially) ship with generous transparent padding
@@ -2494,28 +2704,24 @@ function renderUnassignedShapes(){
 // brick as "about to delete" partway through the hold so releasing early is a visible way to
 // back out; killTimer actually removes it. Either timer is cancelled the instant real movement
 // starts, so a normal drag is never mistaken for a hold.
-// Used to hide real motif <img>s behind their placeholder outline during a drag, because the old
-// code called the full render() (bricksLayer.innerHTML='' + rebuild every brick and every edge
-// clone from scratch) on every single pointermove - real images were never actually the expensive
-// part, tearing down and recreating ~dozens of DOM elements every frame was. Moving the SAME
-// elements via a CSS transform instead (compositor-only, no layout/paint recalc for anything else
-// on screen) is cheap regardless of what's inside them, so real motifs can now just stay visible
-// and moving/still stay smooth. bricks[] only gets its real x/y - and a single reconciling
-// render() - once the gesture actually ends; a plain tap never touches the DOM at all here.
-// Double-tap-to-duplicate used to rely on the browser's native 'dblclick' event, which never
-// actually fired on iPad: e.preventDefault() on pointerdown (needed below to stop iOS turning a
-// drag into a text-selection/page-zoom gesture) also suppresses the synthetic mouse events iOS
-// derives from touch, and dblclick is one of them - so that duplicate gesture only ever worked
-// with a real mouse. Detecting the double-tap ourselves at the pointerdown level sidesteps that
-// entirely (works identically for touch and mouse), and also survives the DOM node under the
-// finger getting replaced by the initial render() below between the two taps, which a native
-// dblclick's own event correlation is liable to lose.
+// A canvas redraw is cheap regardless of what's in it, so unlike the old DOM version there's no
+// need to hide real motif images during a drag or to hand-patch individual elements' styles for
+// resize/rotate - every gesture below just mutates bricks[] and calls the ordinary render() on
+// every pointermove. That's what the whole stage rewrite was for: dragging/resizing/rotating a
+// brick with a large uploaded PNG is now exactly as cheap as an outline placeholder, since
+// drawImage from an already-decoded Image doesn't care how many times or how large it's drawn.
+// Double-tap-to-duplicate is still detected at the pointerdown level (not the browser's native
+// 'dblclick', which never reliably fires from touch) via lastTapId/lastTapTime, same as before -
+// that part didn't depend on DOM at all, it's pure timing state.
 let lastTapId=null,lastTapTime=0;
 // 450ms was too tight for a real fingertip double-tap (as opposed to the perfectly-timed
 // synthetic taps this was originally tested with) - comfortably under the press-hold-to-delete
 // timer below (650ms) so there's still no overlap risk, but forgiving enough for an actual second
 // tap that lands a bit later than a lab-perfect double-click would.
 const DOUBLE_TAP_MS=550;
+// Drawn as the red halo in drawSelectionUI while a press-hold-to-delete is armed but not yet
+// committed - replaces the old .pressHold DOM class toggle.
+let pressHoldId=null;
 function startDrag(e,id){e.preventDefault();
  const now=Date.now();
  if(lastTapId===id && now-lastTapTime<DOUBLE_TAP_MS){
@@ -2525,11 +2731,9 @@ function startDrag(e,id){e.preventDefault();
   return;
  }
  lastTapId=id;lastTapTime=now;
- pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;const stage=document.getElementById('stage');let moved=false;
- const pressEl=()=>document.querySelector('.brick[data-id="'+id+'"]:not(.clone)');
- const warnTimer=setTimeout(()=>{if(!moved)pressEl()?.classList.add('pressHold');},280);
- const killTimer=setTimeout(()=>{if(!moved){bricks=bricks.filter(x=>x.id!==id);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();}},650);
- let liveEls=null;
+ pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;let moved=false;
+ const warnTimer=setTimeout(()=>{if(!moved){pressHoldId=id;render();}},280);
+ const killTimer=setTimeout(()=>{if(!moved){bricks=bricks.filter(x=>x.id!==id);selected=bricks[0]?.id||null;pressHoldId=null;render();syncControls();renderUnassignedShapes();}},650);
  // A real fingertip almost never stays perfectly still for the length of a tap - a couple of
  // stray pixels of movement used to count as "moved" immediately, nudging the brick's x/y by a
  // hair on what was meant to be a plain tap or the first half of a double-tap. That tiny nudge is
@@ -2542,62 +2746,48 @@ function startDrag(e,id){e.preventDefault();
   const dx=ev.clientX-sx,dy=ev.clientY-sy;
   if(!moved){
    if(Math.hypot(dx,dy)<DRAG_THRESHOLD_PX)return;
-   moved=true;clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');liveEls=document.querySelectorAll('.brick[data-id="'+id+'"]');
+   moved=true;clearTimeout(warnTimer);clearTimeout(killTimer);pressHoldId=null;
   }
-  liveEls.forEach(el=>{el.style.transform=`translate(${dx}px,${dy}px) rotate(${b.rot}deg)`;});
-  const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));
+  const tilePx=(mode==='repeat'?_lastStageSize/repeatSpan:_lastStageSize);
   b.x=Math.max(-20,Math.min(120,ox+dx/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+dy/tilePx*100));
-  syncControls(false);
+  render();syncControls(false);
  };
- const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressEl()?.classList.remove('pressHold');if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
+ const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressHoldId=null;render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
-}// Dragging the on-canvas resize handle follows the exact same rules as the sidebar width/height
+}
+// Dragging the on-canvas resize handle follows the exact same rules as the sidebar width/height
 // sliders: scopedBricks() (same shape/colour/all bricks) within this layout, and shapeStyles when
 // "apply to all layouts" is on - dragging the handle and dragging the slider are two input methods
 // for the same thing, so they should behave identically rather than the handle being a
 // single-brick-only shortcut.
-// Used to call the full render() (bricksLayer.innerHTML='' + rebuild every brick and clone from
-// scratch) on every single pointermove, same root cause as the old drag lag - and since resize/
-// rotate mutate every scoped brick's clones too (up to 9x per brick), it was worse per frame, not
-// better, which is why it never felt like the drag fix changed anything: this handle was still on
-// the old path the whole time. Both now update the SAME already-existing elements directly with
-// plain style writes instead: resize recomputes left/top/width/height from each element's own
-// (rotation-and-size-independent) centre point, rotate just swaps the transform's angle - neither
-// needs engineOffset/tile math at all, since every scoped brick ends up at the identical new
-// w/h or rot regardless of its own tile position. render() only runs once, to reconcile, when the
-// gesture actually ends.
-function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;const stage=document.getElementById('stage');let moved=false;
- let scope=null,liveGroups=null;
+function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;let moved=false;
+ let scope=null;
  const onMove=ev=>{
-  if(!moved){moved=true;scope=scopedBricks();liveGroups=[];scope.forEach(x=>{document.querySelectorAll('.brick[data-id="'+x.id+'"]').forEach(el=>{liveGroups.push({el,cx:parseFloat(el.style.left)+parseFloat(el.style.width)/2,cy:parseFloat(el.style.top)+parseFloat(el.style.height)/2});});});}
-  const r=stage.getBoundingClientRect();const tilePx=(mode==='repeat'?Math.min(r.width,r.height)/repeatSpan:Math.min(r.width,r.height));
+  if(!moved){moved=true;scope=scopedBricks();}
+  const tilePx=(mode==='repeat'?_lastStageSize/repeatSpan:_lastStageSize);
   const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;
   const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));
   scope.forEach(x=>{x.w=nw;x.h=nh;});
-  const sf=getPatternScale(texture)/100;const scale=(mode==='repeat'?Math.min(r.width,r.height)/(STAGE*repeatSpan):Math.min(r.width,r.height)/STAGE);
-  const wPx=nw*sf*10*scale,hPx=nh*sf*10*scale;
-  liveGroups.forEach(({el,cx,cy})=>{el.style.left=(cx-wPx/2)+'px';el.style.top=(cy-hPx/2)+'px';el.style.width=wPx+'px';el.style.height=hPx+'px';});
   if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;}
-  syncControls(false);
+  render();syncControls(false);
  };
  const onUp=()=>{if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};
  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
 }
 // Drag-to-rotate handle above the selected brick. Angle is measured from the brick's own screen
-// centre - captured once at gesture start rather than re-measured via getBoundingClientRect() every
-// frame, since a pure rotation around transform-origin:center never actually moves that centre
-// point, only the corners swing around it, so re-measuring it repeatedly was redundant layout work.
+// centre, read via brickScreenGeom (the same geometry the draw/hit-test code already uses) rather
+// than a DOM getBoundingClientRect - a pure rotation never actually moves that centre point, only
+// the corners swing around it, so it only needs computing once at gesture start.
 // Reuses the same scope/styleAllLayouts rules the rotate slider already follows for consistency.
 function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);let moved=false;
- let scope=null,liveEls=null,cx=0,cy=0;
+ let scope=null,cx=0,cy=0;
  const onMove=ev=>{
-  if(!moved){moved=true;scope=scopedBricks();liveEls=[];scope.forEach(x=>{document.querySelectorAll('.brick[data-id="'+x.id+'"]').forEach(el=>liveEls.push(el));});const el=document.querySelector('.brick[data-id="'+id+'"].selected');const r=(el||liveEls[0]).getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;}
+  if(!moved){moved=true;scope=scopedBricks();const g=brickScreenGeom(b,0,0,_lastScale,_lastOrigin);const r=stageCanvasEl().getBoundingClientRect();cx=r.left+g.cx;cy=r.top+g.cy;}
   let angle=Math.round(Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90);
   while(angle>180)angle-=360;while(angle<-180)angle+=360;
   scope.forEach(x=>{x.rot=angle;});
-  liveEls.forEach(el=>{el.style.transform=`rotate(${angle}deg)`;});
   if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].rot=angle;}
-  syncControls(false);
+  render();syncControls(false);
  };
  const onUp=()=>{if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};
  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
@@ -2632,7 +2822,23 @@ function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.in
   bgClassicHTML=bgClassicMiniLayers(bgRec,classicRec);
  }catch(e){console.warn('thumbnail backdrop failed for',key,e);}
  c.innerHTML=`<div class="mini">${bgClassicHTML}${miniWithTexture(list,t)}</div><span>${presets[key].name}</span>${launch?'<em class="launchBadge">layout</em>':''}`;c.onclick=()=>{setPreset(key,true);};grid.appendChild(c);});}
-function updateLiveMini(){if(!current)return;if(presets[current]){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
+// updateLiveMini() used to run its full body - including re-serialising bricks (motifUrl and
+// all) via copyBricks/copyTexture, and rebuilding the mini/filmstrip thumbnails as an HTML string
+// with a real <img src=motifUrl> per brick, then writing it via innerHTML - synchronously on
+// every render() call. That was cheap back when dragging a brick only patched its own DOM
+// transform and never called the full render() per pointermove; now render() (canvas-based) runs
+// on every drag frame, so this same "instant" update was firing 60+ times/sec, each one
+// re-decoding a fresh <img> from a multi-MB motif data URL - the real cause of the ~150ms/frame
+// canvas rewrite was chasing. Coalescing to once per animation frame keeps the mini/filmstrip
+// preview feeling instant (16ms is imperceptible) while collapsing however many render() calls
+// land in the same frame into a single update.
+let _liveMiniRafPending=false;
+function updateLiveMini(){if(!current)return;
+ if(_liveMiniRafPending)return;
+ _liveMiniRafPending=true;
+ requestAnimationFrame(()=>{_liveMiniRafPending=false;updateLiveMiniNow();});
+}
+function updateLiveMiniNow(){if(!current)return;if(presets[current]){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
  // Reuses whatever render() just computed this same frame rather than asking
  // Background/Classics Studio to clone their recipe again immediately after.
  let liveMini;
@@ -2677,10 +2883,9 @@ function syncControls(set=true){const b=selectedBrick();if(!b)return; if(set){xR
 document.querySelectorAll('[data-add]').forEach(btn=>btn.onclick=()=>{pushHistory();addBrick(btn.dataset.add);});
 function deselectBrick(){if(selected==null)return;selected=null;render();}
 document.getElementById('deselectBtn').onclick=deselectBrick;
-// Bricks stopPropagation on their own click handler, so a click that reaches the
-// stage itself only ever came from empty backdrop space (or a tile guide) - that
-// should clear the selection instead of leaving the last brick highlighted.
-document.getElementById('stage').addEventListener('click',deselectBrick);
+// Tapping empty canvas to deselect is now handled directly inside stageOnPointerDown (the single
+// canvas pointerdown listener already decides hit-brick vs. empty-space on every tap), so no
+// separate stage-level click listener is needed here any more.
 document.getElementById('motifUploadBtn').onclick=()=>document.getElementById('motifFile').click();
 document.getElementById('motifFile').addEventListener('change',handleMotifUpload);
 document.getElementById('placeMotifBtn').onclick=placeMotifOnSelected;
@@ -2819,7 +3024,12 @@ const legacyAddStripeLayerBtn=document.getElementById('addStripeLayerBtn');
 if(legacyAddStripeLayerBtn)legacyAddStripeLayerBtn.onclick=addStripeTextureLayer;
 const legacyRemoveStripeLayerBtn=document.getElementById('removeStripeLayerBtn');
 if(legacyRemoveStripeLayerBtn)legacyRemoveStripeLayerBtn.onclick=removeStripeTextureLayer;
-let tapTimes=[];window.addEventListener('pointerup',e=>{if(e.pointerType==='touch'&&!(e.target instanceof Element&&e.target.closest('.brick'))){tapTimes.push(Date.now());tapTimes=tapTimes.filter(t=>Date.now()-t<430);if(tapTimes.length===2){undo();tapTimes=[];}else if(tapTimes.length===3){redo();tapTimes=[];}}});window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}});const patternScaleRange=document.getElementById('patternScaleRange');if(patternScaleRange)patternScaleRange.oninput=()=>{texture.patternScale=+patternScaleRange.value;const psv=document.getElementById('patternScaleValue');if(psv)psv.textContent=texture.patternScale+'%';renderTextureUI();render();};
+// Two/three-finger tap = undo/redo. Used to exclude touches via e.target.closest('.brick') -
+// bricks are canvas-drawn now, not DOM elements, so that check would always be true (this always
+// fired instead of never), miscounting every brick tap/drag release toward the gesture. Excludes
+// the same intent a different way: _pointerHitBrickOrHandle is set by stageOnPointerDown itself,
+// true exactly when the most recent pointerdown actually landed on a brick or its handle.
+let tapTimes=[];window.addEventListener('pointerup',e=>{if(e.pointerType==='touch'&&!_pointerHitBrickOrHandle){tapTimes.push(Date.now());tapTimes=tapTimes.filter(t=>Date.now()-t<430);if(tapTimes.length===2){undo();tapTimes=[];}else if(tapTimes.length===3){redo();tapTimes=[];}}});window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}});const patternScaleRange=document.getElementById('patternScaleRange');if(patternScaleRange)patternScaleRange.oninput=()=>{texture.patternScale=+patternScaleRange.value;const psv=document.getElementById('patternScaleValue');if(psv)psv.textContent=texture.patternScale+'%';renderTextureUI();render();};
 /* v65 colour mode: recolour the current template (bricks + background) from one hero
    colour via generateAdaptivePalette(), with named colourways saved per saved template. */
 function mountColourMode(slotId){
@@ -3198,9 +3408,6 @@ function wireSideCollapse(side){
  btn.onclick=()=>{collapsed=!collapsed;apply(collapsed);try{localStorage.setItem(key,collapsed?'1':'0');}catch(e){}};
 }
 wireSideCollapse('left');wireSideCollapse('right');
-// Bricks stop propagation on their own click, so this only ever fires for a tap that lands on
-// bare canvas (backdrop/tile guides, not a shape) - a plain deselect, no gesture to learn.
-document.getElementById('stage').addEventListener('click',()=>{if(selected!==null){selected=null;render();syncControls();}});
 // One-time cleanup for motifs already sitting in this session oversized from
 // before MOTIF_MAX_DIM existed - newly uploaded motifs are capped going
 // forward, but an already-huge motif already in motifShapes/blueprintStore
@@ -4453,14 +4660,6 @@ window.tsResetToGrey=function(){
  if(typeof renderAll==='function')renderAll(false);
  if(typeof render==='function')render();
 };
-const originalRenderTextureTilesTs=window.renderTextureTiles||renderTextureTiles;
-window.renderTextureTiles=renderTextureTiles=function(stage,scale,origin){
- if(tsAppliedState){
-  if(!tsAppliedDataUrl){const c=document.createElement('canvas');c.width=720;c.height=720;renderPreview(c,720,tsAppliedState.state,'single',false);tsAppliedDataUrl=c.toDataURL('image/png');}
-  tileOffsets().forEach(([tx,ty])=>{const off=engineOffset(tx,ty);const tile=document.createElement('div');tile.className='classicBabyLayer';tile.style.left=((off.x+origin)*scale)+'px';tile.style.top=((off.y+origin)*scale)+'px';tile.style.width=(STAGE*scale)+'px';tile.style.height=(STAGE*scale)+'px';tile.style.backgroundImage=`url(${tsAppliedDataUrl})`;stage.appendChild(tile);});
- }
- originalRenderTextureTilesTs(stage,scale,origin);
-};
 
 window.openTextureStudioType=openType;
 window.openTextureStudio=open;
@@ -5027,11 +5226,6 @@ function bgShowMode(mode){
  if(colourBtn)colourBtn.classList.toggle('active',isColour);
 }
 try{ localStorage.removeItem('pkmActiveBackgroundV34'); }catch(e){} // v37: blank sketchbook startup, no inherited background
-const originalRenderTextureTiles=window.renderTextureTiles || renderTextureTiles;
-window.renderTextureTiles=renderTextureTiles=function(stage,scale,origin){
- if(bgRecipe && bgRecipe.enabled){ if(!bgDataUrl)bgDataUrl=recipeToUrl(bgRecipe); tileOffsets().forEach(([tx,ty])=>{const off=engineOffset(tx,ty);const tile=document.createElement('div');tile.className='bgBabyLayer';tile.style.left=((off.x+origin)*scale)+'px';tile.style.top=((off.y+origin)*scale)+'px';tile.style.width=(STAGE*scale)+'px';tile.style.height=(STAGE*scale)+'px';tile.style.backgroundImage=`url(${bgDataUrl})`;stage.appendChild(tile);}); }
- originalRenderTextureTiles(stage,scale,origin);
-};
 
 /* v40 UX cleanup: designer-facing summary, selected-object inspector, and multi-stop gradients */
 let bgSelectedStop=0;
