@@ -1277,6 +1277,15 @@ function stripeDefaultTexture(){return {enabled:true,bgEnabled:false,bgColor:'#f
 let texture=blankTexture();
 let textureStore={};
 let mode='repeat', edgeClones=true, current=null, selected=null, activeColor='hero';
+// Which layout CARD should highlight - separate from `current` (which also doubles as the key
+// blueprintStore/updateLiveMini save live edits under, every render, forever, as long as it's
+// active). Retiling while keeping your existing bricks (see selectLayout's unchecked path) can't
+// set current to the tapped key when the kept content doesn't actually match that preset's own
+// shapes - continuously saving mismatched content into e.g. blueprintStore.grid would corrupt
+// what "grid" shows the next time its placeholder shapes are deliberately loaded. So current stays
+// 'blank' there (a safe, data-integrity-only value with no thumbnail of its own to corrupt), while
+// activeLayoutKey tracks the card that should actually light up, matching whatever was tapped.
+let activeLayoutKey='grid';
 // When a saved template is loaded, current becomes that template's own unique key (e.g.
 // "saved_1712..."), which never matches any built-in layout key - so without tracking which
 // preset it was originally based on, none of the layout thumbnails (not even the one it came
@@ -1360,8 +1369,8 @@ function sourceTilingEngineFor(key){
  if(tilingEngineStore[key])return tilingEngineStore[key];
  return 'grid';
 }
-function capture(){return JSON.stringify({current,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
-function restore(state){const data=JSON.parse(state);current=data.current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
+function capture(){return JSON.stringify({current,activeLayoutKey,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
+function restore(state){const data=JSON.parse(state);current=data.current;activeLayoutKey=data.activeLayoutKey||current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
 function undo(){if(!history.length)return;redoStack.push(capture());restore(history.pop());}
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
@@ -1468,7 +1477,7 @@ function persistSavedTemplates(){return persistAllSavedItems();}
 // thumbnail) to localStorage, debounced so a drag doesn't write on every pointermove frame.
 const AUTOSAVE_KEY='pkmAutosaveV1';
 let autosaveTimer=null;
-function autosaveSnapshot(){return {current,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
+function autosaveSnapshot(){return {current,activeLayoutKey,currentTemplateBase,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,motifShapes,shapeStyles,styleAllLayouts,showMotifs,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null};}
 // Surfaced at most once per session - autosave fires on a debounce after every edit, and a still-
 // oversized session (many distinct motifs across many layouts, even after the dedup above) would
 // otherwise fail and re-warn on every single one of those, which is just noise. One clear heads-up
@@ -1511,7 +1520,7 @@ function applySnapshotToLiveState(rawData,statusMsg){
    if(data.tilingEngineStore&&data.tilingEngineStore[fallbackKey])data.tilingEngine=data.tilingEngineStore[fallbackKey];
   }
  }
- current=data.current||'grid';currentTemplateBase=data.currentTemplateBase||null;
+ current=data.current||'grid';currentTemplateBase=data.currentTemplateBase||null;activeLayoutKey=data.activeLayoutKey||current;
  blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};
  bricks=data.bricks;texture=data.texture?copyTexture(data.texture):blankTexture();
  motifShapes=data.motifShapes||{};shapeStyles=data.shapeStyles||{};styleAllLayouts=!!data.styleAllLayouts;showMotifs=data.showMotifs!==false;
@@ -1899,17 +1908,31 @@ async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
  const count=selectedIdx.size;
  if(!count)return;
  window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
-  const files=[],used=new Set();
+  const files=[],used=new Set(),failed=[];
+  // Bulk exports can mean dozens of large canvases rendered back to back - on a
+  // memory-constrained device (iPad Safari especially) one item's render/encode can
+  // fail without the browser throwing anything catchable elsewhere. Each item gets
+  // its own try/catch so one bad/legacy-format item can't silently swallow the rest
+  // of the batch (previously any single failure - or a plain missing item - aborted
+  // the whole export with no clear sign of how many actually made it into the zip).
   for(const i of selectedIdx){
-   const item=list[i];if(!item)continue;
-   const canvas=await renderItemToCanvas(item,w);
-   const bytes=await canvasToDpiPngBytes(canvas,dpi);
-   let base=slugName(item.name||label),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
-   files.push({name:`${name}.png`,data:bytes});
+   const item=list[i];
+   if(!item){failed.push(`#${i+1} (missing)`);continue;}
+   try{
+    const canvas=await renderItemToCanvas(item,w);
+    const bytes=await canvasToDpiPngBytes(canvas,dpi);
+    let base=slugName(item.name||label),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
+    files.push({name:`${name}.png`,data:bytes});
+   }catch(e){
+    console.warn('zip export: skipped item',item&&item.name,e);
+    failed.push(item.name||`#${i+1}`);
+   }
   }
-  if(!files.length)throw new Error('nothing selected');
+  if(!files.length)throw new Error('nothing exported - every selected item failed to render');
   triggerBlobDownload(makeZip(files),`${label}-${files.length}.zip`);
- },w=>`Exports ${count} selected ${label}${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`);
+  if(failed.length)return `downloaded ${files.length}/${count} — ${failed.length} failed (see console): ${failed.slice(0,5).join(', ')}${failed.length>5?'…':''}`;
+  return `downloaded ${files.length} ✓`;
+ },w=>`Exports ${count} selected ${label}${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`,count>10?1200:2200);
 }
 // Minimal ZIP writer (STORED/uncompressed entries) - PNGs are already internally
 // compressed so DEFLATE would barely help, and skipping it avoids needing a whole
@@ -2003,7 +2026,7 @@ function saveTemplateToFilmstrip(){
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
-function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;activeLayoutKey=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // Diamond/hexagon/ogee tessellate on their own offset lattice rather than a plain square grid,
 // so their one "live" tile reads noticeably smaller in the default 3x3 repeat view than a
 // grid/halfdrop tile does at the same zoom - there's more surrounding tessellation to fit in the
@@ -2012,7 +2035,7 @@ function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory
 // active gives you the bigger working square without an extra tap, while every other layout's
 // mode preference is left alone.
 function autoSingleTileFor(engine){if(engine==='diamond'||engine==='hexagon'||engine==='ogee')mode='single';}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);autoSingleTileFor(tilingEngine);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;activeLayoutKey=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);autoSingleTileFor(tilingEngine);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // The "repeat layouts" grid used to be three separate pieces (a standalone "free layout" button, the
 // layout grid itself, and a whole second "tiling style" grid) because picking a repeat structure and
 // deciding whether to fill it with that layout's placeholder shapes were bundled into one action -
@@ -2032,14 +2055,14 @@ function selectLayout(key){
  // unchecked just means "these are free-form now", keeping whichever tiling engine was already
  // active rather than falling back to the TILING_ENGINE_TYPES.includes(key) check below (which
  // would silently reset it to plain grid).
- if(current==='blank'&&(key==='blank'||tilingEngine===key))return;
+ if(activeLayoutKey===key)return;
  pushHistory();
- current='blank';currentTemplateBase=null;
+ current='blank';activeLayoutKey=key;currentTemplateBase=null;
  if(key!=='blank'){
   tilingEngine=TILING_ENGINE_TYPES.includes(key)?key:'grid';
   autoSingleTileFor(tilingEngine);
  }
- document.getElementById('currentName').textContent=presets.blank.name;
+ document.getElementById('currentName').textContent=presets[key].name;
  syncTilingEngineButtons();
  render();renderGrid();
 }
@@ -2868,7 +2891,7 @@ function startRotate(e,id){e.preventDefault();e.stopPropagation();pushHistory();
  const onUp=()=>{if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};
  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
 }
-function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.innerHTML='';const textureLaunchers={stripe:'stripes',polka:'dots',gingham:'checks',plaid:'plaid'};skeletonOrder.forEach(key=>{const c=document.createElement('div');const isLive=key===current||key===currentTemplateBase;c.className='skelCard '+(isLive?'active':'');c.dataset.key=key;
+function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.innerHTML='';const textureLaunchers={stripe:'stripes',polka:'dots',gingham:'checks',plaid:'plaid'};skeletonOrder.forEach(key=>{const c=document.createElement('div');const isLive=key===activeLayoutKey||key===currentTemplateBase;c.className='skelCard '+(isLive?'active':'');c.dataset.key=key;
  // Non-active layouts' thumbnails used to preview the current motifShapes assignments on a
  // throwaway copy, so every card side-by-side showed how the motif set would look there without
  // switching into each one - but that meant every renderGrid() call (adding a motif, toggling
@@ -2902,7 +2925,7 @@ function renderGrid(){const grid=document.getElementById('skeletonGrid');grid.in
 // action, same "active" meaning current||currentTemplateBase) - cheap enough to fully rebuild on
 // every renderGrid() call since it's just text buttons, no thumbnails. Kept in its own function
 // so the two stay trivially in sync: anything that already calls renderGrid() updates both.
-function renderSideLayoutGrid(){const grid=document.getElementById('sideLayoutGrid');if(!grid)return;grid.innerHTML='';skeletonOrder.forEach(key=>{const b=document.createElement('button');const isLive=key===current||key===currentTemplateBase;b.className=isLive?'active':'';b.textContent=presets[key].name;b.onclick=()=>selectLayout(key);grid.appendChild(b);});}
+function renderSideLayoutGrid(){const grid=document.getElementById('sideLayoutGrid');if(!grid)return;grid.innerHTML='';skeletonOrder.forEach(key=>{const b=document.createElement('button');const isLive=key===activeLayoutKey||key===currentTemplateBase;b.className=isLive?'active':'';b.textContent=presets[key].name;b.onclick=()=>selectLayout(key);grid.appendChild(b);});}
 // updateLiveMini() used to run its full body - including re-serialising bricks (motifUrl and
 // all) via copyBricks/copyTexture, and rebuilding the mini/filmstrip thumbnails as an HTML string
 // with a real <img src=motifUrl> per brick, then writing it via innerHTML - synchronously on
@@ -2925,7 +2948,7 @@ function updateLiveMiniNow(){if(!current)return;if(presets[current]){blueprintSt
  let liveMini;
  try{liveMini=bgClassicMiniLayers(lastBgSnap,lastClassicSnap)+miniWithTexture(bricks,texture);}
  catch(e){console.warn('live thumbnail update failed',e);liveMini=miniWithTexture(bricks,texture);}
- const card=document.querySelector(`.skelCard[data-key="${current}"] .mini`);if(card)card.innerHTML=liveMini;if(currentTemplateBase){const baseCard=document.querySelector(`.skelCard[data-key="${currentTemplateBase}"] .mini`);if(baseCard)baseCard.innerHTML=liveMini;}const savedIndex=savedTemplates.findIndex(t=>t.key===current);if(savedIndex>=0){savedTemplates[savedIndex].bricks=copyBricks(bricks||[]);savedTemplates[savedIndex].texture=copyTexture(texture);scheduleSavedTemplatesPersist();const film=document.querySelectorAll('.filmCard .mini')[savedIndex];if(film)film.innerHTML=liveMini;}}
+ const card=document.querySelector(`.skelCard[data-key="${current}"] .mini`);if(card)card.innerHTML=liveMini;if(activeLayoutKey!==current){const activeCard=document.querySelector(`.skelCard[data-key="${activeLayoutKey}"] .mini`);if(activeCard)activeCard.innerHTML=liveMini;}if(currentTemplateBase){const baseCard=document.querySelector(`.skelCard[data-key="${currentTemplateBase}"] .mini`);if(baseCard)baseCard.innerHTML=liveMini;}const savedIndex=savedTemplates.findIndex(t=>t.key===current);if(savedIndex>=0){savedTemplates[savedIndex].bricks=copyBricks(bricks||[]);savedTemplates[savedIndex].texture=copyTexture(texture);scheduleSavedTemplatesPersist();const film=document.querySelectorAll('.filmCard .mini')[savedIndex];if(film)film.innerHTML=liveMini;}}
 // Re-serialising every saved template/classic/background to localStorage is cheap once, but
 // updateLiveMini() above calls this on every render() tick (i.e. every drag frame) whenever the
 // active layout happens to match a saved template - with several MB of saved motifs that measured
@@ -3771,9 +3794,14 @@ refreshHeroThumbs();
  // width+dpi, returns a Promise) and a note-generator (re-run whenever the size
  // field changes, since half-drop/half-brick's rectangle dimensions depend on it).
  let activeExportFn=null, activeNoteFn=null;
- window.openDownloadPanel=function(title,exportFn,noteFn){
+ window.openDownloadPanel=function(title,exportFn,noteFn,defaultWidth){
   activeExportFn=exportFn;activeNoteFn=noteFn;
   document.getElementById('dlTitle').textContent=title||'download pattern';
+  // Bulk zip exports render many large canvases back to back, which is a lot heavier
+  // on memory (especially on mobile Safari) than the default single-pattern print size -
+  // callers exporting many items at once can suggest a lighter starting width here; the
+  // user can still type in a bigger size if they want full-res prints of each one.
+  if(defaultWidth)document.getElementById('dlWidth').value=defaultWidth;
   updateShapeNote();
   const o=document.getElementById('downloadOverlay');o.classList.add('open');o.setAttribute('aria-hidden','false');
  };
@@ -3796,10 +3824,11 @@ refreshHeroThumbs();
   const w=Math.max(200,Math.min(12000,+document.getElementById('dlWidth').value||3600));
   const dpi=Math.max(72,Math.min(1200,+document.getElementById('dlDpi').value||300));
   btn.disabled=true;status.textContent='rendering…';
-  try{await activeExportFn(w,dpi);status.textContent='downloaded ✓';}
-  catch(e){console.error('export failed',e);status.textContent='export failed — see console';}
+  let hadIssue=false;
+  try{const msg=await activeExportFn(w,dpi);status.textContent=(typeof msg==='string'&&msg)?msg:'downloaded ✓';hadIssue=/failed/i.test(status.textContent);}
+  catch(e){console.error('export failed',e);status.textContent='export failed — see console';hadIssue=true;}
   btn.disabled=false;
-  setTimeout(()=>{status.textContent='';},2500);
+  setTimeout(()=>{status.textContent='';},hadIssue?7000:2500);
  };
 })();
 </script>
