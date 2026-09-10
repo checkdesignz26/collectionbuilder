@@ -1802,6 +1802,8 @@ function engineOffsetFor(engine,tx,ty){
  if(engine==='halfdrop'||engine==='halfdropflip')return {x:tx*STAGE,y:ty*STAGE+(tx%2!==0?STAGE/2:0)};
  if(engine==='halfbrick')return {x:tx*STAGE+(ty%2!==0?STAGE/2:0),y:ty*STAGE};
  if(engine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half};}
+ if(engine==='hexagon')return tessColRowOffset(tx,ty,HEX_LATTICE.colSpacing,HEX_LATTICE.rowSpacing);
+ if(engine==='ogee')return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);
  return {x:tx*STAGE,y:ty*STAGE};
 }
 async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx){
@@ -2073,7 +2075,28 @@ function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repea
 // two get their own real (non-STAGE-based) column/row spacing derived straight from the brick's own
 // w/h below, same in spirit to how diamond gets its own diagonal-lattice half-step.
 function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y:ty*rowSpacing+(tx%2!==0?rowSpacing/2:0)};}
-function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,STAGE*.45,STAGE*.5196);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,STAGE*.32,STAGE*.72);} return {x:tx*STAGE,y:ty*STAGE};}
+// Single source of truth for the hexagon/ogee lattice, shared by engineOffset (real brick
+// tessellation), engineOffsetFor (saved-template export) and the guide overlay
+// (drawTessGuideCanvas) - previously the guide computed its own copy of these numbers
+// independently, small enough to show a dense honeycomb of several cells per tile, while the
+// actual brick lattice used the SAME ratio at that same small scale, so a freely-placed motif
+// sized to fill the guide's cell would only ever be a fraction of the square tile, not one
+// shape big enough to read as "a hexagon/ogee repeat" the way diamond already does (one diamond
+// exactly fills its tile). Scaling colSpacing up to exactly one STAGE tile width - keeping the
+// same width:height ratio each shape's true tessellation requires - makes one hexagon/ogee cell
+// span (most of) the tile, same idea as diamond, while staying mathematically the same
+// edge-to-edge tessellation, just at a bigger, one-cell-per-tile scale.
+// Hexagon's columns sit edge-to-edge (colSpacing = 0.75x its own width, no overlap), so scaling
+// colSpacing up to exactly one STAGE tile width also makes the hexagon itself exactly one tile
+// wide - both land on the same number. Ogee's columns OVERLAP by design (colSpacing = 0.5x its
+// own width - see comment below), so scaling colSpacing to STAGE would make the lens itself TWO
+// tiles wide: a viewport one tile wide then sits entirely inside a single oversized lens, with
+// its outline pushed entirely outside that viewport and nothing left to stroke. Scaling ogee by
+// its WIDTH instead (so the lens itself is one tile wide, like hexagon/diamond) keeps colSpacing
+// at its natural half-width value instead, preserving the real overlap the tessellation needs.
+const HEX_LATTICE=(()=>{const scale=STAGE/(STAGE*.45);return {colSpacing:STAGE,rowSpacing:STAGE*.5196*scale,w:600*scale,h:519.6*scale};})();
+const OGEE_LATTICE=(()=>{const scale=STAGE/640;return {colSpacing:STAGE*.32*scale,rowSpacing:STAGE*.72*scale,w:640*scale,h:720*scale};})();
+function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,HEX_LATTICE.colSpacing,HEX_LATTICE.rowSpacing);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
 function getPatternScale(t=texture){return Math.max(25,Math.min(200,+(t&&t.patternScale!=null?t.patternScale:100)));}
@@ -2224,13 +2247,15 @@ function drawTessGuideCanvas(ctx,scale,origin,stagePx){
  if(tilingEngine!=='diamond'&&tilingEngine!=='hexagon'&&tilingEngine!=='ogee')return;
  const isDiamond=tilingEngine==='diamond',isHex=tilingEngine==='hexagon';
  const polyKey=isDiamond?'diamond':(isHex?'hexagon':'ogeeLens');
- // Ogee's colSpacing is much tighter than its own width (32 vs 64, i.e. columns overlap by half
- // their width). Unlike hexagon's flat edges, the ogeeLens curve barely widens until quite close
- // to its top/bottom tips, so neighbouring columns need that much horizontal overlap before their
- // curves actually cross and touch instead of leaving a gap between them.
- const colSpacing=isHex?STAGE*.45:STAGE*.32;
- const rowSpacing=isHex?STAGE*.5196:STAGE*.72;
- const wUnits=isDiamond?STAGE:(isHex?600:640),hUnits=isDiamond?STAGE:(isHex?519.6:720);
+ // Ogee's columns overlap by half their width (unlike hexagon's flat edges, the ogeeLens curve
+ // barely widens until quite close to its top/bottom tips, so neighbouring columns need that
+ // much horizontal overlap before their curves actually cross and touch instead of leaving a gap
+ // between them) - see HEX_LATTICE/OGEE_LATTICE above, shared with engineOffset so the guide
+ // always matches exactly where real bricks actually tessellate.
+ const lattice=isHex?HEX_LATTICE:OGEE_LATTICE;
+ const colSpacing=lattice.colSpacing;
+ const rowSpacing=lattice.rowSpacing;
+ const wUnits=isDiamond?STAGE:lattice.w,hUnits=isDiamond?STAGE:lattice.h;
  const strokeColor=isDiamond?'rgba(217,106,152,.55)':'rgba(30,30,40,.32)';
  const pts=GUIDE_SHAPE_POLY[polyKey];
  const range=Math.max(6,Math.ceil((repeatSpan||3)*1.6));
@@ -3794,6 +3819,10 @@ refreshHeroThumbs();
           <button data-tstex="chalk">grunge</button>
           <button data-tstex="vintage">vintage</button>
           <button data-tstex="splatter">ink splatter</button>
+          <button data-tstex="sprinkles">sprinkles</button>
+          <button data-tstex="doodles">doodles</button>
+          <button data-tstex="scribbles">scribbles</button>
+          <button data-tstex="crosshatch">cross hatch</button>
         </div>
         <div class="tsRow" id="tsSurfaceTextureIntensityRow" style="display:none;margin-top:9px"><label>intensity</label><input id="tsSurfaceTextureScale" type="range" min="20" max="200" value="60"></div>
         </div></div>
