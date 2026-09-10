@@ -1040,8 +1040,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <div class="stageOuter"><div class="stageViewport repeat" id="stageViewport"><div id="stage" class="repeatStage repeat"></div></div></div>
       <div class="livePreviewHeader"><span class="livePreviewBadge">Live Preview</span><span class="footerNote">every thumbnail below stays in sync with your motifs and sizing as you edit</span></div>
       <label style="display:flex;align-items:center;gap:8px;margin:9px 0;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)">
-        <input type="checkbox" id="layoutPlaceholdersToggle" checked style="width:16px;height:16px">
-        add this layout's placeholder shapes (uncheck to just set the repeat structure and leave the canvas empty for "place freely")
+        <input type="checkbox" id="layoutPlaceholdersToggle" style="width:16px;height:16px">
+        replace with this layout's own placeholder shapes (leave unchecked to keep your current motifs and just switch the tiling structure)
       </label>
       <div class="skeletonGrid" id="skeletonGrid"></div>
       <div class="filmstripBlock">
@@ -2012,34 +2012,29 @@ function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurr
 // layout grid itself, and a whole second "tiling style" grid) because picking a repeat structure and
 // deciding whether to fill it with that layout's placeholder shapes were bundled into one action -
 // "free layout" was really just "any tiling engine, no placeholders", but it could only ever mean
-// "grid tiling, no placeholders" as its own button. The checkbox makes that choice explicit and
-// applies to every layout: checked reproduces the old setPreset behaviour exactly.
-// Unchecked needs two different things depending on where you're starting from, though - if
-// you're already on the free layout, freely-placed motifs are the whole point of being there, so
-// switching structure must only change tilingEngine (exactly what the old standalone "tiling
-// style" row did) rather than wiping them via a full setPreset('blank',...). Only jump to blank
-// first if you're coming FROM an actual preset's placeholder shapes, which don't belong in free
-// layout at all.
+// "grid tiling, no placeholders" as its own button. The checkbox makes that choice explicit:
+// checked reproduces the old setPreset behaviour exactly (replace the canvas with this layout's
+// own placeholder shapes). Unchecked is the point of this whole panel - move between repeat
+// structures WITHOUT losing whatever's already on the canvas, motifs and all, no matter which
+// preset (if any) they came from. That means never routing through setPreset('blank',...) here,
+// which would wipe bricks back to empty - only `current` changes (to 'blank', since the kept
+// bricks no longer match any named preset's own definition and mustn't get saved back into one
+// via saveCurrentBlueprint), tilingEngine changes to match the tapped card, and the bricks
+// themselves are left completely alone.
 function selectLayout(key){
  if(document.getElementById('layoutPlaceholdersToggle').checked){setPreset(key,true);return;}
  // "free layout" itself isn't a tiling engine (it's not in TILING_ENGINE_TYPES) - tapping it
- // unchecked just means "clear to blank", same as unchecking the box directly below, and must
- // keep whichever tiling engine was already active rather than falling back to the TILING_ENGINE_
- // TYPES.includes(key) check further down (which would silently reset it to plain grid).
- if(key==='blank'){
-  if(current==='blank')return;
-  const keepTiling=tilingEngine;
-  setPreset('blank',true);
-  tilingEngine=keepTiling;
-  syncTilingEngineButtons();
-  render();renderGrid();
-  return;
+ // unchecked just means "these are free-form now", keeping whichever tiling engine was already
+ // active rather than falling back to the TILING_ENGINE_TYPES.includes(key) check below (which
+ // would silently reset it to plain grid).
+ if(current==='blank'&&(key==='blank'||tilingEngine===key))return;
+ pushHistory();
+ current='blank';currentTemplateBase=null;
+ if(key!=='blank'){
+  tilingEngine=TILING_ENGINE_TYPES.includes(key)?key:'grid';
+  autoSingleTileFor(tilingEngine);
  }
- const newTiling=TILING_ENGINE_TYPES.includes(key)?key:'grid';
- if(current!=='blank')setPreset('blank',true);
- else pushHistory();
- tilingEngine=newTiling;
- autoSingleTileFor(tilingEngine);
+ document.getElementById('currentName').textContent=presets.blank.name;
  syncTilingEngineButtons();
  render();renderGrid();
 }
