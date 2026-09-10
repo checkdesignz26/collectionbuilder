@@ -1468,7 +1468,7 @@ function persistAllSavedItems(){
  try{
   const d=newMotifDict();
   const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
-  localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[])}));
+  localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null}));
   return true;
  }catch(e){console.warn('persistAllSavedItems failed',e);return false;}
 }
@@ -1597,7 +1597,7 @@ function buildProjectBackup(){
  const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
  return {app:'magic-collection-builder',kind:'project-backup',version:1,savedAt:new Date().toISOString(),
   session:compactSessionSnapshotForStorage(autosaveSnapshot()),
-  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[]}};
+  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[],motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null}};
 }
 function downloadProjectBackup(){
  const data=buildProjectBackup();
@@ -1614,6 +1614,10 @@ function restoreProjectBackup(raw){
   savedTemplates=expandTemplatesFromBlob(data.savedItems);
   if(window.tsGetSavedList){const list=window.tsGetSavedList();list.length=0;(data.savedItems.classics||[]).forEach(c=>list.push(c));}
   if(window.bgGetSavedList){const list=window.bgGetSavedList();list.length=0;(data.savedItems.backgrounds||[]).forEach(b=>list.push(b));}
+  motifTray=data.savedItems.motifTray||[];
+  activeMotifId=motifTray[0]?.id||null;
+  heroSetFromDataUrl(data.savedItems.heroImgDataUrl);
+  renderMotifTray();
   persistAllSavedItems();
  }
  applySnapshotToLiveState(data.session,'project file loaded ✓');
@@ -2639,7 +2643,12 @@ function stageOnPointerDown(e){
  _pointerHitBrickOrHandle=false;
  if(selected!==null){selected=null;render();syncControls();}
 }
-let motifTray=[];
+// Clipped/uploaded motifs used to only live in memory - gone the instant the page reloaded
+// (autosave/templates only ever stored motifShapes + bricks' own motifUrl, which cover what's
+// already PLACED, not the source library you pick from). Seed the tray from the same persisted
+// blob saved templates/classics/backgrounds already use, so a hero-image clip survives a reload
+// or "reset pattern" the same way everything else in that library does.
+let motifTray=(window.__savedItemsBlob&&window.__savedItemsBlob.motifTray)||[];
 let activeMotifId=null;
 // Most motif PNGs (stock illustrations especially) ship with generous transparent padding
 // around the actual artwork. object-fit:contain scales the WHOLE image including that padding,
@@ -2704,11 +2713,13 @@ function handleMotifUpload(e){
     motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:file.name,dataUrl:trimTransparentPadding(img)});
     if(!activeMotifId)activeMotifId=motifTray[motifTray.length-1].id;
     renderMotifTray();
+    persistAllSavedItems();
    };
    img.onerror=()=>{
     motifTray.push({id:'m'+Math.random().toString(36).slice(2),name:file.name,dataUrl:ev.target.result});
     if(!activeMotifId)activeMotifId=motifTray[motifTray.length-1].id;
     renderMotifTray();
+    persistAllSavedItems();
    };
    img.src=ev.target.result;
   };
@@ -2730,7 +2741,7 @@ function renderMotifTray(){
   del.className='motifDel';
   del.textContent='×';
   del.title='remove from tray';
-  del.onclick=e=>{e.stopPropagation();motifTray=motifTray.filter(x=>x.id!==m.id);if(activeMotifId===m.id)activeMotifId=motifTray[0]?.id||null;renderMotifTray();};
+  del.onclick=e=>{e.stopPropagation();motifTray=motifTray.filter(x=>x.id!==m.id);if(activeMotifId===m.id)activeMotifId=motifTray[0]?.id||null;renderMotifTray();persistAllSavedItems();};
   d.appendChild(del);
   const label=document.createElement('span');
   label.className='motifLabel';
@@ -2749,7 +2760,12 @@ function renderMotifTray(){
 // flip through layouts and see how an already-chosen motif set would look in each one, without
 // reassigning it every time.
 let motifShapes={};
-function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(motifShapes[b.type])b.motifUrl=motifShapes[b.type];else if(b.motifUrl)delete b.motifUrl;});}
+// motifPinned opts a brick OUT of the shared-per-shape-type default above - set when a motif is
+// placed with scope "just this one" (see placeMotifOnSelected), so a specific brick (e.g. one
+// "side" piece in a diamond layout that's meant to carry a different image from its neighbours)
+// keeps its own motif through every later setPreset/layout-switch call instead of being silently
+// flattened back to whatever motifShapes[type] currently holds.
+function applyMotifShapesToBricks(list){(list||[]).forEach(b=>{if(b.motifPinned)return;if(motifShapes[b.type])b.motifUrl=motifShapes[b.type];else if(b.motifUrl)delete b.motifUrl;});}
 // motifShapes only lives in memory - a saved template's own bricks keep their motifUrl fine
 // (that's baked into the saved snapshot), but after a fresh page load motifShapes itself starts
 // empty, so every OTHER Live Preview thumbnail (which reads from motifShapes, not from this
@@ -2794,18 +2810,32 @@ function placeMotifOnSelected(){
  const m=motifTray.find(x=>x.id===activeMotifId);
  if(!b||!m)return;
  pushHistory();
- motifShapes[b.type]=m.dataUrl;
- bricks.forEach(x=>{if(x.type===b.type)x.motifUrl=m.dataUrl;});
+ if(alignScope==='single'){
+  // Pin just this brick - it keeps its own motif independently of whatever every other
+  // brick of the same shape is showing, and survives future layout switches (see
+  // applyMotifShapesToBricks). Set scope back to "same shape" for the old shared behaviour.
+  b.motifUrl=m.dataUrl;b.motifPinned=true;
+ }else{
+  motifShapes[b.type]=m.dataUrl;
+  bricks.forEach(x=>{if(x.type===b.type){x.motifUrl=m.dataUrl;delete x.motifPinned;}});
+ }
  render();
  renderGrid();
  renderAssignedShapes();
 }
 function clearMotifFromSelected(){
  const b=selectedBrick();
- if(!b||!motifShapes[b.type])return;
- pushHistory();
- delete motifShapes[b.type];
- bricks.forEach(x=>{if(x.type===b.type)delete x.motifUrl;});
+ if(!b)return;
+ if(alignScope==='single'){
+  if(!b.motifUrl)return;
+  pushHistory();
+  delete b.motifUrl;delete b.motifPinned;
+ }else{
+  if(!motifShapes[b.type])return;
+  pushHistory();
+  delete motifShapes[b.type];
+  bricks.forEach(x=>{if(x.type===b.type){delete x.motifUrl;delete x.motifPinned;}});
+ }
  render();
  renderGrid();
  renderAssignedShapes();
@@ -3702,6 +3732,15 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
 // for elements defined further down would just return null.
 let heroImg=null,heroImgDataUrl=null,heroLassoPts=null,heroLassoDrawing=false;
 let heroZoom=1,heroPanX=0,heroPanY=0,heroPointers=new Map(),heroPinchStart=null;
+function heroSetFromDataUrl(dataUrl){
+ if(!dataUrl)return;
+ heroImgDataUrl=dataUrl;
+ const img=new Image();
+ img.onload=()=>{heroImg=img;refreshHeroThumbs();};
+ img.onerror=()=>{};
+ img.src=dataUrl;
+}
+heroSetFromDataUrl(window.__savedItemsBlob&&window.__savedItemsBlob.heroImgDataUrl);
 function heroApplyTransform(){
  const canvas=document.getElementById('heroStudioCanvas');if(!canvas)return;
  canvas.style.transform=`translate(${heroPanX}px,${heroPanY}px) scale(${heroZoom})`;
@@ -3714,7 +3753,7 @@ function heroHandleUpload(e){
  const reader=new FileReader();
  reader.onload=ev=>{
   const img=new Image();
-  img.onload=()=>{heroImg=img;heroImgDataUrl=ev.target.result;heroDrawPreview(img);refreshHeroThumbs();};
+  img.onload=()=>{heroImg=img;heroImgDataUrl=ev.target.result;heroDrawPreview(img);refreshHeroThumbs();persistAllSavedItems();};
   img.onerror=()=>{};
   img.src=ev.target.result;
  };
@@ -3848,6 +3887,7 @@ function heroClipSelection(){
  motifTray.push({id:'m'+Math.random().toString(36).slice(2),name,dataUrl:downscaleMotifCanvas(out)});
  activeMotifId=motifTray[motifTray.length-1].id;
  renderMotifTray();
+ persistAllSavedItems();
  heroLassoPts=null;heroRedraw();
  document.getElementById('heroStudioClipRow').style.display='none';
  const status=document.getElementById('heroStudioStatus');if(status){status.textContent='✂️ "'+name+'" clipped into motif tray ✓ - trace another, or close when done.';}
