@@ -2104,15 +2104,21 @@ function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y
 // same width:height ratio each shape's true tessellation requires - makes one hexagon/ogee cell
 // span (most of) the tile, same idea as diamond, while staying mathematically the same
 // edge-to-edge tessellation, just at a bigger, one-cell-per-tile scale.
-// Hexagon's columns sit edge-to-edge (colSpacing = 0.75x its own width, no overlap), so scaling
-// colSpacing up to exactly one STAGE tile width also makes the hexagon itself exactly one tile
-// wide - both land on the same number. Ogee's columns OVERLAP by design (colSpacing = 0.5x its
-// own width - see comment below), so scaling colSpacing to STAGE would make the lens itself TWO
-// tiles wide: a viewport one tile wide then sits entirely inside a single oversized lens, with
-// its outline pushed entirely outside that viewport and nothing left to stroke. Scaling ogee by
-// its WIDTH instead (so the lens itself is one tile wide, like hexagon/diamond) keeps colSpacing
-// at its natural half-width value instead, preserving the real overlap the tessellation needs.
-const HEX_LATTICE=(()=>{const scale=STAGE/(STAGE*.45);return {colSpacing:STAGE,rowSpacing:STAGE*.5196*scale,w:600*scale,h:519.6*scale};})();
+// Ogee's columns OVERLAP by design (colSpacing = 0.5x its own width - see comment below), so
+// scaling colSpacing to STAGE would make the lens itself TWO tiles wide: a viewport one tile wide
+// then sits entirely inside a single oversized lens, with its outline pushed entirely outside
+// that viewport and nothing left to stroke. Scaling ogee by its WIDTH instead (so the lens itself
+// is one tile wide, like diamond) keeps colSpacing at its natural half-width value instead,
+// preserving the real overlap the tessellation needs.
+// A flat-top hexagon is inherently wider than it is tall (600:519.6, i.e. ~1.15:1) - a square
+// tile can only ever exactly fit ONE of its two dimensions, forcing the other to overflow by that
+// same ~15% no matter which axis is chosen. Scaling by width (as this used to) put that overflow
+// on the height axis - straight across the hexagon's FLAT top and bottom edges, which are highly
+// visible as a hard cut when clipped by the tile. Scaling by HEIGHT instead puts the ~15% overflow
+// on the width axis, where the hexagon comes to a single POINT at its left/right - a point poking
+// a little past the tile edge reads as a natural continuation into the next tile (exactly how
+// ogee's tapered tips already get away with the same kind of overflow), not a visible cut.
+const HEX_LATTICE=(()=>{const scale=STAGE/519.6;return {colSpacing:STAGE*.45*scale,rowSpacing:STAGE,w:600*scale,h:STAGE};})();
 const OGEE_LATTICE=(()=>{const scale=STAGE/640;return {colSpacing:STAGE*.32*scale,rowSpacing:STAGE*.72*scale,w:640*scale,h:720*scale};})();
 function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,HEX_LATTICE.colSpacing,HEX_LATTICE.rowSpacing);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
