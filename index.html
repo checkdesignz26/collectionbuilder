@@ -1005,28 +1005,20 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     </div></div>
 
     <div class="box"><h2>repeat layouts <span class="livePreviewBadge">Live Preview</span></h2><div class="body">
-      <p class="hint" style="margin:0 0 7px">No template - place your own motifs freely with nothing structuring them (see "place freely" above). Not one of the repeat structures below; this is the "start from nothing" option.</p>
-      <button class="full" onclick="setPreset('blank',true)" style="margin-bottom:13px;border-style:dashed">✦ free layout (no template)</button>
-      <p class="hint">Repeat structures below - where placeholder shapes sit and how the tile repeats (grid, half drop, hexagon...). This is not the same as "saved patterns" below, which are your own saved snapshots - switching structure here doesn't touch those. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
+      <p class="hint" style="margin:0 0 7px">Pick a repeat structure - where placeholder shapes sit and how the tile repeats (grid, half drop, hexagon...). This is not the same as "saved patterns" below, which are your own saved snapshots - picking a layout here doesn't touch those. Live Preview keeps every layout's thumbnail in sync with your motifs and sizing as you edit, so you can flip through them to compare.</p>
+      <label style="display:flex;align-items:center;gap:8px;margin:0 0 9px;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)">
+        <input type="checkbox" id="layoutPlaceholdersToggle" checked style="width:16px;height:16px">
+        add this layout's placeholder shapes (uncheck to just set the repeat structure and leave the canvas empty for "place freely" above)
+      </label>
       <div class="grid2">
-        <button onclick="setPreset('grid',true)">grid</button>
-        <button onclick="setPreset('halfdrop',true)">half drop</button>
-        <button onclick="setPreset('halfbrick',true)">half brick</button>
-        <button onclick="setPreset('halfdropflip',true)">half drop flip</button>
-        <button onclick="setPreset('diamond',true)">diamond repeat</button>
-        <button onclick="setPreset('tossed',true)">tossed</button>
-        <button onclick="setPreset('ogee',true)">ogee</button>
-        <button onclick="setPreset('hexagon',true)">hexagon</button>
-      </div>
-      <p class="hint" style="margin-top:9px">Tiling style - independent of the layout above, so you can try a different repeat stagger on whatever's currently on the canvas (handy on the free layout + freely-placed motifs). Remembers its own choice per layout.</p>
-      <div class="grid2" id="tilingEngineRow">
-        <button data-tiling="grid">grid</button>
-        <button data-tiling="halfdrop">half drop</button>
-        <button data-tiling="halfdropflip">half drop flip</button>
-        <button data-tiling="halfbrick">half brick</button>
-        <button data-tiling="diamond">diamond</button>
-        <button data-tiling="hexagon">hexagon</button>
-        <button data-tiling="ogee" style="grid-column:1/-1">ogee</button>
+        <button onclick="selectLayout('grid')">grid</button>
+        <button onclick="selectLayout('halfdrop')">half drop</button>
+        <button onclick="selectLayout('halfbrick')">half brick</button>
+        <button onclick="selectLayout('halfdropflip')">half drop flip</button>
+        <button onclick="selectLayout('diamond')">diamond repeat</button>
+        <button onclick="selectLayout('tossed')">tossed</button>
+        <button onclick="selectLayout('ogee')">ogee</button>
+        <button onclick="selectLayout('hexagon')">hexagon</button>
       </div>
     </div></div>
 
@@ -2000,6 +1992,27 @@ function saveTemplateToFilmstrip(){
 }
 function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+// The "repeat layouts" grid used to be three separate pieces (a standalone "free layout" button, the
+// layout grid itself, and a whole second "tiling style" grid) because picking a repeat structure and
+// deciding whether to fill it with that layout's placeholder shapes were bundled into one action -
+// "free layout" was really just "any tiling engine, no placeholders", but it could only ever mean
+// "grid tiling, no placeholders" as its own button. The checkbox makes that choice explicit and
+// applies to every layout: checked reproduces the old setPreset behaviour exactly.
+// Unchecked needs two different things depending on where you're starting from, though - if
+// you're already on the free layout, freely-placed motifs are the whole point of being there, so
+// switching structure must only change tilingEngine (exactly what the old standalone "tiling
+// style" row did) rather than wiping them via a full setPreset('blank',...). Only jump to blank
+// first if you're coming FROM an actual preset's placeholder shapes, which don't belong in free
+// layout at all.
+function selectLayout(key){
+ if(document.getElementById('layoutPlaceholdersToggle').checked){setPreset(key,true);return;}
+ const newTiling=TILING_ENGINE_TYPES.includes(key)?key:'grid';
+ if(current!=='blank')setPreset('blank',true);
+ else pushHistory();
+ tilingEngine=newTiling;
+ syncTilingEngineButtons();
+ render();renderGrid();
+}
 // repeatSpan is always odd (3/5/7/9, driven by the "zoom out" slider) so there's a true centre
 // tile. tileOffsets()/the brick edge-clone range below both walk the same -(n/2)..+(n/2) square, so
 // "zoomed out" just means a bigger square of the same tiles rather than a different code path.
@@ -2678,7 +2691,6 @@ renderAssignedShapes();
 renderMotifTray();
 function syncZoomOutVisibility(){document.getElementById('zoomOutRow').style.display=mode==='repeat'?'grid':'none';}
 function syncTilingEngineButtons(){document.querySelectorAll('#tilingEngineRow [data-tiling]').forEach(btn=>btn.classList.toggle('active',btn.dataset.tiling===tilingEngine));}
-document.querySelectorAll('#tilingEngineRow [data-tiling]').forEach(btn=>btn.onclick=()=>{pushHistory();tilingEngine=btn.dataset.tiling;syncTilingEngineButtons();render();renderGrid();});
 syncTilingEngineButtons();
 document.getElementById('repeatBtn').onclick=()=>{mode='repeat';repeatBtn.classList.add('active');singleBtn.classList.remove('active');syncZoomOutVisibility();render();};document.getElementById('singleBtn').onclick=()=>{mode='single';singleBtn.classList.add('active');repeatBtn.classList.remove('active');syncZoomOutVisibility();render();};
 syncZoomOutVisibility();
