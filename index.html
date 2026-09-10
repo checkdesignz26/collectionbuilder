@@ -2013,6 +2013,20 @@ function selectLayout(key){
  syncTilingEngineButtons();
  render();renderGrid();
 }
+// Unchecking "add placeholder shapes" only ever changed what the NEXT layout tap would do -
+// until then whatever preset was already loaded (its real placeholder shapes included) just sat
+// there unchanged, which read as the checkbox not actually doing anything. Unchecking now clears
+// to free layout immediately, keeping whichever tiling engine was already active rather than
+// resetting it - checking the box back on stays non-reactive (there's no single preset it could
+// jump to), it only affects the next layout you tap.
+document.getElementById('layoutPlaceholdersToggle').addEventListener('change',function(){
+ if(this.checked || current==='blank')return;
+ const keepTiling=tilingEngine;
+ setPreset('blank',true);
+ tilingEngine=keepTiling;
+ syncTilingEngineButtons();
+ render();renderGrid();
+});
 // repeatSpan is always odd (3/5/7/9, driven by the "zoom out" slider) so there's a true centre
 // tile. tileOffsets()/the brick edge-clone range below both walk the same -(n/2)..+(n/2) square, so
 // "zoomed out" just means a bigger square of the same tiles rather than a different code path.
