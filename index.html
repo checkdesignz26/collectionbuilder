@@ -969,7 +969,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>pattern playground</h1><p>v63 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save pattern</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this pattern's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset pattern</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
+  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save pattern</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this pattern's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><button id="downloadProjectBtn" class="small" title="Download everything - current pattern, all saved patterns, classics and backgrounds - as this app's own .pplayground file, independent of this browser/device"><svg class="btnIcon"><use href="#i-download"/></svg>download .pplayground</button><button id="loadProjectBtn" class="small" title="Restore from a .pplayground project file downloaded earlier"><svg class="btnIcon"><use href="#i-target"/></svg>load .pplayground</button><input id="loadProjectFile" type="file" accept=".pplayground,application/json,.json" style="display:none"><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset pattern</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
 </header>
 <main>
   <aside class="side left">
@@ -1493,13 +1493,22 @@ function compactSessionSnapshotForStorage(snap){
  for(const k of Object.keys(snap.blueprintStore||{}))blueprintStore[k]=compactBricksWithDict(snap.blueprintStore[k],d);
  return {...snap,bricks,blueprintStore,motifDict:d.dict};
 }
-function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{
+function writeAutosaveNow(){
  try{localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(compactSessionSnapshotForStorage(autosaveSnapshot())));}
  catch(e){
   console.warn('autosave failed',e);
   if(!autosaveFailWarned){autosaveFailWarned=true;flashSaveStatus("autosave couldn't fit in storage - use \"save template\" to keep this for sure",false,7000);}
  }
-},900);}
+}
+function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(writeAutosaveNow,900);}
+// The 900ms debounce above never gets a chance to fire if the tab is backgrounded/closed
+// right after an edit - exactly the iPad "make a change, switch app or lock the screen" flow
+// that was losing whatever was drawn in the last ~second before reload. visibilitychange
+// (fires reliably before Safari suspends a backgrounded tab) and pagehide (actual close/
+// navigate-away) both flush synchronously so the debounce can never outlive the page.
+function flushAutosaveNow(){if(autosaveTimer){clearTimeout(autosaveTimer);autosaveTimer=null;writeAutosaveNow();}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushAutosaveNow();});
+window.addEventListener('pagehide',flushAutosaveNow);
 // Shared by restoreAutosave and quickLoad - both hand it a parsed snapshot of the same shape
 // (see autosaveSnapshot) and a status message to flash once it's live.
 function applySnapshotToLiveState(rawData,statusMsg){
@@ -1575,6 +1584,46 @@ function quickLoad(){
  pushHistory();
  applySnapshotToLiveState(data,'quick loaded ✓');
 }
+// Everything above (autosave/quicksave/"save pattern") only ever lands in THIS browser's
+// localStorage - gone the moment the user clears site data, switches devices, or the browser
+// itself evicts storage under pressure. This is the actual "own it, don't lose it" escape
+// hatch: one real file, downloaded to the user's device, holding the live canvas AND the whole
+// saved-patterns/classics/backgrounds library, that can be loaded back in on any device/browser.
+function buildProjectBackup(){
+ const d=newMotifDict();
+ const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
+ return {app:'magic-collection-builder',kind:'project-backup',version:1,savedAt:new Date().toISOString(),
+  session:compactSessionSnapshotForStorage(autosaveSnapshot()),
+  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[]}};
+}
+function downloadProjectBackup(){
+ const data=buildProjectBackup();
+ const stamp=new Date().toISOString().slice(0,10);
+ triggerBlobDownload(new Blob([JSON.stringify(data)],{type:'application/json'}),`magic-collection-builder-backup-${stamp}.pplayground`);
+ flashSaveStatus('project file downloaded ✓');
+}
+function restoreProjectBackup(raw){
+ let data;try{data=JSON.parse(raw);}catch(e){flashSaveStatus('that file is not readable JSON',false);return;}
+ if(!data||data.kind!=='project-backup'||!data.session){flashSaveStatus('not a magic collection builder project file',false);return;}
+ if(!confirm('This replaces every currently saved pattern, classic and background with the ones in this file, and loads its live canvas. Continue?'))return;
+ pushHistory();
+ if(data.savedItems){
+  savedTemplates=expandTemplatesFromBlob(data.savedItems);
+  if(window.tsGetSavedList){const list=window.tsGetSavedList();list.length=0;(data.savedItems.classics||[]).forEach(c=>list.push(c));}
+  if(window.bgGetSavedList){const list=window.bgGetSavedList();list.length=0;(data.savedItems.backgrounds||[]).forEach(b=>list.push(b));}
+  persistAllSavedItems();
+ }
+ applySnapshotToLiveState(data.session,'project file loaded ✓');
+}
+document.getElementById('downloadProjectBtn').onclick=downloadProjectBackup;
+document.getElementById('loadProjectBtn').onclick=()=>document.getElementById('loadProjectFile').click();
+document.getElementById('loadProjectFile').addEventListener('change',e=>{
+ const file=e.target.files[0];if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>restoreProjectBackup(reader.result);
+ reader.readAsText(file);
+ e.target.value='';
+});
 let saveBusy=false;
 function flashSaveStatus(msg,ok=true,duration=1200){const s=document.getElementById('saveStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(flashSaveStatus.t);flashSaveStatus.t=setTimeout(()=>{s.textContent='';},duration);}
 // Filmstrip delete used to be a blocking confirm() dialog - the standard failure mode for those
@@ -2472,7 +2521,13 @@ function brickLocalPoint(b,cx,cy,px,py){
  const cos=Math.cos(rad),sin=Math.sin(rad);
  return {x:dx*cos-dy*sin,y:dx*sin+dy*cos};
 }
-function pointInBrick(local,bwPx,bhPx){return Math.abs(local.x)<=bwPx/2&&Math.abs(local.y)<=bhPx/2;}
+// Small/thin motifs (a lot of placeholder shapes are much smaller than a full tile) were only
+// tappable dead-center, since the hit box exactly matched the drawn shape - brutal for a real
+// fingertip and exactly why double-tap-to-duplicate felt like it only worked in the middle.
+// Floor the hit box at a real touch-target size (44px, the Apple/Google minimum) without
+// shrinking or otherwise changing already-large bricks.
+const MIN_TAP_PX=44;
+function pointInBrick(local,bwPx,bhPx){const hw=Math.max(bwPx,MIN_TAP_PX)/2,hh=Math.max(bhPx,MIN_TAP_PX)/2;return Math.abs(local.x)<=hw&&Math.abs(local.y)<=hh;}
 const HANDLE_SIZE=18,ROT_HANDLE_SIZE=16,ROT_OFFSET=30,DOT_SIZE=12;
 // Hit radius is deliberately larger than the visual handle (touch target, not just the drawn
 // pixels) - matches how a real finger is far less precise than a mouse cursor.
