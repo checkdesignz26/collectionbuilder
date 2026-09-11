@@ -2646,7 +2646,14 @@ function stageOnPointerDown(e){
  if(multiSelectMode){
   _pointerHitBrickOrHandle=true;
   const hit=hitTestBrickAt(px,py);
-  if(hit){if(multiSelected.has(hit.id))multiSelected.delete(hit.id);else multiSelected.add(hit.id);selected=hit.id;render();syncControls();syncMultiSelectUI();}
+  if(!hit)return;
+  // A brick that's already in the group needs to support BOTH a plain tap (toggle it back out)
+  // and a real drag (move the whole group) without making the user remember to tap "select
+  // multiple" again first to leave grouping mode - that extra step is exactly what looked like
+  // "the group won't move" when someone dragged straight from grouping into repositioning it.
+  if(multiSelected.size>1&&multiSelected.has(hit.id)){startGroupDragOrToggle(e,hit.id);return;}
+  if(multiSelected.has(hit.id))multiSelected.delete(hit.id);else multiSelected.add(hit.id);
+  selected=hit.id;render();syncControls();syncMultiSelectUI();
   return;
  }
  const sel=selectedBrick();
@@ -2948,6 +2955,34 @@ const DOUBLE_TAP_MS=550;
 // Drawn as the red halo in drawSelectionUI while a press-hold-to-delete is armed but not yet
 // committed - replaces the old .pressHold DOM class toggle.
 let pressHoldId=null;
+// Used only from "select multiple" mode, for a brick that's already in the current group: a plain
+// tap (no real movement) toggles it back out of the group same as before, but real movement drags
+// every grouped brick together right away - no need to leave grouping mode first just to move what
+// was already grouped.
+function startGroupDragOrToggle(e,id){
+ e.preventDefault();
+ const sx=e.clientX,sy=e.clientY;
+ const group=bricks.filter(x=>multiSelected.has(x.id)).map(x=>({b:x,ox:x.x,oy:x.y}));
+ let moved=false;
+ const DRAG_THRESHOLD_PX=6;
+ const onMove=ev=>{
+  const dx=ev.clientX-sx,dy=ev.clientY-sy;
+  if(!moved){
+   if(Math.hypot(dx,dy)<DRAG_THRESHOLD_PX)return;
+   moved=true;pushHistory();
+  }
+  const tilePx=(mode==='repeat'?_lastStageSize/repeatSpan:_lastStageSize);
+  group.forEach(m=>{m.b.x=Math.max(-20,Math.min(120,m.ox+dx/tilePx*100));m.b.y=Math.max(-20,Math.min(120,m.oy+dy/tilePx*100));});
+  render();
+ };
+ const onUp=()=>{
+  window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);
+  if(!moved)multiSelected.delete(id);
+  render();syncControls();syncMultiSelectUI();
+ };
+ window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);
+ selected=id;render();syncControls();
+}
 function startDrag(e,id){e.preventDefault();
  const now=Date.now();
  if(lastTapId===id && now-lastTapTime<DOUBLE_TAP_MS){
