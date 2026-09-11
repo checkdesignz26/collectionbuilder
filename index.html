@@ -1390,6 +1390,47 @@ function redo(){if(!redoStack.length)return;history.push(capture());restore(redo
 // never written to again) and every save/delete anywhere calls
 // persistAllSavedItems() to write the current state of all three back out.
 const SAVED_ITEMS_KEY='pkmSavedItemsV1';
+// Minimal key-value wrapper around IndexedDB - the saved-items library (below) moved here from
+// localStorage because localStorage's quota is small and fixed (often as low as 5-10MB on iOS
+// Safari) and shared by every saved pattern/motif/classic/background at once, so a collection
+// with a handful of real motif images in it could fill it completely and every SAVE from then on
+// would fail forever, no matter how much was deleted elsewhere. IndexedDB's quota scales with the
+// device's actual free disk space instead (typically hundreds of MB to GB), which is the real fix
+// rather than another warning about the same small ceiling.
+const IDB_NAME='pkmDB',IDB_STORE='kv',SAVED_ITEMS_IDB_KEY='items';
+function idbOpen(){
+ return new Promise((resolve,reject)=>{
+  if(!window.indexedDB){reject(new Error('IndexedDB unavailable'));return;}
+  const req=indexedDB.open(IDB_NAME,1);
+  req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(IDB_STORE))req.result.createObjectStore(IDB_STORE);};
+  req.onsuccess=()=>resolve(req.result);
+  req.onerror=()=>reject(req.error);
+ });
+}
+async function idbGet(key){
+ try{
+  const db=await idbOpen();
+  return await new Promise((resolve,reject)=>{
+   const tx=db.transaction(IDB_STORE,'readonly');
+   const req=tx.objectStore(IDB_STORE).get(key);
+   req.onsuccess=()=>resolve(req.result);
+   req.onerror=()=>reject(req.error);
+  });
+ }catch(e){console.warn('idbGet failed',e);return undefined;}
+}
+async function idbSet(key,value){
+ const db=await idbOpen();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(IDB_STORE,'readwrite');
+  tx.objectStore(IDB_STORE).put(value,key);
+  tx.oncomplete=()=>resolve(true);
+  tx.onerror=()=>reject(tx.error);
+ });
+}
+// Synchronous last-resort default so the app can paint instantly on load, before the async
+// IndexedDB read below has a chance to resolve - hydrateSavedItemsFromIDB overwrites this (and
+// re-renders) the moment real data is ready, whether that's from IndexedDB or, the first time
+// ever after this migration, a one-time pull from wherever this saved-items library used to live.
 function loadAllSavedItemsBlob(){
  try{const blob=JSON.parse(localStorage.getItem(SAVED_ITEMS_KEY)||'null');if(blob)return blob;}catch(e){}
  let templates=[],classics=[],backgrounds=[];
@@ -1397,6 +1438,32 @@ function loadAllSavedItemsBlob(){
  try{classics=JSON.parse(localStorage.getItem('pkmTextureStudioV32')||'[]');}catch(e){}
  try{backgrounds=JSON.parse(localStorage.getItem('pkmBackgroundStudioV34')||'[]');}catch(e){}
  return {templates,classics,backgrounds};
+}
+// Applies a freshly-loaded saved-items blob (from IndexedDB, or the pre-migration localStorage
+// blob) into every studio's own array and re-renders whatever's already on screen - shared by the
+// boot-time hydration below and by the legacy-blob migration path inside it.
+function applyHydratedSavedItems(blob){
+ if(!blob)return;
+ savedTemplates=expandTemplatesFromBlob(blob);
+ if(window.tsGetSavedList){const list=window.tsGetSavedList();list.length=0;(blob.classics||[]).forEach(c=>list.push(c));}
+ if(window.bgGetSavedList){const list=window.bgGetSavedList();list.length=0;(blob.backgrounds||[]).forEach(b=>list.push(b));}
+ motifTray=blob.motifTray||[];
+ if(!activeMotifId)activeMotifId=motifTray[0]?.id||null;
+ heroSetFromDataUrl(blob.heroImgDataUrl);
+ renderFilmstrip();renderMotifTray();renderGrid();
+}
+// Runs once at boot, after the rest of the script (every function it calls) is defined. On a
+// fresh IndexedDB it migrates whatever was already saved under the old localStorage key exactly
+// once (never written there again afterward), so upgrading to this doesn't lose anything already
+// saved; from then on IndexedDB is the only thing read or written.
+async function hydrateSavedItemsFromIDB(){
+ try{
+  const idbBlob=await idbGet(SAVED_ITEMS_IDB_KEY);
+  if(idbBlob){applyHydratedSavedItems(idbBlob);return;}
+  let lsBlob=null;
+  try{lsBlob=JSON.parse(localStorage.getItem(SAVED_ITEMS_KEY)||'null');}catch(e){}
+  if(lsBlob){applyHydratedSavedItems(lsBlob);await idbSet(SAVED_ITEMS_IDB_KEY,lsBlob).catch(e=>console.warn('legacy saved-items migration write failed',e));}
+ }catch(e){console.warn('hydrateSavedItemsFromIDB failed',e);}
 }
 // A single content-addressed table of motif images, shared across everything being serialised
 // together (every saved template, or the live canvas plus every layout cached in blueprintStore) -
@@ -1462,16 +1529,18 @@ function expandSessionStateFromStorage(data){
 }
 window.__savedItemsBlob=loadAllSavedItemsBlob();
 window.__savedItemsBlob.templates=expandTemplatesFromBlob(window.__savedItemsBlob);
-// Returns whether the write actually landed - localStorage.setItem throws (typically
-// QuotaExceededError) when the combined blob is too big for the browser's storage limit, which the
-// old version of this function swallowed silently: every caller went on to report "saved ✓"
+// Returns whether the write actually landed (now an IndexedDB write, so this is async) - the old
+// localStorage.setItem could throw QuotaExceededError once the combined blob got big enough, which
+// an earlier version of this function swallowed silently: every caller went on to report "saved ✓"
 // regardless, so a save that never reached disk looked identical to one that had, until the next
-// reload made the difference obvious and confusing.
-function persistAllSavedItems(){
+// reload made the difference obvious and confusing. Still returns false on failure (device truly
+// out of disk, private-browsing IndexedDB restrictions, etc.) so that's never silently lost either.
+async function persistAllSavedItems(){
  try{
   const d=newMotifDict();
   const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
-  localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null}));
+  const blob={templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null};
+  await idbSet(SAVED_ITEMS_IDB_KEY,blob);
   // A successful write here always serializes the FULL current savedTemplates array, so any
   // template that previously failed to persist (see saveTemplateToFilmstrip/unsavedTemplateKeys)
   // is on disk now too, however this write actually got triggered.
@@ -2095,7 +2164,7 @@ function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const was
  renderFilmstrip();
  showUndoToast('Deleted "'+t.name+'"',()=>{savedTemplates.splice(i,0,t);persistSavedTemplates();renderFilmstrip();});
 }
-function saveTemplateToFilmstrip(){
+async function saveTemplateToFilmstrip(){
  if(saveBusy)return;
  saveBusy=true;
  saveBtn.disabled=true;
@@ -2106,13 +2175,11 @@ function saveTemplateToFilmstrip(){
  const key='saved_'+Date.now();
  savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,tilingEngine,colourways:[],activeColourwayId:null});
  renderFilmstrip();
- // Let the new card appear immediately, then write to localStorage on the next tick.
- setTimeout(()=>{
-   if(persistSavedTemplates()){unsavedTemplateKeys.clear();flashSaveStatus('saved ✓');}
-   else{unsavedTemplateKeys.add(key);flashSaveStatus('storage is full - this pattern is only in this browser tab for now. Delete an old saved pattern/motif to free room, or use "download .pplayground" above to back it up right now.',false,9000);}
-   renderFilmstrip();
-   setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
- },0);
+ // Let the new card appear immediately, then write to IndexedDB right after.
+ if(await persistSavedTemplates()){unsavedTemplateKeys.clear();flashSaveStatus('saved ✓');}
+ else{unsavedTemplateKeys.add(key);flashSaveStatus('couldn\'t save to disk - this pattern is only in this browser tab for now. Use "download .pplayground" above to back it up right now.',false,9000);}
+ renderFilmstrip();
+ setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
 }
 function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;activeLayoutKey=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // Diamond/hexagon/ogee tessellate on their own offset lattice rather than a plain square grid,
@@ -3772,6 +3839,11 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 cmRenderSwatches(DEFAULT_COLORS);
 
 window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();if(!restoreAutosave())setPreset('grid');
+// Async - resolves after every studio's own script below has registered its
+// window.tsGetSavedList/bgGetSavedList (script tags run in order, IndexedDB never resolves that
+// fast), then hydrates the real saved-items library on top of the instant empty/legacy-fallback
+// state above and re-renders.
+hydrateSavedItemsFromIDB();
 // Fixed-width side panels squeeze the canvas on small/landscape screens. Collapsing a panel down
 // to a thin strip (its box contents just hide, nothing is lost) hands that width straight to the
 // canvas column since it's the flexible 1fr track. render() is called immediately (for the parts
@@ -4951,7 +5023,7 @@ function renderPreview(canvas,size,st,mode,guides){
  }
 }
 let tsSaving=false;
-function saveTexture(){
+async function saveTexture(){
  if(tsSaving)return;
  tsSaving=true;
  const btn=$('tsSave'); if(btn)btn.disabled=true;
@@ -4960,11 +5032,11 @@ function saveTexture(){
  saved.push({name,state:copy(state)});
  renderFilmstrip();
  const fs=$('tsFilmstrip'); if(fs)fs.scrollLeft=fs.scrollWidth;
- setTimeout(()=>{
-   try{persistAllSavedItems(); setSaveStatus('saved ✓','ok');}
-   catch(e){setSaveStatus('save failed','bad'); console.warn('texture save failed',e);}
-   setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
- },0);
+ try{
+  const ok=await persistAllSavedItems();
+  setSaveStatus(ok?'saved ✓':'save failed - could not reach disk',ok?'ok':'bad');
+ }catch(e){setSaveStatus('save failed','bad'); console.warn('texture save failed',e);}
+ setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
 }
 let tsSelectMode=false,tsSelectedIdx=new Set();
 function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${s.name}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
@@ -5087,14 +5159,6 @@ init();
 // tapping "classics" bounces you back to the main page. Running it immediately, synchronously,
 // right here closes that whole window: no click can be processed until this script finishes.
 try{document.getElementById('textureStudioOverlay')?.classList.remove('open');document.getElementById('backgroundStudioOverlay')?.classList.remove('open');document.body.style.overflow='';}catch(e){}
-window.addEventListener('load',()=>{
- // First run after the unified saved-items store landed: everything has now
- // initialised from the old separate keys (see loadAllSavedItemsBlob), so write
- // the merged result out under the new shared key right away rather than
- // waiting for the next explicit save - otherwise a user who never saves
- // anything new would silently keep re-migrating from the old keys forever.
- try{if(!localStorage.getItem(SAVED_ITEMS_KEY)&&typeof persistAllSavedItems==='function')persistAllSavedItems();}catch(e){}
-});
 })();
 </script>
 
