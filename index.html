@@ -3031,13 +3031,35 @@ function startDrag(e,id){e.preventDefault();
 // single-brick-only shortcut.
 function startResize(e,id){e.preventDefault();e.stopPropagation();pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ow=b.w,oh=b.h;let moved=false;
  let scope=null;
+ // An explicit group (see multiSelected above) resizes as one proportional unit - every member
+ // keeps its own size/position ratio and scales together around the group's own centre, unlike
+ // the shape/colour scope's resize (which snaps every matching brick to one identical size, the
+ // right behaviour when they're meant to match but wrong for an arbitrary group of different
+ // motifs at different sizes).
+ const isGroup=multiSelected.size>1&&multiSelected.has(id);
+ let groupStart=null;
  const onMove=ev=>{
-  if(!moved){moved=true;scope=scopedBricks();}
+  if(!moved){
+   moved=true;scope=scopedBricks();
+   if(isGroup){
+    const minX=Math.min(...scope.map(x=>x.x-x.w/2)),maxX=Math.max(...scope.map(x=>x.x+x.w/2));
+    const minY=Math.min(...scope.map(x=>x.y-x.h/2)),maxY=Math.max(...scope.map(x=>x.y+x.h/2));
+    groupStart={cx:(minX+maxX)/2,cy:(minY+maxY)/2,w:maxX-minX,h:maxY-minY,members:scope.map(x=>({b:x,x:x.x,y:x.y,w:x.w,h:x.h}))};
+   }
+  }
   const tilePx=(mode==='repeat'?_lastStageSize/repeatSpan:_lastStageSize);
   const dx=(ev.clientX-sx)/tilePx*100;const dy=(ev.clientY-sy)/tilePx*100;
-  const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));
-  scope.forEach(x=>{x.w=nw;x.h=nh;});
-  if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;}
+  if(isGroup){
+   const scaleX=Math.max(.1,(groupStart.w+dx)/groupStart.w),scaleY=Math.max(.1,(groupStart.h+dy)/groupStart.h);
+   groupStart.members.forEach(m=>{
+    m.b.x=groupStart.cx+(m.x-groupStart.cx)*scaleX;m.b.y=groupStart.cy+(m.y-groupStart.cy)*scaleY;
+    m.b.w=Math.max(3,m.w*scaleX);m.b.h=Math.max(3,m.h*scaleY);
+   });
+  }else{
+   const nw=Math.max(3,Math.min(120,ow+dx));const nh=Math.max(3,Math.min(120,oh+dy));
+   scope.forEach(x=>{x.w=nw;x.h=nh;});
+   if(styleAllLayouts){shapeStyles[b.type]=shapeStyles[b.type]||{};shapeStyles[b.type].w=nw;shapeStyles[b.type].h=nh;}
+  }
   render();syncControls(false);
  };
  const onUp=()=>{if(moved)render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderGrid();};
