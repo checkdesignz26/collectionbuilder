@@ -2657,6 +2657,19 @@ function stageOnPointerDown(e){
  const px=e.clientX-r.left,py=e.clientY-r.top;
  if(multiSelectMode){
   _pointerHitBrickOrHandle=true;
+  // Same reasoning as the drag fix below, but for the resize/rotate handles: they only show on
+  // the currently `selected` brick, and were only ever checked in the non-select-mode branch
+  // further down - so reaching for a handle while still in "select multiple" mode (the same
+  // in-between state that broke dragging) fell through to a plain toggle instead, making resize
+  // look like it silently did nothing.
+  const selForHandle=selectedBrick();
+  if(selForHandle&&multiSelected.size>1&&multiSelected.has(selForHandle.id)){
+   const g=brickScreenGeom(selForHandle,0,0,_lastScale,_lastOrigin);
+   const local=brickLocalPoint(selForHandle,g.cx,g.cy,px,py);
+   const handle=getHandleForLocalPoint(local.x,local.y,g.bwPx,g.bhPx);
+   if(handle==='resize'){startResize(e,selForHandle.id);return;}
+   if(handle==='rotate'){startRotate(e,selForHandle.id);return;}
+  }
   const hit=hitTestBrickAt(px,py);
   if(!hit)return;
   // A brick that's already in the group needs to support BOTH a plain tap (toggle it back out)
