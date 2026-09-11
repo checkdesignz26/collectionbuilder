@@ -1037,8 +1037,9 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     </div></div>
 
     <div class="box"><h2>collection palette</h2><div class="body">
-      <p class="hint">Placeholder colours stay consistent in blueprint and living tiles. Classic colours are managed in Classics Studio.</p>
+      <p class="hint">Placeholder colours stay consistent in blueprint and living tiles. Classic colours are managed in Classics Studio. Tap + to add your own colours to this palette (long-press/right-click one you added to remove it).</p>
       <div class="swatches" id="swatches"></div>
+      <input type="color" id="addSwatchColorInput" style="display:none">
     </div></div>
   </aside>
   <section class="workspace">
@@ -1276,7 +1277,63 @@ function generateAdaptivePalette(heroHex,mood,richness){
  };
  return {roles,bg:{base:roles.white,tex:roles.hero}};
 }
-function renderSwatchesUI(){const sw=document.getElementById('swatches');if(!sw)return;sw.innerHTML='';swatches.forEach(([name])=>{const d=document.createElement('div');d.className='sw '+(name===activeColor?'active':'');d.style.background=colors[name];d.title=name;d.onclick=()=>{activeColor=name;renderSwatchesUI();const b=selectedBrick();if(b){pushHistory();b.role=name;render();}};sw.appendChild(d);});}
+function renderSwatchesUI(){
+ const sw=document.getElementById('swatches');if(!sw)return;sw.innerHTML='';
+ swatches.forEach(([name])=>{
+  const d=document.createElement('div');
+  d.className='sw '+(name===activeColor?'active':'');
+  d.style.background=colors[name];
+  const isCustom=name.startsWith('custom_');
+  d.title=isCustom?colors[name]+' — long-press/right-click to remove':name;
+  d.onclick=()=>{activeColor=name;renderSwatchesUI();const b=selectedBrick();if(b){pushHistory();b.role=name;render();}};
+  if(isCustom)d.oncontextmenu=e=>{e.preventDefault();removeCustomSwatch(name);};
+  sw.appendChild(d);
+ });
+ const addBtn=document.createElement('div');
+ addBtn.className='sw';
+ addBtn.style.cssText='display:flex;align-items:center;justify-content:center;border:2px dashed rgba(120,100,140,.45);background:transparent;font-weight:900;font-size:16px;line-height:1;cursor:pointer;color:var(--muted,#777)';
+ addBtn.textContent='+';
+ addBtn.title='add a colour to this palette';
+ addBtn.onclick=()=>document.getElementById('addSwatchColorInput').click();
+ sw.appendChild(addBtn);
+}
+// Custom swatches (beyond the built-in hero/secondary/filler/accent/black/grey/white roles) are
+// just extra entries appended to the same colors/swatches the built-in ones already live in -
+// colorForBrick/role assignment don't care where a role name came from. Persisted separately from
+// everything else in IndexedDB (its own small key) since a palette is really its own thing, not
+// tied to any one saved pattern.
+const CUSTOM_SWATCHES_KEY='customSwatchesV1';
+function persistCustomSwatches(){
+ const custom=swatches.filter(([name])=>name.startsWith('custom_'));
+ idbSet(CUSTOM_SWATCHES_KEY,custom).catch(e=>console.warn('persistCustomSwatches failed',e));
+}
+async function loadCustomSwatches(){
+ try{
+  const list=await idbGet(CUSTOM_SWATCHES_KEY);
+  if(Array.isArray(list)&&list.length){
+   list.forEach(([name,hex])=>{if(!colors[name]){colors[name]=hex;swatches.push([name,hex]);}});
+   renderSwatchesUI();
+  }
+ }catch(e){console.warn('loadCustomSwatches failed',e);}
+}
+function addCustomSwatch(hex){
+ const name='custom_'+Date.now();
+ colors[name]=hex;
+ swatches.push([name,hex]);
+ activeColor=name;
+ renderSwatchesUI();
+ persistCustomSwatches();
+}
+function removeCustomSwatch(name){
+ if(!name.startsWith('custom_'))return;
+ delete colors[name];
+ const idx=swatches.findIndex(([n])=>n===name);
+ if(idx>=0)swatches.splice(idx,1);
+ if(activeColor===name)activeColor='hero';
+ renderSwatchesUI();
+ persistCustomSwatches();
+}
+document.getElementById('addSwatchColorInput').addEventListener('input',e=>addCustomSwatch(e.target.value));
 let activeTextureColor=texturePalette[0][1];
 let selectedTextureLayer=0;
 function blankTexture(){return {enabled:false,bgEnabled:false,bgColor:'#ffffff',bgOpacity:100,patternScale:100,layers:[]};}
@@ -3557,6 +3614,7 @@ document.getElementById('themeToggle').onclick=()=>{
 };
 syncThemeToggleUI();
 renderSwatchesUI();
+loadCustomSwatches();
 const legacyTextureToggle=document.getElementById('textureToggle');
 if(legacyTextureToggle)legacyTextureToggle.onclick=()=>{pushHistory();if(!texture.layers.length)texture=stripeDefaultTexture();else texture.enabled=!texture.enabled;renderTextureUI();render();};
 const legacyBgToggle=document.getElementById('bgToggle');
