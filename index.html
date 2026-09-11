@@ -809,6 +809,7 @@ button,.tsLayerCard,.tsSw,.tsColourDot{touch-action:manipulation!important;}
 .livePreviewHeader .livePreviewBadge{margin-left:0}
 .livePreviewHeader .footerNote{margin-top:0}
 .filmCheck{position:absolute;left:4px;top:4px;width:22px;height:22px;border-radius:6px;background:rgba(20,10,24,.78);border:1px solid rgba(255,255,255,.45);display:grid;place-items:center;font-size:13px;color:#fff;z-index:2}
+.unsavedBadge{position:absolute;left:4px;right:4px;bottom:30px;z-index:3;background:rgba(120,20,40,.88);color:#ffd9e2;font-size:9px;font-weight:850;text-align:center;padding:3px 4px;border-radius:6px;border:1px solid rgba(255,180,200,.55);pointer-events:none}
 .filmCheck.checked{background:linear-gradient(90deg,var(--purple),var(--pink));border-color:#fff}
 .filmUseAsBg{display:block;width:100%;margin-top:5px;font-size:10px;padding:5px 4px;border-radius:8px;background:rgba(155,107,255,.18)!important;border:1px solid rgba(155,107,255,.45)!important;color:#e9defe!important}
 .filmUseAsBg:active{background:rgba(155,107,255,.35)!important}
@@ -1471,6 +1472,10 @@ function persistAllSavedItems(){
   const d=newMotifDict();
   const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
   localStorage.setItem(SAVED_ITEMS_KEY,JSON.stringify({templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null}));
+  // A successful write here always serializes the FULL current savedTemplates array, so any
+  // template that previously failed to persist (see saveTemplateToFilmstrip/unsavedTemplateKeys)
+  // is on disk now too, however this write actually got triggered.
+  if(typeof unsavedTemplateKeys!=='undefined'&&unsavedTemplateKeys.size){unsavedTemplateKeys.clear();renderFilmstrip();}
   return true;
  }catch(e){console.warn('persistAllSavedItems failed',e);return false;}
 }
@@ -2060,7 +2065,13 @@ window.exportPatternPNG=async function(pxSize,dpi){
 // (tsSelectMode/tsSelectedIdx/tsToggleSelectMode/tsDownloadSelectedZip) so the two filmstrips
 // behave the same way, not just look similar.
 let savedSelectMode=false,savedSelectedIdx=new Set();
-function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';c.innerHTML=`${delHTML}${checkHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
+// saveTemplateToFilmstrip adds the new card to the filmstrip immediately, then writes to
+// localStorage a tick later (see there) - if that write fails (storage full), the card still
+// LOOKS saved with nothing to tell you otherwise, so reloading later can quietly lose it. Track
+// which template keys are only living in this session's memory and badge them so "it's right
+// there in the filmstrip" doesn't get mistaken for "it's safely on disk".
+let unsavedTemplateKeys=new Set();
+function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';const unsavedHTML=unsavedTemplateKeys.has(t.key)?'<div class="unsavedBadge" title="Only in this session - storage was full when this tried to save to disk. Free up room (delete an old pattern/motif) or download .pplayground now to back it up.">⚠ not saved to disk</div>':'';c.innerHTML=`${delHTML}${checkHTML}${unsavedHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;}
 function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
 async function savedDownloadSelectedZip(){await downloadSelectedAsZip(savedTemplates,savedSelectedIdx,async(t,w)=>{const c=document.createElement('canvas');const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');const dims=(engine==='halfdrop'||engine==='halfdropflip')?{w:w*2,h:w}:(engine==='halfbrick'?{w:w,h:w*2}:{w,h:w});c.width=dims.w;c.height=dims.h;const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;await renderSavedTemplateToCanvas(c,t,dims.w,dims.h,w,transparentBg);return c;},'pattern');}
@@ -2097,8 +2108,9 @@ function saveTemplateToFilmstrip(){
  renderFilmstrip();
  // Let the new card appear immediately, then write to localStorage on the next tick.
  setTimeout(()=>{
-   if(persistSavedTemplates()){flashSaveStatus('saved ✓');}
-   else{flashSaveStatus('save failed - storage is full, delete an old saved pattern or motif to free room',false,6000);}
+   if(persistSavedTemplates()){unsavedTemplateKeys.clear();flashSaveStatus('saved ✓');}
+   else{unsavedTemplateKeys.add(key);flashSaveStatus('storage is full - this pattern is only in this browser tab for now. Delete an old saved pattern/motif to free room, or use "download .pplayground" above to back it up right now.',false,9000);}
+   renderFilmstrip();
    setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
  },0);
 }
