@@ -1604,7 +1604,11 @@ function buildProjectBackup(){
 function downloadProjectBackup(){
  const data=buildProjectBackup();
  const stamp=new Date().toISOString().slice(0,10);
- triggerBlobDownload(new Blob([JSON.stringify(data)],{type:'application/json'}),`magic-collection-builder-backup-${stamp}.pplayground`);
+ // application/octet-stream, not application/json: some browsers (Safari/iOS especially)
+ // "helpfully" append the extension matching a recognised MIME type onto whatever filename was
+ // requested, turning "….pplayground" into "….pplayground.json" on disk. An opaque/generic MIME
+ // type gives the browser nothing to recognise, so the requested .pplayground name is left alone.
+ triggerBlobDownload(new Blob([JSON.stringify(data)],{type:'application/octet-stream'}),`magic-collection-builder-backup-${stamp}.pplayground`);
  flashSaveStatus('project file downloaded ✓');
 }
 function restoreProjectBackup(raw){
@@ -3205,7 +3209,22 @@ function scopedBricks(){if(multiSelected.size>1)return bricks.filter(b=>multiSel
 function edgeX(b,side){return side==='left'?b.x-b.w/2:side==='right'?b.x+b.w/2:b.x}
 function edgeY(b,side){return side==='top'?b.y-b.h/2:side==='bottom'?b.y+b.h/2:b.y}
 function alignGroup(kind){const anchor=selectedBrick();if(!anchor)return;pushHistory();const arr=scopedBricks();arr.forEach(b=>{if(kind==='left')b.x=edgeX(anchor,'left')+b.w/2; if(kind==='right')b.x=edgeX(anchor,'right')-b.w/2; if(kind==='centre')b.x=anchor.x; if(kind==='top')b.y=edgeY(anchor,'top')+b.h/2; if(kind==='bottom')b.y=edgeY(anchor,'bottom')-b.h/2; if(kind==='middle')b.y=anchor.y;});render();syncControls();}
-function distributeGroup(axis){pushHistory();const arr=scopedBricks().sort((a,b)=>axis==='x'?a.x-b.x:a.y-b.y);if(arr.length<3)return;const first=arr[0][axis], last=arr[arr.length-1][axis];arr.forEach((b,i)=>{b[axis]=first+i*((last-first)/(arr.length-1));});render();syncControls();}
+// "Space evenly" treats the row/column as one period of an infinitely-repeating strip, not just
+// the span between the first and last brick - the LAST gap (off the tile edge, wrapping around to
+// where the first brick reappears on the next tile) is sized equal to every other gap too, so a
+// row spaced this way tiles with no visible seam at the repeat boundary. The first (leftmost/
+// topmost) brick's own edge is kept as the anchor; everything else is placed forward from there.
+function distributeGroup(axis){
+ pushHistory();
+ const sizeProp=axis==='x'?'w':'h';
+ const arr=scopedBricks().sort((a,b)=>a[axis]-b[axis]);
+ if(arr.length<2)return;
+ const totalSize=arr.reduce((n,b)=>n+b[sizeProp],0);
+ const gap=(100-totalSize)/arr.length;
+ let cursor=arr[0][axis]-arr[0][sizeProp]/2;
+ arr.forEach(b=>{b[axis]=cursor+b[sizeProp]/2;cursor+=b[sizeProp]+gap;});
+ render();syncControls();
+}
 function cloneBrick(b,dx=6,dy=6){return {...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:Math.max(-20,Math.min(120,b.x+dx)),y:Math.max(-20,Math.min(120,b.y+dy))};}
 // A single scoped brick just mirrors its own motif/shape in place (drawBrickSync/
 // drawBrickToCanvas apply ctx.scale around the brick's own centre). With 2+ bricks it's a real
