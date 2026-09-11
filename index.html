@@ -1024,7 +1024,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 
     <div class="box"><h2>textures</h2><div class="body">
       <p class="hint">Open the shared Classics Studio for stripes, dots, checks, plaid, madras and argyle. Background Studio is separate now.</p>
-      <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" id="bgEyedropperBtn" title="Tap this, then tap anywhere on the canvas (a motif, your hero image, a placeholder) to set a plain background in that exact colour - no trip into Background Studio needed"><svg class="btnIcon"><use href="#i-eyedropper"/></svg>pick background colour from canvas</button><button class="full" id="clearBgBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>clear background</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
+      <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" id="bgEyedropperBtn" title="Tap this, then tap anywhere on the canvas (a motif, your hero image, a placeholder) to set a plain background in that exact colour - no trip into Background Studio needed"><svg class="btnIcon"><use href="#i-eyedropper"/></svg>pick background colour from canvas</button><button class="full" id="heroPaletteBtn" title="Pull a set of dominant colours straight out of your uploaded hero image - tap one to set it as the background"><svg class="btnIcon"><use href="#i-palette"/></svg>extract colours from hero image</button><div class="swatches" id="heroPaletteSwatches"></div><button class="full" id="clearBgBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>clear background</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
       <div class="grid2">
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('dots')">dots</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('checks')">checks</button>
@@ -2779,6 +2779,27 @@ function applySampledBackground(hex){
  flashSaveStatus('background set to '+hex+' ✓');
 }
 document.getElementById('bgEyedropperBtn').onclick=()=>{if(bgEyedropperArmed)disarmBgEyedropper();else armBgEyedropper();};
+// Pulls a palette straight out of the already-uploaded hero reference photo (see Hero Studio)
+// instead of requiring yet another upload of the same image just to run Colour Mode's own
+// "from image" extractor (cmExtractColoursFromImage, reused here as-is) - tapping a swatch sets
+// it as the background via the same applySampledBackground the eye-dropper above uses.
+function extractHeroPalette(){
+ if(!heroImg){flashSaveStatus('upload a hero image first (hero studio) to extract colours from it',false);return;}
+ const hexes=cmExtractColoursFromImage(heroImg,10);
+ renderHeroPaletteSwatches(hexes);
+ flashSaveStatus(hexes.length?'colours extracted - tap one to set as background':'no colours found',!!hexes.length);
+}
+function renderHeroPaletteSwatches(hexes){
+ const box=document.getElementById('heroPaletteSwatches');if(!box)return;
+ box.innerHTML='';
+ hexes.forEach(hex=>{
+  const d=document.createElement('div');
+  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to set as background';
+  d.onclick=()=>applySampledBackground(hex);
+  box.appendChild(d);
+ });
+}
+document.getElementById('heroPaletteBtn').onclick=extractHeroPalette;
 function stageOnPointerDown(e){
  const r=stageCanvasEl().getBoundingClientRect();
  const px=e.clientX-r.left,py=e.clientY-r.top;
