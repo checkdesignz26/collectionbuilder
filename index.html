@@ -1821,11 +1821,11 @@ function showUndoToast(message,onUndo){
 // by half a tile - export those as the true tileable rapport (2 tiles wide or
 // tall, with the stagger baked in) instead of a square, so any software can
 // place the exported PNG edge-to-edge with no special "half-drop" support needed.
-function tileCanvasDims(pxSize){
- if(current==='halfdrop'||current==='halfdropflip')return{w:pxSize*2,h:pxSize};
- if(current==='halfbrick')return{w:pxSize,h:pxSize*2};
- return{w:pxSize,h:pxSize};
-}
+// Keyed on the live tilingEngine, not `current` - a layout picked via the checkbox-off "keep
+// bricks, switch repeat structure" flow (selectLayout) leaves `current` at 'blank' while
+// tilingEngine carries the real active repeat, so checking `current` here missed exactly that
+// case for halfdrop/halfbrick and (before tileDimsForEngine) never handled hexagon/ogee at all.
+function tileCanvasDims(pxSize){return tileDimsForEngine(tilingEngine,pxSize);}
 // --- Native canvas rendering for pattern export ---------------------------
 // Safari/WebKit has a long-standing limitation where it never rasterises SVG
 // <foreignObject> content when the SVG is used as a canvas.drawImage() source -
@@ -2036,6 +2036,24 @@ function engineOffsetFor(engine,tx,ty){
  if(engine==='ogee')return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);
  return {x:tx*STAGE,y:ty*STAGE};
 }
+// halfdrop/halfbrick already export as a non-square rectangle sized so a PLAIN grid repeat (no
+// offset needed) reproduces the pattern in any external tool - the offset is baked into the
+// export instead of left for the other app to apply. Hexagon/ogee use the exact same
+// column-offset-by-row-parity lattice shape as halfdrop (see tessColRowOffset/engineOffsetFor
+// above), just with their own non-STAGE column/row spacing, so they need the same treatment:
+// the true seamless-repeat rectangle is (2x column spacing) wide by (row spacing) tall, NOT a
+// square. Exporting a plain pxSize-square for these (the previous behaviour, since this case was
+// simply never handled) sliced the pattern off mid-repeat - ogee's true tile is ~12.5% taller
+// than its width, so a square export always cut off the bottom of the vertical repeat, and
+// nothing external tiling it edge-to-edge (however that other tool describes the offset) could
+// ever line the seam back up, because the source tile itself was already incomplete.
+function tileDimsForEngine(engine,pxSize){
+ if(engine==='halfdrop'||engine==='halfdropflip')return{w:pxSize*2,h:pxSize};
+ if(engine==='halfbrick')return{w:pxSize,h:pxSize*2};
+ if(engine==='hexagon')return{w:Math.round(pxSize*2*HEX_LATTICE.colSpacing/STAGE),h:Math.round(pxSize*HEX_LATTICE.rowSpacing/STAGE)};
+ if(engine==='ogee')return{w:Math.round(pxSize*2*OGEE_LATTICE.colSpacing/STAGE),h:Math.round(pxSize*OGEE_LATTICE.rowSpacing/STAGE)};
+ return{w:pxSize,h:pxSize};
+}
 async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg){
  const ctx=canvas.getContext('2d');
  if(!transparentBg){ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);}
@@ -2230,7 +2248,7 @@ function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip')
 function renameSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const name=prompt('Rename this saved pattern:',t.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===t.name)return;t.name=trimmed;if(current===t.key)document.getElementById('currentName').textContent=trimmed;renderFilmstrip();persistSavedTemplates();}
 function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;}
 function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
-async function savedDownloadSelectedZip(){await downloadSelectedAsZip(savedTemplates,savedSelectedIdx,async(t,w)=>{const c=document.createElement('canvas');const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');const dims=(engine==='halfdrop'||engine==='halfdropflip')?{w:w*2,h:w}:(engine==='halfbrick'?{w:w,h:w*2}:{w,h:w});c.width=dims.w;c.height=dims.h;const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;await renderSavedTemplateToCanvas(c,t,dims.w,dims.h,w,transparentBg);return c;},'pattern');}
+async function savedDownloadSelectedZip(){await downloadSelectedAsZip(savedTemplates,savedSelectedIdx,async(t,w)=>{const c=document.createElement('canvas');const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');const dims=tileDimsForEngine(engine,w);c.width=dims.w;c.height=dims.h;const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;await renderSavedTemplateToCanvas(c,t,dims.w,dims.h,w,transparentBg);return c;},'pattern');}
 document.getElementById('savedSelectMode').onclick=savedToggleSelectMode;
 document.getElementById('savedSelectAll').onclick=()=>{savedTemplates.forEach((_,i)=>savedSelectedIdx.add(i));renderFilmstrip();savedUpdateSelectUI();};
 document.getElementById('savedSelectNone').onclick=()=>{savedSelectedIdx.clear();renderFilmstrip();savedUpdateSelectUI();};
