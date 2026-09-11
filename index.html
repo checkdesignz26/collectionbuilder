@@ -1062,6 +1062,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     <div class="box"><h2>control room ✨</h2><div class="body">
       <p class="hint">Alignment uses the selected brick as the anchor. Scope decides what follows it.</p>
       <div class="scopeRow"><button id="scopeSingle"><svg class="btnIcon"><use href="#i-one"/></svg>just this one</button><button id="scopeType" class="active"><svg class="btnIcon"><use href="#i-target"/></svg>same shape</button><button id="scopeRole"><svg class="btnIcon"><use href="#i-palette"/></svg>same colour</button><button id="scopeAll"><svg class="btnIcon"><use href="#i-grid"/></svg>all bricks</button></div>
+      <p class="hint">Or group specific bricks by hand - tap "select multiple" then tap each one (handy for a row of freely-placed motifs that don't share a shape). While 2+ are grouped, drag/flip/align/etc. above move only that group; everything else on the canvas stays put.</p>
+      <div class="grid2"><button id="multiSelectBtn"><svg class="btnIcon"><use href="#i-target"/></svg>select multiple</button><button id="clearGroupBtn" class="hidden"><svg class="btnIcon"><use href="#i-x-circle"/></svg>clear group</button></div>
       <div class="grid3"><button id="alignL"><svg class="btnIcon"><use href="#i-align-left"/></svg>left</button><button id="alignC"><svg class="btnIcon"><use href="#i-align-center"/></svg>centre</button><button id="alignR"><svg class="btnIcon"><use href="#i-align-right"/></svg>right</button><button id="alignT"><svg class="btnIcon"><use href="#i-align-top"/></svg>top</button><button id="alignM"><svg class="btnIcon"><use href="#i-align-middle"/></svg>middle</button><button id="alignB"><svg class="btnIcon"><use href="#i-align-bottom"/></svg>bottom</button></div>
       <div class="grid2" style="margin-top:7px"><button id="distH"><svg class="btnIcon"><use href="#i-dist-h"/></svg>space evenly h</button><button id="distV"><svg class="btnIcon"><use href="#i-dist-v"/></svg>space evenly v</button><button id="rowify"><svg class="btnIcon"><use href="#i-row"/></svg>make row</button><button id="colify"><svg class="btnIcon"><use href="#i-column"/></svg>make column</button><button id="sameSize"><svg class="btnIcon"><use href="#i-expand"/></svg>same size</button><button id="dup"><svg class="btnIcon"><use href="#i-copy"/></svg>duplicate</button></div>
       <div class="grid2" style="margin-top:7px"><button id="flipHBtn" title="Mirror the scoped brick(s) left-right in place"><svg class="btnIcon"><use href="#i-flip-h"/></svg>flip horizontal</button><button id="flipVBtn" title="Mirror the scoped brick(s) top-bottom in place"><svg class="btnIcon"><use href="#i-flip-v"/></svg>flip vertical</button><button id="dupRowH" title="Duplicate the whole scoped group as a unit, placed right after it"><svg class="btnIcon"><use href="#i-dist-h"/></svg>duplicate row →</button><button id="dupRowV" title="Duplicate the whole scoped group as a unit, placed right below it"><svg class="btnIcon"><use href="#i-dist-v"/></svg>duplicate row ↓</button></div>
@@ -1797,9 +1799,9 @@ async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx){
 // a canvas equivalent of stripeGradient()'s repeating-linear-gradient CSS, drawn
 // fresh within each tile's own local box. Shared by PNG export and the live stage's
 // backdrop (see renderBackdropOffscreen).
-function drawTextureLayersToCanvas(ctx,textureObj,tilePx){
+function drawTextureLayersToCanvas(ctx,textureObj,tilePx,transparentBg){
  if(!textureObj)return;
- if(textureObj.bgEnabled){ctx.fillStyle=hexToRgba(textureObj.bgColor,textureObj.bgOpacity);ctx.fillRect(0,0,tilePx,tilePx);}
+ if(textureObj.bgEnabled&&!transparentBg){ctx.fillStyle=hexToRgba(textureObj.bgColor,textureObj.bgOpacity);ctx.fillRect(0,0,tilePx,tilePx);}
  if(!textureObj.enabled)return;
  const sf=getPatternScale(textureObj)/100;
  (textureObj.layers||[]).filter(l=>l.visible!==false).forEach(l=>{
@@ -1824,15 +1826,15 @@ function drawTextureLayersToCanvas(ctx,textureObj,tilePx){
 // layers are rendered by their own studios (window.bgRenderToTileCanvas /
 // window.tsRenderToTileCanvas) at native resolution and drawn in per tile,
 // same as renderBackdropOffscreen() already does for the on-screen canvas.
-async function renderPatternToCanvas(canvas,pxW,pxH,tilePx){
+async function renderPatternToCanvas(canvas,pxW,pxH,tilePx,transparentBg){
  const ctx=canvas.getContext('2d');
- ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);
+ if(!transparentBg){ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);}
  const scale=tilePx/STAGE;
  const tiles=[[0,0]];
  if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
 
  let bgTileCanvas=null,classicTileCanvas=null;
- if(window.bgGetSnapshot){const rec=window.bgGetSnapshot();if(rec&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(rec,tilePx);}
+ if(!transparentBg&&window.bgGetSnapshot){const rec=window.bgGetSnapshot();if(rec&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(rec,tilePx);}
  if(window.tsRenderToTileCanvas)classicTileCanvas=window.tsRenderToTileCanvas(tilePx);
 
  tiles.forEach(([tx,ty])=>{
@@ -1842,7 +1844,7 @@ async function renderPatternToCanvas(canvas,pxW,pxH,tilePx){
   if(bgTileCanvas)ctx.drawImage(bgTileCanvas,destX,destY);
   if(classicTileCanvas)ctx.drawImage(classicTileCanvas,destX,destY);
   ctx.save();ctx.translate(destX,destY);ctx.beginPath();ctx.rect(0,0,tilePx,tilePx);ctx.clip();
-  drawTextureLayersToCanvas(ctx,texture,tilePx);
+  drawTextureLayersToCanvas(ctx,texture,tilePx,transparentBg);
   ctx.restore();
  });
 
@@ -1873,16 +1875,16 @@ function engineOffsetFor(engine,tx,ty){
  if(engine==='ogee')return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);
  return {x:tx*STAGE,y:ty*STAGE};
 }
-async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx){
+async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg){
  const ctx=canvas.getContext('2d');
- ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);
+ if(!transparentBg){ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);}
  const scale=tilePx/STAGE;
  const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');
  const tiles=[[0,0]];
  if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
 
  let bgTileCanvas=null,classicTileCanvas=null;
- if(t.background&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(t.background,tilePx);
+ if(!transparentBg&&t.background&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(t.background,tilePx);
  if(t.classicPattern&&t.classicPattern.state){classicTileCanvas=document.createElement('canvas');classicTileCanvas.width=tilePx;classicTileCanvas.height=tilePx;renderPreview(classicTileCanvas,tilePx,t.classicPattern.state,'single',false);}
 
  tiles.forEach(([tx,ty])=>{
@@ -1892,7 +1894,7 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx){
   if(bgTileCanvas)ctx.drawImage(bgTileCanvas,destX,destY);
   if(classicTileCanvas)ctx.drawImage(classicTileCanvas,destX,destY);
   ctx.save();ctx.translate(destX,destY);ctx.beginPath();ctx.rect(0,0,tilePx,tilePx);ctx.clip();
-  drawTextureLayersToCanvas(ctx,t.texture,tilePx);
+  drawTextureLayersToCanvas(ctx,t.texture,tilePx,transparentBg);
   ctx.restore();
  });
 
@@ -2043,10 +2045,11 @@ function makeZip(files){
 window.exportPatternPNG=async function(pxSize,dpi){
  const dims=tileCanvasDims(pxSize);
  const canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
- await renderPatternToCanvas(canvas,dims.w,dims.h,pxSize);
+ const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;
+ await renderPatternToCanvas(canvas,dims.w,dims.h,pxSize,transparentBg);
  const bytes=await canvasToDpiPngBytes(canvas,dpi);
  const name=slugName(presets[current]?.name||(savedTemplates.find(t=>t.key===current)||{}).name||current);
- triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${name}-${dims.w}x${dims.h}-${dpi}dpi.png`);
+ triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${name}-${dims.w}x${dims.h}-${dpi}dpi${transparentBg?'-transparent':''}.png`);
  return {width:dims.w,height:dims.h};
 };
 // Select-mode + bulk zip download, matching Classics Studio's saved-classics filmstrip
@@ -2056,7 +2059,7 @@ let savedSelectMode=false,savedSelectedIdx=new Set();
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';c.innerHTML=`${delHTML}${checkHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture)}</div><span>${t.name}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;}
 function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
-async function savedDownloadSelectedZip(){await downloadSelectedAsZip(savedTemplates,savedSelectedIdx,async(t,w)=>{const c=document.createElement('canvas');const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');const dims=(engine==='halfdrop'||engine==='halfdropflip')?{w:w*2,h:w}:(engine==='halfbrick'?{w:w,h:w*2}:{w,h:w});c.width=dims.w;c.height=dims.h;await renderSavedTemplateToCanvas(c,t,dims.w,dims.h,w);return c;},'pattern');}
+async function savedDownloadSelectedZip(){await downloadSelectedAsZip(savedTemplates,savedSelectedIdx,async(t,w)=>{const c=document.createElement('canvas');const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');const dims=(engine==='halfdrop'||engine==='halfdropflip')?{w:w*2,h:w}:(engine==='halfbrick'?{w:w,h:w*2}:{w,h:w});c.width=dims.w;c.height=dims.h;const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;await renderSavedTemplateToCanvas(c,t,dims.w,dims.h,w,transparentBg);return c;},'pattern');}
 document.getElementById('savedSelectMode').onclick=savedToggleSelectMode;
 document.getElementById('savedSelectAll').onclick=()=>{savedTemplates.forEach((_,i)=>savedSelectedIdx.add(i));renderFilmstrip();savedUpdateSelectUI();};
 document.getElementById('savedSelectNone').onclick=()=>{savedSelectedIdx.clear();renderFilmstrip();savedUpdateSelectUI();};
@@ -2449,6 +2452,12 @@ function render(){const stage=document.getElementById('stage');stage.className='
   const g=brickScreenGeom(b,tx,ty,scale,origin);
   drawBrickSync(ctx,b,g.cx,g.cy,g.bwPx,g.bhPx);
   if(!clone&&selected===b.id)selGeom=g;
+  if(!clone&&multiSelected.has(b.id)){
+   ctx.save();ctx.translate(g.cx,g.cy);ctx.rotate((b.rot||0)*Math.PI/180);
+   ctx.strokeStyle='#7c5cff';ctx.lineWidth=2;ctx.setLineDash([5,4]);
+   ctx.strokeRect(-g.bwPx/2-4,-g.bhPx/2-4,g.bwPx+8,g.bhPx+8);
+   ctx.restore();
+  }
  });
  if(selGeom)drawSelectionUI(ctx,bricks.find(x=>x.id===selected),selGeom.cx,selGeom.cy,selGeom.bwPx,selGeom.bhPx);
  // An empty canvas (freshest on "free layout", but also reachable by deleting every brick from
@@ -2630,6 +2639,12 @@ let _pointerHitBrickOrHandle=false;
 function stageOnPointerDown(e){
  const r=stageCanvasEl().getBoundingClientRect();
  const px=e.clientX-r.left,py=e.clientY-r.top;
+ if(multiSelectMode){
+  _pointerHitBrickOrHandle=true;
+  const hit=hitTestBrickAt(px,py);
+  if(hit){if(multiSelected.has(hit.id))multiSelected.delete(hit.id);else multiSelected.add(hit.id);selected=hit.id;render();syncControls();syncMultiSelectUI();}
+  return;
+ }
  const sel=selectedBrick();
  if(sel){
   const g=brickScreenGeom(sel,0,0,_lastScale,_lastOrigin);
@@ -2639,8 +2654,14 @@ function stageOnPointerDown(e){
   if(handle==='rotate'){_pointerHitBrickOrHandle=true;startRotate(e,sel.id);return;}
  }
  const hit=hitTestBrickAt(px,py);
- if(hit){_pointerHitBrickOrHandle=true;startDrag(e,hit.id);return;}
+ if(hit){
+  _pointerHitBrickOrHandle=true;
+  if(multiSelected.size>1&&!multiSelected.has(hit.id)){multiSelected.clear();syncMultiSelectUI();}
+  startDrag(e,hit.id);
+  return;
+ }
  _pointerHitBrickOrHandle=false;
+ if(multiSelected.size){multiSelected.clear();syncMultiSelectUI();}
  if(selected!==null){selected=null;render();syncControls();}
 }
 // Clipped/uploaded motifs used to only live in memory - gone the instant the page reloaded
@@ -2933,6 +2954,10 @@ function startDrag(e,id){e.preventDefault();
  }
  lastTapId=id;lastTapTime=now;
  pushHistory();selected=id;const b=bricks.find(x=>x.id===id);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;let moved=false;
+ // Dragging a brick that's part of an explicit group (see multiSelected above) moves every
+ // member together, keeping their relative spacing - everything else on the canvas is
+ // untouched since only bricks the user actually grouped are in this list.
+ const group=(multiSelected.size>1&&multiSelected.has(id))?bricks.filter(x=>multiSelected.has(x.id)).map(x=>({b:x,ox:x.x,oy:x.y})):null;
  const warnTimer=setTimeout(()=>{if(!moved){pressHoldId=id;render();}},280);
  const killTimer=setTimeout(()=>{if(!moved){bricks=bricks.filter(x=>x.id!==id);selected=bricks[0]?.id||null;pressHoldId=null;render();syncControls();renderUnassignedShapes();}},650);
  // A real fingertip almost never stays perfectly still for the length of a tap - a couple of
@@ -2950,7 +2975,11 @@ function startDrag(e,id){e.preventDefault();
    moved=true;clearTimeout(warnTimer);clearTimeout(killTimer);pressHoldId=null;
   }
   const tilePx=(mode==='repeat'?_lastStageSize/repeatSpan:_lastStageSize);
-  b.x=Math.max(-20,Math.min(120,ox+dx/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+dy/tilePx*100));
+  if(group){
+   group.forEach(m=>{m.b.x=Math.max(-20,Math.min(120,m.ox+dx/tilePx*100));m.b.y=Math.max(-20,Math.min(120,m.oy+dy/tilePx*100));});
+  }else{
+   b.x=Math.max(-20,Math.min(120,ox+dx/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+dy/tilePx*100));
+  }
   render();syncControls(false);
  };
  const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressHoldId=null;render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
@@ -3155,16 +3184,47 @@ let alignScope='type';
 function setScope(scope){alignScope=scope;[scopeSingle,scopeType,scopeRole,scopeAll].forEach(b=>b.classList.remove('active'));({single:scopeSingle,type:scopeType,role:scopeRole,all:scopeAll}[scope]).classList.add('active');}
 scopeSingle.onclick=()=>setScope('single');scopeType.onclick=()=>setScope('type');scopeRole.onclick=()=>setScope('role');scopeAll.onclick=()=>setScope('all');
 document.getElementById('styleAllLayoutsBtn').onclick=()=>{styleAllLayouts=!styleAllLayouts;const btn=document.getElementById('styleAllLayoutsBtn');btn.textContent='apply to all layouts: '+(styleAllLayouts?'on':'off');btn.classList.toggle('active',styleAllLayouts);};
-function scopedBricks(){const b=selectedBrick();if(!b)return[]; if(alignScope==='single')return [b]; if(alignScope==='all')return bricks; if(alignScope==='role')return bricks.filter(x=>x.role===b.role); return bricks.filter(x=>x.type===b.type);}
+// An ad-hoc group, separate from the shape/colour scope above - tap bricks in "group select"
+// mode to build up an arbitrary set (e.g. one freely-placed row of otherwise-unrelated motifs,
+// each its own unique type, that the shape/colour scope has no way to tie together). Once 2+
+// bricks are grouped this way, it takes over from every scope-driven operation below (align,
+// distribute, resize/rotate scope, flip, duplicate row) AND dragging, so only the bricks you
+// actually grouped move/flip together - everything else on the canvas stays fixed in place.
+let multiSelected=new Set(),multiSelectMode=false;
+function toggleMultiSelectMode(){
+ multiSelectMode=!multiSelectMode;
+ document.getElementById('multiSelectBtn').classList.toggle('active',multiSelectMode);
+ document.getElementById('multiSelectBtn').textContent=multiSelectMode?'tap bricks to group… done':'select multiple';
+ render();
+}
+function clearMultiSelect(){multiSelected.clear();render();syncMultiSelectUI();}
+function syncMultiSelectUI(){const b=document.getElementById('clearGroupBtn');if(b)b.classList.toggle('hidden',multiSelected.size<2);}
+document.getElementById('multiSelectBtn').onclick=toggleMultiSelectMode;
+document.getElementById('clearGroupBtn').onclick=clearMultiSelect;
+function scopedBricks(){if(multiSelected.size>1)return bricks.filter(b=>multiSelected.has(b.id));const b=selectedBrick();if(!b)return[]; if(alignScope==='single')return [b]; if(alignScope==='all')return bricks; if(alignScope==='role')return bricks.filter(x=>x.role===b.role); return bricks.filter(x=>x.type===b.type);}
 function edgeX(b,side){return side==='left'?b.x-b.w/2:side==='right'?b.x+b.w/2:b.x}
 function edgeY(b,side){return side==='top'?b.y-b.h/2:side==='bottom'?b.y+b.h/2:b.y}
 function alignGroup(kind){const anchor=selectedBrick();if(!anchor)return;pushHistory();const arr=scopedBricks();arr.forEach(b=>{if(kind==='left')b.x=edgeX(anchor,'left')+b.w/2; if(kind==='right')b.x=edgeX(anchor,'right')-b.w/2; if(kind==='centre')b.x=anchor.x; if(kind==='top')b.y=edgeY(anchor,'top')+b.h/2; if(kind==='bottom')b.y=edgeY(anchor,'bottom')-b.h/2; if(kind==='middle')b.y=anchor.y;});render();syncControls();}
 function distributeGroup(axis){pushHistory();const arr=scopedBricks().sort((a,b)=>axis==='x'?a.x-b.x:a.y-b.y);if(arr.length<3)return;const first=arr[0][axis], last=arr[arr.length-1][axis];arr.forEach((b,i)=>{b[axis]=first+i*((last-first)/(arr.length-1));});render();syncControls();}
 function cloneBrick(b,dx=6,dy=6){return {...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:Math.max(-20,Math.min(120,b.x+dx)),y:Math.max(-20,Math.min(120,b.y+dy))};}
-// Mirrors each scoped brick's own motif/shape in place (drawBrickSync/drawBrickToCanvas apply
-// ctx.scale around the brick's own centre) - toggled per-brick so a row of several bricks can end
-// up with a mix of flipped/unflipped, same as rotate already allows.
-function flipScope(axis){const arr=scopedBricks();if(!arr.length)return;pushHistory();arr.forEach(b=>{if(axis==='x')b.flipX=!b.flipX;else b.flipY=!b.flipY;});render();}
+// A single scoped brick just mirrors its own motif/shape in place (drawBrickSync/
+// drawBrickToCanvas apply ctx.scale around the brick's own centre). With 2+ bricks it's a real
+// group flip like a design tool's: also reflect each brick's POSITION across the group's own
+// bounding-box centre, so a flipped row reads as a true mirror of the whole row, not five
+// separately-mirrored motifs sitting where they always were.
+function flipScope(axis){
+ const arr=scopedBricks();if(!arr.length)return;
+ pushHistory();
+ if(arr.length>1){
+  const minX=Math.min(...arr.map(b=>b.x-b.w/2)),maxX=Math.max(...arr.map(b=>b.x+b.w/2));
+  const minY=Math.min(...arr.map(b=>b.y-b.h/2)),maxY=Math.max(...arr.map(b=>b.y+b.h/2));
+  const cx=(minX+maxX)/2,cy=(minY+maxY)/2;
+  arr.forEach(b=>{if(axis==='x'){b.x=2*cx-b.x;b.flipX=!b.flipX;}else{b.y=2*cy-b.y;b.flipY=!b.flipY;}});
+ }else{
+  arr.forEach(b=>{if(axis==='x')b.flipX=!b.flipX;else b.flipY=!b.flipY;});
+ }
+ render();
+}
 // Duplicates the whole scoped group as one rigid unit - same relative spacing, offset by the
 // group's own bounding-box size so the copy lands immediately after the original (right for a
 // row, below for a column), instead of duplicating one brick at a time and losing the row's shape.
@@ -3684,6 +3744,7 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
         <div><label style="display:block;font-size:12px;color:var(--muted);font-weight:850;margin-bottom:4px">DPI</label><input id="dlDpi" type="number" min="72" max="1200" step="1" value="300" style="width:100%"></div>
       </div>
       <p class="footerNote" id="dlShapeNote"></p>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)"><input type="checkbox" id="dlTransparentBg" style="width:16px;height:16px">transparent background (no fill/background layer - just the motifs, e.g. for wrapping a glass or can)</label>
       <button id="dlDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download PNG</button>
       <p class="footerNote" id="dlStatus"></p>
     </div>
