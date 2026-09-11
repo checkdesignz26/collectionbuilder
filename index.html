@@ -2387,24 +2387,29 @@ function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y
 // same width:height ratio each shape's true tessellation requires - makes one hexagon/ogee cell
 // span (most of) the tile, same idea as diamond, while staying mathematically the same
 // edge-to-edge tessellation, just at a bigger, one-cell-per-tile scale.
-// Ogee's columns OVERLAP by design (colSpacing = 0.5x its own width - see comment below), so
-// scaling colSpacing to STAGE would make the lens itself TWO tiles wide: a viewport one tile wide
-// then sits entirely inside a single oversized lens, with its outline pushed entirely outside
-// that viewport and nothing left to stroke. Scaling ogee by its WIDTH instead (so the lens itself
-// is one tile wide, like diamond) keeps colSpacing at its natural half-width value instead,
-// preserving the real overlap the tessellation needs.
+// Ogee's columns OVERLAP by design (colSpacing = 0.5x its own width - see comment below); that
+// 0.5x ratio comes from the .32/640 constants below and holds no matter which axis "scale" is
+// derived from, so it's preserved regardless of the width-vs-height choice made here.
 // A flat-top hexagon is inherently wider than it is tall (600:519.6, i.e. ~1.15:1), so it can
 // never exactly touch all 4 sides of a square tile the way diamond does. Scaling by its WIDTH -
-// not by colSpacing, which is only 0.75x the width, and not by height, which leaves the wider
-// axis overflowing - is the one basis where the hexagon's own w/h both land at or under 100% of
-// the tile: width lands exactly on 100% (its left/right points just touch the tile edges), height
-// comes out to ~86.6%, sitting inset with a small margin top and bottom rather than overflowing
-// past them. Nothing gets clipped by the tile on any side - not the flat top/bottom edges (the
-// earlier width-derived-from-colSpacing attempt sliced across exactly these, since colSpacing=
-// STAGE made the true width 33% too big) and not the side points either (the following height-
-// based attempt's fix for that ended up overflowing sideways by ~15% instead).
+// its LARGER dimension - not by colSpacing, which is only 0.75x the width, and not by height,
+// which leaves the wider axis overflowing - is the one basis where the hexagon's own w/h both
+// land at or under 100% of the tile: width lands exactly on 100% (its left/right points just
+// touch the tile edges), height comes out to ~86.6%, sitting inset with a small margin top and
+// bottom rather than overflowing past them.
+// An ogee lens is the mirror case - inherently TALLER than it is wide (640:720, i.e. its own
+// height is the larger dimension, ~1.125:1) - so the same "scale by whichever axis is bigger"
+// rule that keeps hexagon's shape fully inside the tile means scaling ogee by its HEIGHT, not
+// its width. Scaling by width instead (an earlier version of this) made the true height 12.5%
+// too big, so a single ogee lens's tip and base both stuck out past the top/bottom of the tile
+// viewport - visibly clipped in both single-tile editing and every export built on this lattice,
+// and nothing an external tiling tool did afterwards could put the missing 12.5% back, since the
+// source tile handed to it never had the whole lens in the first place. Scaling by height instead
+// lands height at exactly 100% (tip and base just touch the tile edges) and width at ~88.9%,
+// inset with a small side margin instead of overflowing - the ogee equivalent of hexagon's own
+// small top/bottom margin.
 const HEX_LATTICE=(()=>{const scale=STAGE/600;return {colSpacing:STAGE*.45*scale,rowSpacing:519.6*scale,w:STAGE,h:519.6*scale};})();
-const OGEE_LATTICE=(()=>{const scale=STAGE/640;return {colSpacing:STAGE*.32*scale,rowSpacing:STAGE*.72*scale,w:640*scale,h:720*scale};})();
+const OGEE_LATTICE=(()=>{const scale=STAGE/720;return {colSpacing:STAGE*.32*scale,rowSpacing:STAGE*.72*scale,w:640*scale,h:720*scale};})();
 function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,HEX_LATTICE.colSpacing,HEX_LATTICE.rowSpacing);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
