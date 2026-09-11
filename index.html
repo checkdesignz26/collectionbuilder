@@ -1459,10 +1459,23 @@ function applyHydratedSavedItems(blob){
 async function hydrateSavedItemsFromIDB(){
  try{
   const idbBlob=await idbGet(SAVED_ITEMS_IDB_KEY);
-  if(idbBlob){applyHydratedSavedItems(idbBlob);return;}
+  if(idbBlob){
+   applyHydratedSavedItems(idbBlob);
+   // Belt-and-braces: an earlier version of this migration applied+wrote the legacy blob into
+   // IndexedDB but never actually freed the old localStorage copy, so it kept sitting there
+   // taking up the exact same small quota autosave/quicksave still share - clear it here too,
+   // not just on the fresh-migration path below, so anyone who already migrated gets the space
+   // back as well.
+   try{localStorage.removeItem(SAVED_ITEMS_KEY);}catch(e){}
+   return;
+  }
   let lsBlob=null;
   try{lsBlob=JSON.parse(localStorage.getItem(SAVED_ITEMS_KEY)||'null');}catch(e){}
-  if(lsBlob){applyHydratedSavedItems(lsBlob);await idbSet(SAVED_ITEMS_IDB_KEY,lsBlob).catch(e=>console.warn('legacy saved-items migration write failed',e));}
+  if(lsBlob){
+   applyHydratedSavedItems(lsBlob);
+   await idbSet(SAVED_ITEMS_IDB_KEY,lsBlob).catch(e=>console.warn('legacy saved-items migration write failed',e));
+   try{localStorage.removeItem(SAVED_ITEMS_KEY);}catch(e){}
+  }
  }catch(e){console.warn('hydrateSavedItemsFromIDB failed',e);}
 }
 // A single content-addressed table of motif images, shared across everything being serialised
@@ -1572,11 +1585,11 @@ function compactSessionSnapshotForStorage(snap){
  for(const k of Object.keys(snap.blueprintStore||{}))blueprintStore[k]=compactBricksWithDict(snap.blueprintStore[k],d);
  return {...snap,bricks,blueprintStore,motifDict:d.dict};
 }
-function writeAutosaveNow(){
- try{localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(compactSessionSnapshotForStorage(autosaveSnapshot())));}
+async function writeAutosaveNow(){
+ try{await idbSet(AUTOSAVE_KEY,compactSessionSnapshotForStorage(autosaveSnapshot()));}
  catch(e){
   console.warn('autosave failed',e);
-  if(!autosaveFailWarned){autosaveFailWarned=true;flashSaveStatus("autosave couldn't fit in storage - use \"save template\" to keep this for sure",false,7000);}
+  if(!autosaveFailWarned){autosaveFailWarned=true;flashSaveStatus("autosave couldn't save - use \"save template\" to keep this for sure",false,7000);}
  }
 }
 function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(writeAutosaveNow,900);}
@@ -1624,10 +1637,15 @@ function applySnapshotToLiveState(rawData,statusMsg){
  renderGrid();renderFilmstrip();render();syncControls();renderAssignedShapes();
  flashSaveStatus(statusMsg);
 }
-function restoreAutosave(){
- let raw;try{raw=localStorage.getItem(AUTOSAVE_KEY);}catch(e){return false;}
- if(!raw)return false;
- let data;try{data=JSON.parse(raw);}catch(e){return false;}
+async function restoreAutosave(){
+ let data;try{data=await idbGet(AUTOSAVE_KEY);}catch(e){data=null;}
+ if(!data){
+  // One-time migration path for a session mid-flight when this moved off localStorage - applied
+  // and copied into IndexedDB so it isn't lost, then the old key is cleared since it's dead
+  // weight from here on (every write goes to IndexedDB only).
+  try{const raw=localStorage.getItem(AUTOSAVE_KEY);if(raw)data=JSON.parse(raw);}catch(e){data=null;}
+  if(data)idbSet(AUTOSAVE_KEY,data).then(()=>{try{localStorage.removeItem(AUTOSAVE_KEY);}catch(e){}}).catch(()=>{});
+ }
  if(!data||!Array.isArray(data.bricks))return false;
  // The autosave is worth restoring if EITHER the live layout at last-save had bricks on it, OR any
  // other layout's blueprintStore snapshot does - not just the current one. Requiring only the live
@@ -1646,20 +1664,24 @@ function restoreAutosave(){
 // template" (adds a new filmstrip card every time). One tap captures exactly where things are
 // right now; one tap jumps straight back to it, no filmstrip management needed.
 const QUICKSAVE_KEY='pkmQuickSaveV1';
-function quickSave(){
+async function quickSave(){
  try{
-  localStorage.setItem(QUICKSAVE_KEY,JSON.stringify(compactSessionSnapshotForStorage(autosaveSnapshot())));
+  await idbSet(QUICKSAVE_KEY,compactSessionSnapshotForStorage(autosaveSnapshot()));
   flashSaveStatus('quick saved ✓');
  }catch(e){
   console.warn('quick save failed',e);
-  flashSaveStatus('quick save failed - storage is full, delete an old saved pattern or motif to free room',false,6000);
+  flashSaveStatus('quick save failed - could not reach storage',false,6000);
  }
 }
-function quickLoad(){
- let raw;try{raw=localStorage.getItem(QUICKSAVE_KEY);}catch(e){flashSaveStatus('no quick save found',false);return;}
- if(!raw){flashSaveStatus('no quick save found yet',false);return;}
- let data;try{data=JSON.parse(raw);}catch(e){flashSaveStatus('quick save is corrupted',false);return;}
- if(!data||!Array.isArray(data.bricks)||!data.bricks.length){flashSaveStatus('quick save is empty',false);return;}
+async function quickLoad(){
+ let data;try{data=await idbGet(QUICKSAVE_KEY);}catch(e){data=null;}
+ if(!data){
+  // One-time migration path, same reasoning as restoreAutosave above.
+  try{const raw=localStorage.getItem(QUICKSAVE_KEY);if(raw)data=JSON.parse(raw);}catch(e){data=null;}
+  if(data)idbSet(QUICKSAVE_KEY,data).then(()=>{try{localStorage.removeItem(QUICKSAVE_KEY);}catch(e){}}).catch(()=>{});
+ }
+ if(!data){flashSaveStatus('no quick save found yet',false);return;}
+ if(!Array.isArray(data.bricks)||!data.bricks.length){flashSaveStatus('quick save is empty',false);return;}
  pushHistory();
  applySnapshotToLiveState(data,'quick loaded ✓');
 }
@@ -3838,7 +3860,8 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 };
 cmRenderSwatches(DEFAULT_COLORS);
 
-window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();if(!restoreAutosave())setPreset('grid');
+window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();
+restoreAutosave().then(ok=>{if(!ok)setPreset('grid');});
 // Async - resolves after every studio's own script below has registered its
 // window.tsGetSavedList/bgGetSavedList (script tags run in order, IndexedDB never resolves that
 // fast), then hydrates the real saved-items library on top of the instant empty/legacy-fallback
