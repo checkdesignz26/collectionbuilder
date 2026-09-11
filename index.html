@@ -2387,32 +2387,27 @@ function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y
 // same width:height ratio each shape's true tessellation requires - makes one hexagon/ogee cell
 // span (most of) the tile, same idea as diamond, while staying mathematically the same
 // edge-to-edge tessellation, just at a bigger, one-cell-per-tile scale.
-// Ogee's columns OVERLAP by design (colSpacing = 0.5x its own width - see comment below); that
-// 0.5x ratio comes from the .32/640 constants below and holds no matter which axis "scale" is
-// derived from, so it's preserved regardless of the width-vs-height choice made here.
-// A REGULAR flat-top hexagon is inherently wider than it is tall (600:519.6, i.e. ~1.15:1), so a
-// uniform scale (one factor applied to both axes, preserving that true ratio) can only ever touch
-// 2 of the tile's 4 sides - whichever axis it's scaled to land on 100% comes out exactly on the
-// edges, the other axis necessarily lands under 100%, inset with a margin (this is what an
-// earlier version of this did: scaled by width, the larger dimension, so width touched left/right
-// exactly and height sat inset ~86.6%, clipping nothing but not touching top/bottom either).
-// Fitting the hexagon EXACTLY into the square tile on all 4 sides - not just avoiding clipping,
-// but actually touching every edge - needs the opposite of a uniform scale: colSpacing/w (the
-// horizontal axis) keeps its natural 0.75x-of-width tessellation ratio (unchanged from a regular
-// hexagon), while rowSpacing/h (the vertical axis) is stretched independently straight to STAGE
-// instead of derived from the same scale factor. That's a deliberate departure from a true
-// regular hexagon (its top/bottom points now sit further from centre than its left/right ones,
-// versus a regular hexagon's more even spread) in exchange for a perfect edge-to-edge square fit -
-// still gap-free/edge-to-edge as a tessellation (affine-stretching a valid tessellation along one
-// axis preserves the edge-to-edge adjacency, it just isn't a REGULAR hexagon grid anymore).
-// An ogee lens is inherently TALLER than it is wide (640:720, ~1.125:1) - the mirror of hexagon -
-// so it uses the same uniform-scale approach hexagon used to, just choosing height (its larger
-// dimension) as the axis to land on 100%: tip and base touch top/bottom exactly, width comes out
-// to ~88.9%, inset with a small side margin rather than overflowing past it (an earlier version
-// scaled ogee by width instead, which left its true height 12.5% too big - clipped top and bottom
-// in both single-tile editing and every export, not just short of touching every edge).
-const HEX_LATTICE=(()=>{const scale=STAGE/600;return {colSpacing:STAGE*.45*scale,rowSpacing:STAGE,w:STAGE,h:STAGE};})();
-const OGEE_LATTICE=(()=>{const scale=STAGE/720;return {colSpacing:STAGE*.32*scale,rowSpacing:STAGE*.72*scale,w:640*scale,h:720*scale};})();
+// Both hexagon and ogee are naturally non-square shapes (a regular hexagon is ~1.15:1
+// width:height; an ogee lens is ~1.125:1 height:width the other way), so a UNIFORM scale (one
+// factor applied to both axes, preserving the true shape) can only ever land ONE axis exactly on
+// the tile's edges - the other axis necessarily comes out short (inset with a margin) or long
+// (overflowing/clipped), never both landing on 100% at once. Earlier versions of this used a
+// uniform scale for both shapes - hexagon scaled by width landed width on 100% but left height
+// inset ~86.6%; ogee scaled by width overflowed height by 12.5% (clipped top and bottom); ogee
+// re-scaled by height then fixed the clipping but left width inset ~88.9%.
+// Fitting EXACTLY into the square on all 4 sides needs the opposite of a uniform scale: each
+// axis's spacing keeps its own natural ratio to that axis's shape size (colSpacing = 0.75x
+// hexagon's own width; colSpacing = 0.5x ogee's own width, i.e. "columns overlap by half their
+// own width" - see tessColRowOffset comment; rowSpacing = the shape's own height for both), but
+// w and h are independently forced to STAGE instead of derived from one shared scale factor. That
+// means every column-spacing/row-spacing value below is just "STAGE times that axis's fixed
+// ratio", not the shape's literal own pixel size at any particular scale. This is a deliberate
+// departure from either shape's true regular proportions (both axes now touch the tile evenly,
+// which neither shape's real geometry would do on its own) in exchange for an exact square fit -
+// still a valid gap-free tessellation either way (affine-stretching a tessellation along an axis
+// preserves edge-to-edge adjacency, it just isn't drawn from a perfectly regular grid anymore).
+const HEX_LATTICE={colSpacing:STAGE*.75,rowSpacing:STAGE,w:STAGE,h:STAGE};
+const OGEE_LATTICE={colSpacing:STAGE*.5,rowSpacing:STAGE,w:STAGE,h:STAGE};
 function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,HEX_LATTICE.colSpacing,HEX_LATTICE.rowSpacing);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
