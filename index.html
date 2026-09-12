@@ -2719,9 +2719,16 @@ function render(){const stage=document.getElementById('stage');stage.className='
  // engine's own pitch (see engineColPitch/engineRowPitch) so hexagon/ogee's tighter column
  // spacing still gets enough clones to fill the same physical width every other engine does at
  // this repeatSpan, instead of stopping partway and leaving bare guide lattice around the edges.
+ // Engines that shift alternating columns/rows by half a step (halfdrop/halfdropflip/hexagon/
+ // ogee shift odd columns down by half a row; halfbrick shifts odd rows right by half a column)
+ // need one extra clone on the shifted axis: the shift moves that axis's clone positions off-
+ // center relative to the unshifted lattice, so the plain +/-cloneHalf range leaves a gap at one
+ // edge of the canvas for every shifted column/row instead of covering the same span as the rest.
  const cloneHalf=mode==='repeat'?repeatHalf:1;
- const cloneHalfX=Math.ceil(cloneHalf*STAGE/engineColPitch(tilingEngine));
- const cloneHalfY=Math.ceil(cloneHalf*STAGE/engineRowPitch(tilingEngine));
+ const rowShiftsByCol=tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'||tilingEngine==='hexagon'||tilingEngine==='ogee';
+ const colShiftsByRow=tilingEngine==='halfbrick';
+ const cloneHalfX=Math.ceil(cloneHalf*STAGE/engineColPitch(tilingEngine))+(colShiftsByRow?1:0);
+ const cloneHalfY=Math.ceil(cloneHalf*STAGE/engineRowPitch(tilingEngine))+(rowShiftsByCol?1:0);
  const cloneRangeX=Array.from({length:cloneHalfX*2+1},(_,i)=>i-cloneHalfX);
  const cloneRangeY=Array.from({length:cloneHalfY*2+1},(_,i)=>i-cloneHalfY);
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRangeX.forEach(tx=>cloneRangeY.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
