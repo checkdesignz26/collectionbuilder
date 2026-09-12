@@ -1935,10 +1935,15 @@ function drawStructureBrick(ctx,b,bwPx,bhPx,color){
  }
  ctx.restore();
 }
-async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx){
+async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx,extraFlipY=false){
  ctx.save();
  ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);
- if(b.flipX||b.flipY)ctx.scale(b.flipX?-1:1,b.flipY?-1:1);
+ // extraFlipY is the "half drop flip" clone mirror (see engineOffset/render()'s drawList) - XORed
+ // against the brick's own flipY so the two independent flips (the user's manual flip and the
+ // tiling engine's alternate-column mirror) combine correctly rather than one silently masking
+ // the other.
+ const fx=!!b.flipX,fy=(!!b.flipY)!==extraFlipY;
+ if(fx||fy)ctx.scale(fx?-1:1,fy?-1:1);
  if(b.motifUrl){
   try{
    const img=await loadImageCached(b.motifUrl);
@@ -2015,11 +2020,13 @@ async function renderPatternToCanvas(canvas,pxW,pxH,tilePx,transparentBg){
  const sf=getPatternScale(texture)/100;
  for(const {b,tx,ty} of drawList){
   const off=engineOffset(tx,ty);
+  const mirrored=tilingEngine==='halfdropflip'&&tx%2!==0;
+  const by=mirrored?100-b.y:b.y;
   const bw=b.w*sf,bh=b.h*sf;
-  const cx=(off.x+b.x*10)*scale,cy=(off.y+b.y*10)*scale;
+  const cx=(off.x+b.x*10)*scale,cy=(off.y+by*10)*scale;
   const bwPx=bw*10*scale,bhPx=bh*10*scale;
   if(cx+bwPx<0||cy+bhPx<0||cx-bwPx>pxW||cy-bhPx>pxH)continue;
-  await drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx);
+  await drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx,mirrored);
  }
 }
 // Same drawing as renderPatternToCanvas above, but for a saved pattern's OWN snapshot (bricks,
@@ -2083,11 +2090,13 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg
  const sf=getPatternScale(t.texture)/100;
  for(const {b,tx,ty} of drawList){
   const off=engineOffsetFor(engine,tx,ty);
+  const mirrored=engine==='halfdropflip'&&tx%2!==0;
+  const by=mirrored?100-b.y:b.y;
   const bw=b.w*sf,bh=b.h*sf;
-  const cx=(off.x+b.x*10)*scale,cy=(off.y+b.y*10)*scale;
+  const cx=(off.x+b.x*10)*scale,cy=(off.y+by*10)*scale;
   const bwPx=bw*10*scale,bhPx=bh*10*scale;
   if(cx+bwPx<0||cy+bhPx<0||cx-bwPx>pxW||cy-bhPx>pxH)continue;
-  await drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx);
+  await drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx,mirrored);
  }
 }
 function crc32(bytes){
@@ -2655,8 +2664,18 @@ function render(){const stage=document.getElementById('stage');stage.className='
  const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRangeX.forEach(tx=>cloneRangeY.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
  let selGeom=null;
  drawList.forEach(({b,tx,ty,clone})=>{
-  const g=brickScreenGeom(b,tx,ty,scale,origin);
-  drawBrickSync(ctx,b,g.cx,g.cy,g.bwPx,g.bhPx);
+  // "half drop flip" is a half-drop repeat where alternate columns are a true mirror of the base
+  // tile - not just offset like plain half-drop, but reflected: both the shape's own orientation
+  // (flipped here) and its position within the tile (mirrored y, via the {...b,y:100-b.y} passed
+  // only to the geometry calc - drawBrickSync/drawBrickToCanvas still draw the real, unmodified
+  // brick's content). Without the position mirror too, odd columns would just show the same
+  // layout upside-down in place, not an actual reflection - indistinguishable from plain
+  // half-drop for a lattice offset alone (flipping the sign of a periodic offset produces the
+  // exact same infinite tiling), which was the whole bug: "half drop flip" rendered identically
+  // to "half drop" because no actual mirroring was ever applied anywhere.
+  const mirrored=clone&&tilingEngine==='halfdropflip'&&tx%2!==0;
+  const g=brickScreenGeom(mirrored?{...b,y:100-b.y}:b,tx,ty,scale,origin);
+  drawBrickSync(ctx,b,g.cx,g.cy,g.bwPx,g.bhPx,mirrored);
   if(!clone&&selected===b.id)selGeom=g;
   if(!clone&&multiSelected.has(b.id)){
    ctx.save();ctx.translate(g.cx,g.cy);ctx.rotate((b.rot||0)*Math.PI/180);
@@ -2774,10 +2793,15 @@ function getHandleForLocalPoint(lx,ly,bwPx,bhPx){
 // with PNG export) - real motif images draw via the live image cache; everything else is either
 // a "structure" brick's approximated fill or an outline placeholder shape, with a flow-direction
 // arrow overlaid the same way the CSS .flowArrow span used to.
-function drawBrickSync(ctx,b,cx,cy,bwPx,bhPx){
+function drawBrickSync(ctx,b,cx,cy,bwPx,bhPx,extraFlipY=false){
  ctx.save();
  ctx.translate(cx,cy);ctx.rotate((b.rot||0)*Math.PI/180);
- if(b.flipX||b.flipY)ctx.scale(b.flipX?-1:1,b.flipY?-1:1);
+ // extraFlipY is the "half drop flip" clone mirror (see engineOffset/render()'s drawList) - XORed
+ // against the brick's own flipY so the two independent flips (the user's manual flip and the
+ // tiling engine's alternate-column mirror) combine correctly rather than one silently masking
+ // the other.
+ const fx=!!b.flipX,fy=(!!b.flipY)!==extraFlipY;
+ if(fx||fy)ctx.scale(fx?-1:1,fy?-1:1);
  if(b.motifUrl&&showMotifs){
   const img=getLiveImage(b.motifUrl);
   if(img){
