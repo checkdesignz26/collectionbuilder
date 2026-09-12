@@ -3209,6 +3209,7 @@ function placeMotifOnSelected(){
  render();
  renderGrid();
  renderAssignedShapes();
+ syncControls();
 }
 function clearMotifFromSelected(){
  const b=selectedBrick();
@@ -3216,16 +3217,17 @@ function clearMotifFromSelected(){
  if(alignScope==='single'){
   if(!b.motifUrl)return;
   pushHistory();
-  delete b.motifUrl;delete b.motifPinned;
+  delete b.motifUrl;delete b.motifPinned;delete b.recolor;
  }else{
   if(!motifShapes[b.type])return;
   pushHistory();
   delete motifShapes[b.type];
-  bricks.forEach(x=>{if(x.type===b.type){delete x.motifUrl;delete x.motifPinned;}});
+  bricks.forEach(x=>{if(x.type===b.type){delete x.motifUrl;delete x.motifPinned;delete x.recolor;}});
  }
  render();
  renderGrid();
  renderAssignedShapes();
+ syncControls();
 }
 // A shape's motif assignment (motifShapes) outlives the layout it was made on and the brick you
 // selected to make it - it's easy to forget a shape got assigned a motif several layouts/minutes
@@ -3245,10 +3247,11 @@ function renderAssignedShapes(){
   d.onclick=()=>{
    pushHistory();
    delete motifShapes[type];
-   bricks.forEach(x=>{if(x.type===type)delete x.motifUrl;});
+   bricks.forEach(x=>{if(x.type===type){delete x.motifUrl;delete x.recolor;}});
    render();
    renderGrid();
    renderAssignedShapes();
+   syncControls();
   };
   box.appendChild(d);
  });
@@ -3564,10 +3567,11 @@ document.getElementById('clearAllMotifsBtn').onclick=()=>{
  if(!Object.keys(motifShapes).length)return;
  pushHistory();
  motifShapes={};
- bricks.forEach(x=>{if(x.motifUrl)delete x.motifUrl;});
+ bricks.forEach(x=>{if(x.motifUrl){delete x.motifUrl;delete x.recolor;}});
  render();
  renderGrid();
  renderAssignedShapes();
+ syncControls();
 };
 renderAssignedShapes();
 renderMotifTray();
