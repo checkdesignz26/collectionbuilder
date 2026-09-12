@@ -1092,6 +1092,11 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
        <button id="recolorFromHeroBtn" class="full small" title="Pull dominant colours from your uploaded hero image, straight into the recolour swatch"><svg class="btnIcon"><use href="#i-palette"/></svg>pick from hero image colours</button>
        <div class="swatches" id="recolorPaletteSwatches"></div>
        <input type="color" id="addRecolorPaletteColorInput" style="display:none">
+       <button id="recolorFromMoodBtn" class="full small" title="Same adaptive mood/season palette generator as Classics Studio and Background Studio - pick a vibe, tap a colour"><svg class="btnIcon"><use href="#i-dice"/></svg>pick from mood palette</button>
+       <div class="miniControl"><label>vibe</label><select id="recolorMoodSelect" class="selectTiny">
+         <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="luxe">luxurious / opulent</option><option value="jewel">jewel tones</option><option value="christmas">christmas / festive</option>
+        </select></div>
+       <div class="swatches" id="recolorMoodSwatches"></div>
        <button id="saveRecolorAsMotifBtn" class="full small" title="Bakes this recoloured version into a brand new, independent motif in your tray - place it anywhere, on any shape, without touching the original"><svg class="btnIcon"><use href="#i-copy"/></svg>save as new motif</button>
        <button id="recolorClearBtn" class="full small">clear recolor</button>
        <p class="footerNote">Alpha-locked like Procreate - tints only the motif's own opaque pixels, same shape/edges, nothing painted outside it. "flat" replaces the colour completely (best for simple icons/silhouettes); the other blend modes keep the motif's own shading and just shift its hue (best for a shaded illustration).</p>
@@ -3606,7 +3611,7 @@ const baseRender=render; render=function(){baseRender();updateLiveMini();schedul
 function miniHTML(key){ if(key==='stripe')return '<div style="height:100%;background:repeating-linear-gradient(0deg,#111 0 8px,#777 8px 16px,#fff 16px 24px)"></div>'; if(key==='gingham')return '<div style="height:100%;background:linear-gradient(90deg,rgba(0,0,0,.5) 50%,transparent 50%),linear-gradient(rgba(0,0,0,.5) 50%,transparent 50%);background-size:18px 18px"></div>'; if(key==='chevron')return '<div style="height:100%;background:linear-gradient(135deg,#111 25%,transparent 25%) 0 0/24px 24px,linear-gradient(225deg,#111 25%,transparent 25%) 0 0/24px 24px"></div>'; if(key==='scallop')return '<div style="height:100%;background:radial-gradient(circle at 14px 100%,transparent 0 13px,#111 14px 16px,transparent 17px);background-size:28px 58px"></div>'; if(key==='plaid')return '<div style="height:100%;background:repeating-linear-gradient(0deg,transparent 0 18px,#111 18px 22px),repeating-linear-gradient(90deg,transparent 0 18px,#777 18px 22px)"></div>'; let dots={grid:[[22,22],[68,22],[22,68],[68,68]],halfdrop:[[50,16],[24,50],[76,50],[50,82]],halfbrick:[[22,24],[76,24],[50,62],[22,84],[76,84]],halfdropflip:[[50,16],[24,55],[76,55],[50,82]],diamond:[[50,14],[24,50],[76,50],[50,84]],tossed:[[30,24],[72,30],[38,68],[78,78]],polka:[[20,20],[70,20],[45,50],[20,80],[70,80]]}[key]||[];return dots.map((d,i)=>`<div class="miniDot" style="left:${d[0]}%;top:${d[1]}%;transform:translate(-50%,-50%);${key==='diamond'?'border-radius:2px;transform:translate(-50%,-50%) rotate(45deg);':''}"></div>`).join('');}
 function addBrick(type){let role=activeColor;let w=20,h=14;if(type==='circle'){w=h=12}else if(type==='square'||type==='diamond'||type==='triangle'||type==='hexagon'||type==='star'||type==='heart'){w=h=15}else if(type.includes('Row')){w=90;h=10;role='black'}else if(type==='gingham'||type==='chevron'){w=100;h=100;role='grey'} if(type==='rectRow'){type='rect';w=85;h=9;role='grey'} role=defaultRoleForType(type); const b=p(type,50,50,w,h,role,0,type==='arrowOval'?'↗':'');bricks.push(b);selected=b.id;render();syncControls();renderUnassignedShapes();}
 function selectedBrick(){return bricks.find(b=>b.id===selected)}
-function syncControls(set=true){const b=selectedBrick();const recolorRow=document.getElementById('recolorRow');if(!b){recolorRow.classList.add('hidden');return;} if(set){xRange.value=b.x;yRange.value=b.y;wRange.value=b.w;hRange.value=b.h;rRange.value=b.rot} recolorRow.classList.toggle('hidden',!b.motifUrl);if(b.motifUrl){document.getElementById('recolorInput').value=b.recolor||'#7c5cff';document.getElementById('recolorMode').value=b.recolorMode||'flat';renderRecolorPaletteSwatches();}}
+function syncControls(set=true){const b=selectedBrick();const recolorRow=document.getElementById('recolorRow');if(!b){recolorRow.classList.add('hidden');return;} if(set){xRange.value=b.x;yRange.value=b.y;wRange.value=b.w;hRange.value=b.h;rRange.value=b.rot} recolorRow.classList.toggle('hidden',!b.motifUrl);if(b.motifUrl){document.getElementById('recolorInput').value=b.recolor||'#7c5cff';document.getElementById('recolorMode').value=b.recolorMode||'flat';renderRecolorPaletteSwatches();renderRecolorMoodSwatches();}}
 // x/y (position) stays single-brick: dragging every same-shape brick to one identical spot would
 // just collapse the layout, and dedicated bulk actions (left/right/centre/make row/make column
 // etc, all scope-aware already) already cover intentional bulk repositioning.
@@ -3668,6 +3673,39 @@ async function saveRecolorAsNewMotif(){
  flashSaveStatus('recoloured motif saved to your tray ✓');
 }
 document.getElementById('saveRecolorAsMotifBtn').addEventListener('click',saveRecolorAsNewMotif);
+// Same adaptive mood/season palette generator behind Classics Studio and Background Studio's
+// "colour mode" panel (cmGetPalette/generateAdaptivePalette/MOOD_CURVES) - #cmPanel and its
+// controls (cmHero/cmMood/cmRichness) are a real, permanent DOM node re-parented into whichever
+// studio opens it (see mountColourMode), never destroyed, so cmGetPalette() works here too
+// regardless of whether either studio is currently open. recolorMoodSelect is a separate <select>
+// (the shared cmMood node can't be mounted in two places at once) that writes straight into
+// cmMood.value on change, so picking a vibe here also updates it everywhere else Colour Mode
+// reads it from.
+function renderRecolorMoodSwatches(){
+ const box=document.getElementById('recolorMoodSwatches');if(!box)return;
+ const cmMood=document.getElementById('cmMood');
+ const sel=document.getElementById('recolorMoodSelect');
+ if(cmMood&&sel)sel.value=cmMood.value;
+ const pal=cmGetPalette();
+ box.innerHTML='';
+ Object.values(pal.roles).forEach(hex=>{
+  const d=document.createElement('div');
+  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to recolour with this colour';
+  d.onclick=()=>{
+   const b=selectedBrick();if(!b||!b.motifUrl)return;
+   pushHistory();b.recolor=hex;
+   document.getElementById('recolorInput').value=hex;
+   render();
+  };
+  box.appendChild(d);
+ });
+}
+document.getElementById('recolorFromMoodBtn').addEventListener('click',renderRecolorMoodSwatches);
+document.getElementById('recolorMoodSelect').addEventListener('change',e=>{
+ const cmMood=document.getElementById('cmMood');
+ if(cmMood)cmMood.value=e.target.value;
+ renderRecolorMoodSwatches();
+});
 document.querySelectorAll('[data-add]').forEach(btn=>btn.onclick=()=>{pushHistory();addBrick(btn.dataset.add);});
 function deselectBrick(){if(selected==null)return;selected=null;render();}
 document.getElementById('deselectBtn').onclick=deselectBrick;
