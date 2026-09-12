@@ -2125,6 +2125,19 @@ function tileDimsForEngine(engine,pxSize){
  if(engine==='ogee')return{w:Math.round(pxSize*2*OGEE_LATTICE.colSpacing/STAGE),h:Math.round(pxSize*OGEE_LATTICE.rowSpacing/STAGE)};
  return{w:pxSize,h:pxSize};
 }
+function gcdInt(a,b){a=Math.round(Math.abs(a));b=Math.round(Math.abs(b));while(b){const t=a%b;a=b;b=t;}return a||1;}
+// The true seamless repeat unit for the offset engines above is a rectangle, not a square (2:1 for
+// halfdrop/halfdropflip, 1:2 for halfbrick, 3:2 for hexagon) - no crop of it can be forced into a
+// square and still tile edge-to-edge, since a plain-grid repeat only stays seamless when each side
+// is an exact multiple of the true unit's matching side. This finds the smallest whole number of
+// true-tile copies (nx across, ny down) that exactly reproduces a square, so a square export can be
+// built by literally plain-tiling the true (already-seamless) unit that many times - not by
+// resizing/cropping it, which is what breaks the seam when done by hand in outside software.
+function squareRepeatCounts(engine){
+ const d=tileDimsForEngine(engine,10000);
+ const g=gcdInt(d.w,d.h);
+ return {nx:Math.round(d.h/g),ny:Math.round(d.w/g)};
+}
 async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg){
  const ctx=canvas.getContext('2d');
  if(!transparentBg){ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);}
@@ -2298,10 +2311,29 @@ function makeZip(files){
  return new Blob([...localParts,...centralParts,eocd],{type:'application/zip'});
 }
 window.exportPatternPNG=async function(pxSize,dpi){
- const dims=tileCanvasDims(pxSize);
- const canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
  const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;
- await renderPatternToCanvas(canvas,dims.w,dims.h,pxSize,transparentBg);
+ const wantSquare=!!document.getElementById('dlSquareTile')?.checked;
+ const {nx,ny}=squareRepeatCounts(tilingEngine);
+ let canvas,dims;
+ if(wantSquare&&(nx>1||ny>1)){
+  // pxSize here is the requested SQUARE side - scale the true (non-square) tile down so nx*ny
+  // copies of it exactly fill that square, then plain-tile it in with no offset (see
+  // squareRepeatCounts above for why plain-tiling stays seamless).
+  const unitW=tileDimsForEngine(tilingEngine,10000).w/10000;
+  const trueTilePx=Math.max(1,Math.round(pxSize/(nx*unitW)));
+  const trueDims=tileDimsForEngine(tilingEngine,trueTilePx);
+  const trueCanvas=document.createElement('canvas');trueCanvas.width=trueDims.w;trueCanvas.height=trueDims.h;
+  await renderPatternToCanvas(trueCanvas,trueDims.w,trueDims.h,trueTilePx,transparentBg);
+  canvas=document.createElement('canvas');canvas.width=trueDims.w*nx;canvas.height=trueDims.h*ny;
+  const ctx=canvas.getContext('2d');
+  if(!transparentBg){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}
+  for(let iy=0;iy<ny;iy++)for(let ix=0;ix<nx;ix++)ctx.drawImage(trueCanvas,ix*trueDims.w,iy*trueDims.h);
+  dims={w:canvas.width,h:canvas.height};
+ }else{
+  dims=tileCanvasDims(pxSize);
+  canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
+  await renderPatternToCanvas(canvas,dims.w,dims.h,pxSize,transparentBg);
+ }
  const bytes=await canvasToDpiPngBytes(canvas,dpi);
  const name=slugName(presets[current]?.name||(savedTemplates.find(t=>t.key===current)||{}).name||current);
  triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${name}-${dims.w}x${dims.h}-${dpi}dpi${transparentBg?'-transparent':''}.png`);
@@ -4393,6 +4425,7 @@ setTimeout(()=>{shrinkOversizedMotifsInSession().catch(e=>console.warn('motif sh
         <div><label style="display:block;font-size:12px;color:var(--muted);font-weight:850;margin-bottom:4px">DPI</label><input id="dlDpi" type="number" min="72" max="1200" step="1" value="300" style="width:100%"></div>
       </div>
       <p class="footerNote" id="dlShapeNote"></p>
+      <label id="dlSquareLabel" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)"><input type="checkbox" id="dlSquareTile" checked style="width:16px;height:16px">make it an exact square (auto-repeats the tile to fill it - still seamless, ready to use as-is)</label>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:850;color:var(--muted)"><input type="checkbox" id="dlTransparentBg" style="width:16px;height:16px">transparent background (no fill/background layer - just the motifs, e.g. for wrapping a glass or can)</label>
       <button id="dlDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download PNG</button>
       <p class="footerNote" id="dlStatus"></p>
@@ -4639,6 +4672,10 @@ refreshHeroThumbs();
  window.openDownloadPanel=function(title,exportFn,noteFn,defaultWidth){
   activeExportFn=exportFn;activeNoteFn=noteFn;
   document.getElementById('dlTitle').textContent=title||'download pattern';
+  // "make it a square" only means anything for the main canvas's own export (it's the only
+  // caller that reads dlSquareTile) - hidden elsewhere so it doesn't look like an offered
+  // option that silently does nothing for classics/background/zip-batch downloads.
+  document.getElementById('dlSquareLabel').style.display='none';
   // Bulk zip exports render many large canvases back to back, which is a lot heavier
   // on memory (especially on mobile Safari) than the default single-pattern print size -
   // callers exporting many items at once can suggest a lighter starting width here; the
@@ -4653,11 +4690,18 @@ refreshHeroThumbs();
   const w=Math.max(200,Math.min(12000,+document.getElementById('dlWidth').value||3600));
   note.textContent=activeNoteFn?activeNoteFn(w):`Exports a single ${w}×${w}px seamless tile.`;
  }
- document.getElementById('openDownload').onclick=()=>window.openDownloadPanel('download pattern',window.exportPatternPNG,w=>{
-  if(current==='halfdrop'||current==='halfdropflip')return `Half-drop can't tile correctly as a plain square, so this exports a ${w*2}×${w}px rectangle (2 tiles wide, stagger baked in) that tiles edge-to-edge in any software.`;
-  if(current==='halfbrick')return `Half-brick can't tile correctly as a plain square, so this exports a ${w}×${w*2}px rectangle (2 tiles tall, stagger baked in) that tiles edge-to-edge in any software.`;
-  return `Exports a single ${w}×${w}px seamless tile.`;
- });
+ document.getElementById('openDownload').onclick=()=>{
+  window.openDownloadPanel('download pattern',window.exportPatternPNG,w=>{
+   const {nx,ny}=squareRepeatCounts(tilingEngine);
+   const square=(nx>1||ny>1)&&!!document.getElementById('dlSquareTile')?.checked;
+   if(square)return `${tilingEngine}'s true seamless repeat isn't a square on its own, so this auto-repeats it (${nx}×${ny} copies) to exactly fill a ${w}×${w}px square - still perfectly seamless, ready to drop straight into any app.`;
+   if(current==='halfdrop'||current==='halfdropflip')return `Half-drop can't tile correctly as a plain square, so this exports a ${w*2}×${w}px rectangle (2 tiles wide, stagger baked in) that tiles edge-to-edge in any software.`;
+   if(current==='halfbrick')return `Half-brick can't tile correctly as a plain square, so this exports a ${w}×${w*2}px rectangle (2 tiles tall, stagger baked in) that tiles edge-to-edge in any software.`;
+   return `Exports a single ${w}×${w}px seamless tile.`;
+  });
+  document.getElementById('dlSquareLabel').style.display='flex';
+ };
+ document.getElementById('dlSquareTile').addEventListener('change',updateShapeNote);
  document.getElementById('dlClose').onclick=closeDl;
  document.getElementById('downloadOverlay').addEventListener('click',e=>{if(e.target.id==='downloadOverlay')closeDl();});
  document.getElementById('dlWidth').addEventListener('input',updateShapeNote);
