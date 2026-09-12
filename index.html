@@ -1391,14 +1391,15 @@ const presets={
  // two shapes side by side pretending to checkerboard.
  diamond:{name:'diamond repeat',bricks:[p('diamond',50,50,100,100,'hero')]},
  tossed:{name:'tossed',bricks:[p('arrowOval',30,24,22,14,'hero',-20,'→'),p('oval',72,30,18,12,'secondary',35,'→'),p('diamond',38,68,13,13,'filler',15),p('circle',78,78,10,10,'accent')]},
- // Ogee is a fixed structural lattice, not a placeable brick - see renderTessGuide, which draws
- // the whole trellis straight into the non-interactive backdrop. No starter brick here (same as
- // blank canvas): pick "ogee stagger" to see the trellis, then place your own motifs on top with
- // "place freely" and they'll repeat across the same lattice.
+ // Ogee is a fixed structural lattice, not a placeable brick - see drawTessGuideCanvas, which
+ // draws the whole trellis straight into the non-interactive backdrop, styled the same pink as
+ // diamond's own guide (see strokeColor there) rather than a separate neutral grey. No starter
+ // brick here (same as blank canvas): pick "ogee" to see the trellis, then place your own motifs
+ // on top with "place freely" and they'll repeat across the same lattice.
  ogee:{name:'ogee',bricks:[]},
- // Hexagon is a fixed structural honeycomb, not a placeable brick - see renderTessGuide. No
- // starter brick (same as blank canvas): pick "hexagon stagger" to see the honeycomb, then place
- // your own motifs on top with "place freely" and they'll repeat across the same lattice.
+ // Hexagon is a fixed structural honeycomb, not a placeable brick - see drawTessGuideCanvas. No
+ // starter brick (same as blank canvas): pick "hexagon" to see the honeycomb, then place your own
+ // motifs on top with "place freely" and they'll repeat across the same lattice.
  hexagon:{name:'hexagon',bricks:[]},
  polka:{name:'polka',bricks:[p('circle',20,20,10,10,'black'),p('circle',70,20,10,10,'black'),p('circle',45,50,10,10,'black'),p('circle',20,80,10,10,'black'),p('circle',70,80,10,10,'black')]},
  gingham:{name:'gingham',bricks:[p('gingham',50,50,100,100,'grey')]},
@@ -2535,25 +2536,20 @@ function renderBackdropOffscreen(scale,origin,size){
 // the render wrapper below) instead of asking Background/Classics Studio to
 // clone their recipe a second time for the exact same frame.
 let lastBgSnap=null,lastClassicSnap=null;
-// Hexagon/ogee are fixed structural repeats, not a "brick" the way every other layout's shapes
-// are - the whole point of a honeycomb/ogee tile is that the cells stay put, so nothing can drag
-// or resize one cell out of the tessellation and leave a gap behind. They render entirely in the
-// non-interactive backdrop layer instead (tileGuide/texture tiles already live here for the same
-// reason - see ensureStageLayers above), using the exact same shape + spacing already verified
-// gap-free. The hexagon/ogee PRESETS themselves carry no bricks at all (see presets.hexagon/ogee) -
-// place your own motifs with "place freely", and while this tiling style is active they'll repeat
-// across the same honeycomb/ogee lattice the guide is showing, landing on top of it.
-// Diamond/hexagon/ogee are all fixed structural repeats, not a "brick" the way every other
-// layout's shapes are - the whole point of a honeycomb/ogee/diamond tile is that the cells stay
-// put, so nothing can drag or resize one cell out of the tessellation and leave a gap behind. All
-// three render as ONE combined SVG <path> (one stroke, dashed) instead of many independently
-// positioned divs - drawing each cell as its own div (the old approach, still used for diamond
-// until this) meant adjacent cells' shared edges were two separately-rounded floating-point
-// computations that only APPROXIMATELY coincided, which read as a fine but real double line once
-// zoomed in (most visible on diamond's simple straight edges). A single path can't ever double up
-// against itself. The hexagon/ogee PRESETS carry no bricks at all (see presets.hexagon/ogee) -
-// place your own motifs with "place freely", and while one of these tiling styles is active
-// they'll repeat across the same lattice the guide is showing, landing on top of it.
+// Diamond/hexagon/ogee are all fixed structural repeats, not a placeable "brick" the way every
+// other layout's shapes are - the underlying lattice spacing (engineOffset) is fixed regardless
+// of what's on the canvas, so nothing can drag or resize one cell out of alignment with its
+// neighbours. The dashed reference lattice below is purely a non-interactive backdrop guide
+// (tileGuide/texture tiles already live in that same layer - see ensureStageLayers above), drawn
+// as ONE combined canvas path (not many independently positioned divs/cells) so adjacent cells'
+// shared edges can't double up into a visible seam the way two separately-rounded floating-point
+// edges could. It's drawn regardless of whether any bricks exist yet - diamond's own preset
+// happens to also seed one real brick shaped to match this exact guide (presets.diamond), but
+// hexagon/ogee's presets carry none (presets.hexagon/ogee) - "place freely" is how you add
+// content for those, placing motifs that repeat across the same lattice this guide is showing.
+// All three guides now share the same styling (see strokeColor below) regardless of that
+// difference, so hexagon/ogee's reference lattice reads as the same kind of "fixed structural
+// shape" diamond's does, not a separate/lesser grey scratch outline.
 const GUIDE_SHAPE_POLY={diamond:[[50,0],[100,50],[50,100],[0,50]],hexagon:SHAPE_POLY_PCT.hexagon,ogeeLens:SHAPE_POLY_PCT.ogeeLens};
 function drawTessGuideCanvas(ctx,scale,origin,stagePx){
  if(tilingEngine!=='diamond'&&tilingEngine!=='hexagon'&&tilingEngine!=='ogee')return;
@@ -2568,7 +2564,7 @@ function drawTessGuideCanvas(ctx,scale,origin,stagePx){
  const colSpacing=lattice.colSpacing;
  const rowSpacing=lattice.rowSpacing;
  const wUnits=isDiamond?STAGE:lattice.w,hUnits=isDiamond?STAGE:lattice.h;
- const strokeColor=isDiamond?'rgba(217,106,152,.55)':'rgba(30,30,40,.32)';
+ const strokeColor='rgba(217,106,152,.55)';
  const pts=GUIDE_SHAPE_POLY[polyKey];
  const range=Math.max(6,Math.ceil((repeatSpan||3)*1.6));
  // Adjacent cells in a true edge-to-edge tessellation (hexagon, diamond) share their border edge
