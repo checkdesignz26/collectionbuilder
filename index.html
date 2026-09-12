@@ -1083,8 +1083,16 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <p class="footerNote">Width/height/rotate follow the scope above (same shape by default) within this layout. Turn this on to have Live Preview also carry the change to every other repeat layout's matching shape.</p>
       <div id="recolorRow" class="hidden">
        <div class="range"><label>recolor</label><input id="recolorInput" type="color" value="#7c5cff"></div>
+       <div class="range"><label>blend</label><select id="recolorMode">
+         <option value="flat">flat (silhouette)</option>
+         <option value="overlay">overlay (keep shading)</option>
+         <option value="multiply">multiply (tint darker)</option>
+         <option value="color">colour (keep shading)</option>
+        </select></div>
+       <button id="recolorFromHeroBtn" class="full small" title="Pull dominant colours from your uploaded hero image, straight into the recolour swatch"><svg class="btnIcon"><use href="#i-palette"/></svg>pick from hero image colours</button>
+       <div class="swatches" id="recolorPaletteSwatches"></div>
        <button id="recolorClearBtn" class="full small">clear recolor</button>
-       <p class="footerNote">Alpha-locked like Procreate - tints only the motif's own opaque pixels with a flat colour, same shape/edges, nothing painted outside it.</p>
+       <p class="footerNote">Alpha-locked like Procreate - tints only the motif's own opaque pixels, same shape/edges, nothing painted outside it. "flat" replaces the colour completely (best for simple icons/silhouettes); the other blend modes keep the motif's own shading and just shift its hue (best for a shaded illustration).</p>
       </div>
       <button id="styleAllLayoutsBtn" class="full">apply to all layouts: off</button>
       <div class="grid2"><button id="arrowsBtn"><svg class="btnIcon"><use href="#i-compass"/></svg>toggle arrows</button><button id="deleteBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>delete</button></div>
@@ -1847,21 +1855,45 @@ function loadImageCached(src){
  _exportImageCache.set(src,p);
  return p;
 }
-// Export-quality counterpart to getLiveTintedThumb - same alpha-locked 'source-atop' flat-colour
-// composite, but against the full-resolution decoded image (not the downscaled live thumbnail),
-// so a recoloured motif exports at the same quality an un-recoloured one would. Cached per
-// url+colour since export can redraw the same brick many times (edge clones).
-const _exportTintCache=new Map();
-function tintedExportImage(url,img,color){
- const key=url+'|'+color;
- if(_exportTintCache.has(key))return _exportTintCache.get(key);
- const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+// Shared by getLiveTintedThumb (live canvas, downscaled thumb source) and tintedExportImage
+// (export, full-res source) - the only difference between them is which image they tint and how
+// the result is cached. 'flat' is the alpha-locked silhouette fill from before (Procreate's
+// alpha-lock default): 'source-atop' only paints over pixels the destination already has some
+// opacity in, so the fill respects the motif's silhouette with no separate masking step needed.
+// Every other mode is a real blend (canvas's globalCompositeOperation accepts CSS blend-mode
+// names directly) - blending the flat colour fill against the ORIGINAL pixels first (so shading/
+// highlights/linework survive, unlike 'flat' which replaces them outright), then a second
+// 'destination-in' pass re-clips the result back to the source's own alpha shape, since a blend
+// mode (unlike 'source-atop') paints across the WHOLE canvas including originally-transparent
+// pixels - without this second pass the motif's background would pick up a faint colour wash
+// instead of staying fully transparent.
+function compositeRecolor(source,iw,ih,color,mode){
  const c=document.createElement('canvas');c.width=iw;c.height=ih;
  const cctx=c.getContext('2d');
- cctx.drawImage(img,0,0,iw,ih);
- cctx.globalCompositeOperation='source-atop';
- cctx.fillStyle=color;
- cctx.fillRect(0,0,iw,ih);
+ cctx.drawImage(source,0,0,iw,ih);
+ if(mode&&mode!=='flat'){
+  cctx.globalCompositeOperation=mode;
+  cctx.fillStyle=color;
+  cctx.fillRect(0,0,iw,ih);
+  cctx.globalCompositeOperation='destination-in';
+  cctx.drawImage(source,0,0,iw,ih);
+ }else{
+  cctx.globalCompositeOperation='source-atop';
+  cctx.fillStyle=color;
+  cctx.fillRect(0,0,iw,ih);
+ }
+ return c;
+}
+// Export-quality counterpart to getLiveTintedThumb - same compositeRecolor treatment, but against
+// the full-resolution decoded image (not the downscaled live thumbnail), so a recoloured motif
+// exports at the same quality an un-recoloured one would. Cached per url+colour+mode since export
+// can redraw the same brick many times (edge clones).
+const _exportTintCache=new Map();
+function tintedExportImage(url,img,color,mode){
+ const key=url+'|'+color+'|'+(mode||'flat');
+ if(_exportTintCache.has(key))return _exportTintCache.get(key);
+ const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+ const c=compositeRecolor(img,iw,ih,color,mode);
  _exportTintCache.set(key,c);
  return c;
 }
@@ -1970,7 +2002,7 @@ async function drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx,extraFlipY=false){
  if(b.motifUrl){
   try{
    const img=await loadImageCached(b.motifUrl);
-   const src=b.recolor?tintedExportImage(b.motifUrl,img,b.recolor):img;
+   const src=b.recolor?tintedExportImage(b.motifUrl,img,b.recolor,b.recolorMode):img;
    // Match the on-screen CSS (object-fit:contain): fit within the brick's box
    // preserving the motif's own aspect ratio, not stretched to fill it.
    const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
@@ -2769,24 +2801,17 @@ function getLiveThumb(url,img){
  _liveThumbReady.set(url,c);
  return c;
 }
-// Alpha-locked recolor (Procreate's term for exactly this) - fills a flat colour everywhere the
-// motif already has opaque pixels, leaving transparent areas untouched, via 'source-atop'
-// compositing: it only paints over existing (non-transparent) destination pixels, so the fill
-// respects the motif's own silhouette without needing to trace or mask it by hand. Tints the
-// already-downscaled live thumbnail (not the full-res source) since that's what's actually drawn
-// on screen - cheap enough to redo per colour change, cached per url+colour combo so dragging/
-// re-rendering after that doesn't repeat the composite every frame.
+// Alpha-locked recolor (Procreate's term for exactly this), or a real blend mode over the same
+// silhouette - see compositeRecolor. Tints the already-downscaled live thumbnail (not the full-res
+// source) since that's what's actually drawn on screen - cheap enough to redo per colour/mode
+// change, cached per url+colour+mode combo so dragging/re-rendering after that doesn't repeat the
+// composite every frame.
 const _liveTintReady=new Map();
-function getLiveTintedThumb(url,img,color){
- const key=url+'|'+color;
+function getLiveTintedThumb(url,img,color,mode){
+ const key=url+'|'+color+'|'+(mode||'flat');
  if(_liveTintReady.has(key))return _liveTintReady.get(key);
  const base=getLiveThumb(url,img);
- const c=document.createElement('canvas');c.width=base.width;c.height=base.height;
- const tctx=c.getContext('2d');
- tctx.drawImage(base,0,0);
- tctx.globalCompositeOperation='source-atop';
- tctx.fillStyle=color;
- tctx.fillRect(0,0,c.width,c.height);
+ const c=compositeRecolor(base,base.width,base.height,color,mode);
  _liveTintReady.set(key,c);
  return c;
 }
@@ -2850,7 +2875,7 @@ function drawBrickSync(ctx,b,cx,cy,bwPx,bhPx,extraFlipY=false){
  if(b.motifUrl&&showMotifs){
   const img=getLiveImage(b.motifUrl);
   if(img){
-   const src=b.recolor?getLiveTintedThumb(b.motifUrl,img,b.recolor):getLiveThumb(b.motifUrl,img);
+   const src=b.recolor?getLiveTintedThumb(b.motifUrl,img,b.recolor,b.recolorMode):getLiveThumb(b.motifUrl,img);
    const iw=src.width,ih=src.height;
    const fit=iw&&ih?Math.min(bwPx/iw,bhPx/ih):1;
    const dw=iw?iw*fit:bwPx,dh=ih?ih*fit:bhPx;
@@ -2960,11 +2985,16 @@ document.getElementById('bgEyedropperBtn').onclick=()=>{if(bgEyedropperArmed)dis
 // instead of requiring yet another upload of the same image just to run Colour Mode's own
 // "from image" extractor (cmExtractColoursFromImage, reused here as-is) - tapping a swatch sets
 // it as the background via the same applySampledBackground the eye-dropper above uses.
+// Shared with the "selected brick" recolor panel (see recolorFromHeroBtn/renderRecolorPaletteSwatches
+// below) so extracting once here also makes the same swatches available there, and vice versa -
+// one extraction, one palette, usable to set either the background or a motif's recolor.
+let heroPaletteHexes=[];
 function extractHeroPalette(){
  if(!heroImg){flashSaveStatus('upload a hero image first (hero studio) to extract colours from it',false);return;}
- const hexes=cmExtractColoursFromImage(heroImg,10);
- renderHeroPaletteSwatches(hexes);
- flashSaveStatus(hexes.length?'colours extracted - tap one to set as background':'no colours found',!!hexes.length);
+ heroPaletteHexes=cmExtractColoursFromImage(heroImg,10);
+ renderHeroPaletteSwatches(heroPaletteHexes);
+ renderRecolorPaletteSwatches();
+ flashSaveStatus(heroPaletteHexes.length?'colours extracted - tap a swatch to use it ✓':'no colours found',!!heroPaletteHexes.length);
 }
 function renderHeroPaletteSwatches(hexes){
  const box=document.getElementById('heroPaletteSwatches');if(!box)return;
@@ -3528,7 +3558,7 @@ const baseRender=render; render=function(){baseRender();updateLiveMini();schedul
 function miniHTML(key){ if(key==='stripe')return '<div style="height:100%;background:repeating-linear-gradient(0deg,#111 0 8px,#777 8px 16px,#fff 16px 24px)"></div>'; if(key==='gingham')return '<div style="height:100%;background:linear-gradient(90deg,rgba(0,0,0,.5) 50%,transparent 50%),linear-gradient(rgba(0,0,0,.5) 50%,transparent 50%);background-size:18px 18px"></div>'; if(key==='chevron')return '<div style="height:100%;background:linear-gradient(135deg,#111 25%,transparent 25%) 0 0/24px 24px,linear-gradient(225deg,#111 25%,transparent 25%) 0 0/24px 24px"></div>'; if(key==='scallop')return '<div style="height:100%;background:radial-gradient(circle at 14px 100%,transparent 0 13px,#111 14px 16px,transparent 17px);background-size:28px 58px"></div>'; if(key==='plaid')return '<div style="height:100%;background:repeating-linear-gradient(0deg,transparent 0 18px,#111 18px 22px),repeating-linear-gradient(90deg,transparent 0 18px,#777 18px 22px)"></div>'; let dots={grid:[[22,22],[68,22],[22,68],[68,68]],halfdrop:[[50,16],[24,50],[76,50],[50,82]],halfbrick:[[22,24],[76,24],[50,62],[22,84],[76,84]],halfdropflip:[[50,16],[24,55],[76,55],[50,82]],diamond:[[50,14],[24,50],[76,50],[50,84]],tossed:[[30,24],[72,30],[38,68],[78,78]],polka:[[20,20],[70,20],[45,50],[20,80],[70,80]]}[key]||[];return dots.map((d,i)=>`<div class="miniDot" style="left:${d[0]}%;top:${d[1]}%;transform:translate(-50%,-50%);${key==='diamond'?'border-radius:2px;transform:translate(-50%,-50%) rotate(45deg);':''}"></div>`).join('');}
 function addBrick(type){let role=activeColor;let w=20,h=14;if(type==='circle'){w=h=12}else if(type==='square'||type==='diamond'||type==='triangle'||type==='hexagon'||type==='star'||type==='heart'){w=h=15}else if(type.includes('Row')){w=90;h=10;role='black'}else if(type==='gingham'||type==='chevron'){w=100;h=100;role='grey'} if(type==='rectRow'){type='rect';w=85;h=9;role='grey'} role=defaultRoleForType(type); const b=p(type,50,50,w,h,role,0,type==='arrowOval'?'↗':'');bricks.push(b);selected=b.id;render();syncControls();renderUnassignedShapes();}
 function selectedBrick(){return bricks.find(b=>b.id===selected)}
-function syncControls(set=true){const b=selectedBrick();const recolorRow=document.getElementById('recolorRow');if(!b){recolorRow.classList.add('hidden');return;} if(set){xRange.value=b.x;yRange.value=b.y;wRange.value=b.w;hRange.value=b.h;rRange.value=b.rot} recolorRow.classList.toggle('hidden',!b.motifUrl);if(b.motifUrl)document.getElementById('recolorInput').value=b.recolor||'#7c5cff';}
+function syncControls(set=true){const b=selectedBrick();const recolorRow=document.getElementById('recolorRow');if(!b){recolorRow.classList.add('hidden');return;} if(set){xRange.value=b.x;yRange.value=b.y;wRange.value=b.w;hRange.value=b.h;rRange.value=b.rot} recolorRow.classList.toggle('hidden',!b.motifUrl);if(b.motifUrl){document.getElementById('recolorInput').value=b.recolor||'#7c5cff';document.getElementById('recolorMode').value=b.recolorMode||'flat';renderRecolorPaletteSwatches();}}
 // x/y (position) stays single-brick: dragging every same-shape brick to one identical spot would
 // just collapse the layout, and dedicated bulk actions (left/right/centre/make row/make column
 // etc, all scope-aware already) already cover intentional bulk repositioning.
@@ -3545,7 +3575,27 @@ function syncControls(set=true){const b=selectedBrick();const recolorRow=documen
 // tints one specific uploaded motif image, not a placeholder shape's role colour, so there's no
 // natural "same shape" group to share it with the way width/height/rotate do.
 document.getElementById('recolorInput').addEventListener('input',e=>{const b=selectedBrick();if(!b||!b.motifUrl)return;pushHistory();b.recolor=e.target.value;render();});
-document.getElementById('recolorClearBtn').addEventListener('click',()=>{const b=selectedBrick();if(!b)return;pushHistory();delete b.recolor;render();syncControls();});
+document.getElementById('recolorMode').addEventListener('change',e=>{const b=selectedBrick();if(!b||!b.motifUrl)return;pushHistory();b.recolorMode=e.target.value;render();});
+document.getElementById('recolorClearBtn').addEventListener('click',()=>{const b=selectedBrick();if(!b)return;pushHistory();delete b.recolor;delete b.recolorMode;render();syncControls();});
+// Reuses the same extraction Background Studio's "extract colours from hero image" already runs
+// (cmExtractColoursFromImage against heroImg) - see extractHeroPalette/heroPaletteHexes above, one
+// shared cache instead of a second independent extraction here.
+document.getElementById('recolorFromHeroBtn').addEventListener('click',extractHeroPalette);
+function renderRecolorPaletteSwatches(){
+ const box=document.getElementById('recolorPaletteSwatches');if(!box)return;
+ box.innerHTML='';
+ heroPaletteHexes.forEach(hex=>{
+  const d=document.createElement('div');
+  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to recolour with this colour';
+  d.onclick=()=>{
+   const b=selectedBrick();if(!b||!b.motifUrl)return;
+   pushHistory();b.recolor=hex;
+   document.getElementById('recolorInput').value=hex;
+   render();
+  };
+  box.appendChild(d);
+ });
+}
 document.querySelectorAll('[data-add]').forEach(btn=>btn.onclick=()=>{pushHistory();addBrick(btn.dataset.add);});
 function deselectBrick(){if(selected==null)return;selected=null;render();}
 document.getElementById('deselectBtn').onclick=deselectBrick;
