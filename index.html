@@ -1098,6 +1098,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         </select></div>
        <div class="swatches" id="recolorMoodSwatches"></div>
        <button id="saveRecolorAsMotifBtn" class="full small" title="Bakes this recoloured version into a brand new, independent motif in your tray - place it anywhere, on any shape, without touching the original"><svg class="btnIcon"><use href="#i-copy"/></svg>save as new motif</button>
+       <button id="downloadRecolorBtn" class="full small" title="Downloads this recoloured version as its own transparent PNG, full resolution - for using outside this app, e.g. Procreate, Illustrator"><svg class="btnIcon"><use href="#i-download"/></svg>download recoloured PNG</button>
        <button id="recolorClearBtn" class="full small">clear recolor</button>
        <p class="footerNote">Alpha-locked like Procreate - tints only the motif's own opaque pixels, same shape/edges, nothing painted outside it. "flat" replaces the colour completely (best for simple icons/silhouettes); the other blend modes keep the motif's own shading and just shift its hue (best for a shaded illustration).</p>
       </div>
@@ -3739,6 +3740,24 @@ async function saveRecolorAsNewMotif(){
  flashSaveStatus('recoloured motif saved to your tray ✓');
 }
 document.getElementById('saveRecolorAsMotifBtn').addEventListener('click',saveRecolorAsNewMotif);
+// Same full-res tint as saveRecolorAsNewMotif just above, but handed straight out as a downloaded
+// PNG instead of being kept inside this app's own motif tray - for taking a recoloured motif into
+// another app (Procreate, Illustrator, etc) rather than continuing to use it here.
+async function downloadRecolorAsPNG(){
+ const b=selectedBrick();
+ if(!b||!b.motifUrl||!b.recolor)return;
+ const img=await loadImageCached(b.motifUrl);
+ const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+ const tinted=compositeRecolor(img,iw,ih,b.recolor,b.recolorMode);
+ const source=motifTray.find(m=>m.dataUrl===b.motifUrl);
+ const baseName=source?source.name.replace(/\.[a-z0-9]+$/i,''):'motif';
+ tinted.toBlob(blob=>{
+  if(!blob){flashSaveStatus('PNG export failed - see console',false);return;}
+  triggerBlobDownload(blob,`${slugName(baseName)}-${b.recolor.replace('#','')}.png`);
+  flashSaveStatus('recoloured PNG downloaded ✓');
+ },'image/png');
+}
+document.getElementById('downloadRecolorBtn').addEventListener('click',downloadRecolorAsPNG);
 // Same adaptive mood/season palette generator behind Classics Studio and Background Studio's
 // "colour mode" panel (cmGetPalette/generateAdaptivePalette/MOOD_CURVES) - #cmPanel and its
 // controls (cmHero/cmMood/cmRichness) are a real, permanent DOM node re-parented into whichever
