@@ -1027,7 +1027,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 
     <div class="box"><h2>textures</h2><div class="body">
       <p class="hint">Open the shared Classics Studio for stripes, dots, checks, plaid, madras and argyle. Background Studio is separate now.</p>
-      <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" id="bgEyedropperBtn" title="Tap this, then tap anywhere on the canvas (a motif, your hero image, a placeholder) to set a plain background in that exact colour - no trip into Background Studio needed"><svg class="btnIcon"><use href="#i-eyedropper"/></svg>pick background colour from canvas</button><button class="full" id="heroPaletteBtn" title="Pull a set of dominant colours straight out of your uploaded hero image - tap one to set it as the background"><svg class="btnIcon"><use href="#i-palette"/></svg>extract colours from hero image</button><div class="swatches" id="heroPaletteSwatches"></div><button class="full" id="clearBgBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>clear background</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
+      <button class="full primary" onclick="window.openBackgroundStudio&&window.openBackgroundStudio()"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button class="full" id="bgEyedropperBtn" title="Tap this, then tap anywhere on the canvas (a motif, your hero image, a placeholder) to set a plain background in that exact colour - no trip into Background Studio needed"><svg class="btnIcon"><use href="#i-eyedropper"/></svg>pick background colour from canvas</button><button class="full" id="heroPaletteBtn" title="Pull a set of dominant colours straight out of your uploaded hero image - tap one to set it as the background"><svg class="btnIcon"><use href="#i-palette"/></svg>extract colours from hero image</button><div class="range zoomRow"><label>colours</label><input id="heroPaletteCount" type="range" min="6" max="30" value="16"><output id="heroPaletteCountValue">16</output></div><div class="swatches" id="heroPaletteSwatches"></div><button class="full" id="clearBgBtn"><svg class="btnIcon"><use href="#i-trash"/></svg>clear background</button><button class="full" onclick="window.openTextureStudioType&&window.openTextureStudioType('stripes')">classic stripes</button>
       <div class="grid2">
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('dots')">dots</button>
         <button onclick="window.openTextureStudioType&&window.openTextureStudioType('checks')">checks</button>
@@ -2993,11 +2993,16 @@ document.getElementById('bgEyedropperBtn').onclick=()=>{if(bgEyedropperArmed)dis
 let heroPaletteHexes=[];
 function extractHeroPalette(){
  if(!heroImg){flashSaveStatus('upload a hero image first (hero studio) to extract colours from it',false);return;}
- heroPaletteHexes=cmExtractColoursFromImage(heroImg,10);
+ const count=+document.getElementById('heroPaletteCount').value||16;
+ heroPaletteHexes=cmExtractColoursFromImage(heroImg,count);
  renderHeroPaletteSwatches(heroPaletteHexes);
  renderRecolorPaletteSwatches();
  flashSaveStatus(heroPaletteHexes.length?'colours extracted - tap a swatch to use it ✓':'no colours found',!!heroPaletteHexes.length);
 }
+document.getElementById('heroPaletteCount').addEventListener('input',e=>{
+ document.getElementById('heroPaletteCountValue').textContent=e.target.value;
+ if(heroImg)extractHeroPalette();
+});
 function renderHeroPaletteSwatches(hexes){
  const box=document.getElementById('heroPaletteSwatches');if(!box)return;
  box.innerHTML='';
