@@ -3667,7 +3667,17 @@ function syncControls(set=true){const b=selectedBrick();const recolorRow=documen
 // Alpha-locked recolor (like Procreate) - single-brick only, same reasoning as x/y above: this
 // tints one specific uploaded motif image, not a placeholder shape's role colour, so there's no
 // natural "same shape" group to share it with the way width/height/rotate do.
-document.getElementById('recolorInput').addEventListener('input',e=>{const b=selectedBrick();if(!b||!b.motifUrl)return;pushHistory();b.recolor=e.target.value;render();});
+// Same pointerdown-once/input-many pattern as the x/y/w/h/r sliders above (see the comment
+// there) - matters even more here, since capture()/pushHistory does a full JSON.stringify of
+// the ENTIRE session (every layout's bricks, not just this one) and this input used to call it
+// on every single 'input' tick. A native colour picker fires 'input' continuously while it's
+// being dragged (far more ticks than a range slider produces for the same gesture), so that was
+// repeatedly blocking the main thread and stacking up to 80 multi-megabyte snapshots in the undo
+// history from one colour-picking session alone - a much likelier crash cause on memory-
+// constrained devices than anything about drawing the (already downscaled, already capped)
+// motif image itself.
+document.getElementById('recolorInput').addEventListener('pointerdown',pushHistory);
+document.getElementById('recolorInput').addEventListener('input',e=>{const b=selectedBrick();if(!b||!b.motifUrl)return;b.recolor=e.target.value;render();});
 document.getElementById('recolorMode').addEventListener('change',e=>{const b=selectedBrick();if(!b||!b.motifUrl)return;pushHistory();b.recolorMode=e.target.value;render();});
 document.getElementById('recolorClearBtn').addEventListener('click',()=>{const b=selectedBrick();if(!b)return;pushHistory();delete b.recolor;delete b.recolorMode;render();syncControls();});
 // Reuses the same extraction Background Studio's "extract colours from hero image" already runs
