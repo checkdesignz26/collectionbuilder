@@ -1091,6 +1091,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         </select></div>
        <button id="recolorFromHeroBtn" class="full small" title="Pull dominant colours from your uploaded hero image, straight into the recolour swatch"><svg class="btnIcon"><use href="#i-palette"/></svg>pick from hero image colours</button>
        <div class="swatches" id="recolorPaletteSwatches"></div>
+       <input type="color" id="addRecolorPaletteColorInput" style="display:none">
+       <button id="saveRecolorAsMotifBtn" class="full small" title="Bakes this recoloured version into a brand new, independent motif in your tray - place it anywhere, on any shape, without touching the original"><svg class="btnIcon"><use href="#i-copy"/></svg>save as new motif</button>
        <button id="recolorClearBtn" class="full small">clear recolor</button>
        <p class="footerNote">Alpha-locked like Procreate - tints only the motif's own opaque pixels, same shape/edges, nothing painted outside it. "flat" replaces the colour completely (best for simple icons/silhouettes); the other blend modes keep the motif's own shading and just shift its hue (best for a shaded illustration).</p>
       </div>
@@ -2999,14 +3001,40 @@ function extractHeroPalette(){
 function renderHeroPaletteSwatches(hexes){
  const box=document.getElementById('heroPaletteSwatches');if(!box)return;
  box.innerHTML='';
- hexes.forEach(hex=>{
+ hexes.forEach((hex,i)=>{
   const d=document.createElement('div');
-  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to set as background';
+  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to set as background, long-press/right-click to remove';
   d.onclick=()=>applySampledBackground(hex);
+  d.oncontextmenu=e=>{e.preventDefault();removeHeroPaletteColor(i);};
   box.appendChild(d);
  });
+ box.appendChild(addToHeroPaletteBtn());
+}
+// The extracted palette isn't limited to what got auto-picked out of the image - same "+ add a
+// colour" affordance the collection palette already has (see renderSwatchesUI/addCustomSwatch),
+// just appending straight into heroPaletteHexes instead of the role-based swatches list, so a
+// hand-picked colour sits right alongside the extracted ones for either use (background or
+// recolor - see renderRecolorPaletteSwatches, which shares this same array).
+function addToHeroPaletteBtn(){
+ const addBtn=document.createElement('div');
+ addBtn.className='sw';
+ addBtn.style.cssText='display:flex;align-items:center;justify-content:center;border:2px dashed rgba(120,100,140,.45);background:transparent;font-weight:900;font-size:16px;line-height:1;cursor:pointer;color:var(--muted,#777)';
+ addBtn.textContent='+';
+ addBtn.title='add your own colour to this palette';
+ addBtn.onclick=()=>document.getElementById('addRecolorPaletteColorInput').click();
+ return addBtn;
+}
+function removeHeroPaletteColor(i){
+ heroPaletteHexes.splice(i,1);
+ renderHeroPaletteSwatches(heroPaletteHexes);
+ renderRecolorPaletteSwatches();
 }
 document.getElementById('heroPaletteBtn').onclick=extractHeroPalette;
+document.getElementById('addRecolorPaletteColorInput').addEventListener('input',e=>{
+ heroPaletteHexes.push(e.target.value);
+ renderHeroPaletteSwatches(heroPaletteHexes);
+ renderRecolorPaletteSwatches();
+});
 function stageOnPointerDown(e){
  const r=stageCanvasEl().getBoundingClientRect();
  const px=e.clientX-r.left,py=e.clientY-r.top;
@@ -3584,18 +3612,42 @@ document.getElementById('recolorFromHeroBtn').addEventListener('click',extractHe
 function renderRecolorPaletteSwatches(){
  const box=document.getElementById('recolorPaletteSwatches');if(!box)return;
  box.innerHTML='';
- heroPaletteHexes.forEach(hex=>{
+ heroPaletteHexes.forEach((hex,i)=>{
   const d=document.createElement('div');
-  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to recolour with this colour';
+  d.className='sw';d.style.background=hex;d.style.cursor='pointer';d.title=hex+' — tap to recolour with this colour, long-press/right-click to remove';
   d.onclick=()=>{
    const b=selectedBrick();if(!b||!b.motifUrl)return;
    pushHistory();b.recolor=hex;
    document.getElementById('recolorInput').value=hex;
    render();
   };
+  d.oncontextmenu=e=>{e.preventDefault();removeHeroPaletteColor(i);};
   box.appendChild(d);
  });
+ box.appendChild(addToHeroPaletteBtn());
 }
+// Bakes the current live recolor (flat fill or blend-preserving-shading, whichever is active)
+// into a real, standalone PNG and drops it into the motif tray as its own independent motif -
+// the original upload/motifUrl is untouched, and this new one can be placed anywhere (any shape,
+// any layout) exactly like a freshly uploaded motif would, with no ongoing link back to the brick
+// it was recoloured on.
+async function saveRecolorAsNewMotif(){
+ const b=selectedBrick();
+ if(!b||!b.motifUrl||!b.recolor)return;
+ const img=await loadImageCached(b.motifUrl);
+ const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+ const tinted=compositeRecolor(img,iw,ih,b.recolor,b.recolorMode);
+ const dataUrl=tinted.toDataURL('image/png');
+ const source=motifTray.find(m=>m.dataUrl===b.motifUrl);
+ const baseName=source?source.name.replace(/\.[a-z0-9]+$/i,''):'motif';
+ const entry={id:'m'+Math.random().toString(36).slice(2),name:baseName+' '+b.recolor,dataUrl};
+ motifTray.push(entry);
+ activeMotifId=entry.id;
+ renderMotifTray();
+ await persistAllSavedItems();
+ flashSaveStatus('recoloured motif saved to your tray ✓');
+}
+document.getElementById('saveRecolorAsMotifBtn').addEventListener('click',saveRecolorAsNewMotif);
 document.querySelectorAll('[data-add]').forEach(btn=>btn.onclick=()=>{pushHistory();addBrick(btn.dataset.add);});
 function deselectBrick(){if(selected==null)return;selected=null;render();}
 document.getElementById('deselectBtn').onclick=deselectBrick;
