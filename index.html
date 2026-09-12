@@ -3805,10 +3805,18 @@ function alignGroup(kind){const anchor=selectedBrick();if(!anchor)return;pushHis
 // row spaced this way tiles with no visible seam at the repeat boundary. The first (leftmost/
 // topmost) brick's own edge is kept as the anchor; everything else is placed forward from there.
 function distributeGroup(axis){
- pushHistory();
  const sizeProp=axis==='x'?'w':'h';
  const arr=scopedBricks().sort((a,b)=>a[axis]-b[axis]);
- if(arr.length<2)return;
+ if(arr.length<2){
+  // Silently doing nothing here used to be the only feedback - confusing especially for
+  // freely-placed motifs, since each one gets its own unique shape type (see placeMotifFreely),
+  // so the default "same shape" scope always resolves to just that one brick and this always
+  // no-ops for them. "select multiple" (grouping by hand) is the one scope that works across
+  // different shapes/types, which is exactly what spacing several free motifs needs.
+  flashSaveStatus('need 2+ bricks to space out - try "select multiple" to group them first (the default scope only matches bricks of the same shape)',false,4000);
+  return;
+ }
+ pushHistory();
  const totalSize=arr.reduce((n,b)=>n+b[sizeProp],0);
  const gap=(100-totalSize)/arr.length;
  let cursor=arr[0][axis]-arr[0][sizeProp]/2;
