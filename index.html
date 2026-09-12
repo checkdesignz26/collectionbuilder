@@ -1047,8 +1047,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
   </aside>
   <section class="workspace">
     <div class="previewWrap">
-      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active"><svg class="btnIcon"><use href="#i-grid"/></svg><span id="repeatBtnLabel">3×3</span> repeat</button><button id="singleBtn"><svg class="btnIcon"><use href="#i-square"/></svg>single tile</button></div></div>
-      <div class="range zoomRow" id="zoomOutRow"><label><svg class="btnIcon" style="margin:0"><use href="#i-zoom-out"/></svg>zoom out</label><input id="zoomOutRange" type="range" min="0" max="3" step="1" value="0"><output id="zoomOutValue"></output></div>
+      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active"><svg class="btnIcon"><use href="#i-grid"/></svg><span id="repeatBtnLabel">5×5</span> repeat</button><button id="singleBtn"><svg class="btnIcon"><use href="#i-square"/></svg>single tile</button></div></div>
+      <div class="range zoomRow" id="zoomOutRow"><label><svg class="btnIcon" style="margin:0"><use href="#i-zoom-out"/></svg>zoom out</label><input id="zoomOutRange" type="range" min="0" max="3" step="1" value="1"><output id="zoomOutValue"></output></div>
       <div class="stageZoomRow"><button class="small" id="stageZoomOut">−</button><span class="pill" id="stageZoomPill">100%</span><button class="small" id="stageZoomIn">+</button><button class="small" id="motifDisplayModeBtn" style="margin-left:auto">showing: motifs</button><button class="small" id="stageZoomResetBtn">reset zoom</button></div>
       <div class="stageOuter"><div class="stageViewport repeat" id="stageViewport"><div id="stage" class="repeatStage repeat"></div></div></div>
       <div class="livePreviewHeader"><span class="livePreviewBadge">Live Preview</span><span class="footerNote">every thumbnail below stays in sync with your motifs and sizing as you edit</span></div>
@@ -2344,7 +2344,11 @@ document.getElementById('layoutPlaceholdersToggle').addEventListener('change',fu
 // repeatSpan is always odd (3/5/7/9, driven by the "zoom out" slider) so there's a true centre
 // tile. tileOffsets()/the brick edge-clone range below both walk the same -(n/2)..+(n/2) square, so
 // "zoomed out" just means a bigger square of the same tiles rather than a different code path.
-let repeatSpan=3;
+// Defaults to 5 (not the minimum 3) so a freshly-opened repeat view reads like an actual swatch of
+// fabric from the first glance - enough copies visible to see the pattern actually repeat - rather
+// than the sparser, more "diagram-like" 3x3 someone would otherwise have to reach for the zoom-out
+// slider to get past. Applies to every tiling engine's repeat view alike, not engine-specific.
+let repeatSpan=5;
 // Zoom into the canvas itself (independent of the "zoom out" repeat-span slider above, which
 // widens how many tiles are shown - this widens how big each tile looks). Growing #stage's real
 // box size (not a CSS transform) means every existing rect-based layout/drag calculation below
@@ -2736,6 +2740,14 @@ const HANDLE_SIZE=18,ROT_HANDLE_SIZE=16,ROT_OFFSET=30,DOT_SIZE=12;
 // Hit radius is deliberately larger than the visual handle (touch target, not just the drawn
 // pixels) - matches how a real finger is far less precise than a mouse cursor.
 function getHandleForLocalPoint(lx,ly,bwPx,bhPx){
+ // Below a certain rendered size (the same MIN_TAP_PX floor pointInBrick already uses), the
+ // corner-anchored resize handle's hit-circle gets big enough relative to the shape to reach past
+ // the corner and swallow the shape's own centre - so a plain tap or double-tap on a small motif
+ // (routine once the default repeat view got denser - see repeatSpan) could misfire as a resize
+ // grab instead of a select/duplicate. There's no usable on-canvas handle target below that size
+ // anyway (the visible handle itself would dwarf the shape) - resize/rotate that shape from the
+ // sidebar sliders instead, and let every tap here mean "the shape", never "a handle".
+ if(Math.min(bwPx,bhPx)<MIN_TAP_PX)return null;
  const hw=bwPx/2,hh=bhPx/2;
  const rx=hw,ry=hh;
  if(Math.hypot(lx-rx,ly-ry)<=HANDLE_SIZE*1.1)return 'resize';
@@ -3506,6 +3518,7 @@ document.getElementById('motifDisplayModeBtn').onclick=()=>{
  });
 };
 document.getElementById('zoomOutValue').textContent=repeatSpan+'×'+repeatSpan;
+document.getElementById('repeatBtnLabel').textContent=repeatSpan+'×'+repeatSpan;
 document.getElementById('edgeBtn').onclick=()=>{edgeClones=!edgeClones;edgeBtn.classList.toggle('active',edgeClones);render();};document.getElementById('deleteBtn').onclick=()=>{pushHistory();bricks=bricks.filter(b=>b.id!==selected);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();};document.getElementById('arrowsBtn').onclick=()=>{const b=selectedBrick();if(b){pushHistory();const flows=['','↑','→','↓','←','↗','↘','↙','↖','↻','↔','↕'];const i=flows.indexOf(b.flow||'');b.flow=flows[(i+1)%flows.length];render();}};document.getElementById('dup').onclick=()=>{const b=selectedBrick();if(!b)return;pushHistory();const n={...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:b.x+6,y:b.y+6};bricks.push(n);selected=n.id;render();syncControls();renderUnassignedShapes();};
 let alignScope='type';
 function setScope(scope){alignScope=scope;[scopeSingle,scopeType,scopeRole,scopeAll].forEach(b=>b.classList.remove('active'));({single:scopeSingle,type:scopeType,role:scopeRole,all:scopeAll}[scope]).classList.add('active');}
