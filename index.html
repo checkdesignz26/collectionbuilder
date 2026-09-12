@@ -1047,8 +1047,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
   </aside>
   <section class="workspace">
     <div class="previewWrap">
-      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active"><svg class="btnIcon"><use href="#i-grid"/></svg><span id="repeatBtnLabel">5×5</span> repeat</button><button id="singleBtn"><svg class="btnIcon"><use href="#i-square"/></svg>single tile</button></div></div>
-      <div class="range zoomRow" id="zoomOutRow"><label><svg class="btnIcon" style="margin:0"><use href="#i-zoom-out"/></svg>zoom out</label><input id="zoomOutRange" type="range" min="0" max="3" step="1" value="1"><output id="zoomOutValue"></output></div>
+      <div class="previewTop"><div><b id="currentName">grid</b><div class="footerNote">selected layout + repeat engine</div></div><div class="seg"><button id="repeatBtn" class="active"><svg class="btnIcon"><use href="#i-grid"/></svg><span id="repeatBtnLabel">3×3</span> repeat</button><button id="singleBtn"><svg class="btnIcon"><use href="#i-square"/></svg>single tile</button></div></div>
+      <div class="range zoomRow" id="zoomOutRow"><label><svg class="btnIcon" style="margin:0"><use href="#i-zoom-out"/></svg>zoom out</label><input id="zoomOutRange" type="range" min="0" max="3" step="1" value="0"><output id="zoomOutValue"></output></div>
       <div class="stageZoomRow"><button class="small" id="stageZoomOut">−</button><span class="pill" id="stageZoomPill">100%</span><button class="small" id="stageZoomIn">+</button><button class="small" id="motifDisplayModeBtn" style="margin-left:auto">showing: motifs</button><button class="small" id="stageZoomResetBtn">reset zoom</button></div>
       <div class="stageOuter"><div class="stageViewport repeat" id="stageViewport"><div id="stage" class="repeatStage repeat"></div></div></div>
       <div class="livePreviewHeader"><span class="livePreviewBadge">Live Preview</span><span class="footerNote">every thumbnail below stays in sync with your motifs and sizing as you edit</span></div>
@@ -2344,11 +2344,7 @@ document.getElementById('layoutPlaceholdersToggle').addEventListener('change',fu
 // repeatSpan is always odd (3/5/7/9, driven by the "zoom out" slider) so there's a true centre
 // tile. tileOffsets()/the brick edge-clone range below both walk the same -(n/2)..+(n/2) square, so
 // "zoomed out" just means a bigger square of the same tiles rather than a different code path.
-// Defaults to 5 (not the minimum 3) so a freshly-opened repeat view reads like an actual swatch of
-// fabric from the first glance - enough copies visible to see the pattern actually repeat - rather
-// than the sparser, more "diagram-like" 3x3 someone would otherwise have to reach for the zoom-out
-// slider to get past. Applies to every tiling engine's repeat view alike, not engine-specific.
-let repeatSpan=5;
+let repeatSpan=3;
 // Zoom into the canvas itself (independent of the "zoom out" repeat-span slider above, which
 // widens how many tiles are shown - this widens how big each tile looks). Growing #stage's real
 // box size (not a CSS transform) means every existing rect-based layout/drag calculation below
@@ -2413,6 +2409,18 @@ function tessColRowOffset(tx,ty,colSpacing,rowSpacing){return {x:tx*colSpacing,y
 // preserves edge-to-edge adjacency, it just isn't drawn from a perfectly regular grid anymore).
 const HEX_LATTICE={colSpacing:STAGE*.75,rowSpacing:STAGE,w:STAGE,h:STAGE};
 const OGEE_LATTICE={colSpacing:STAGE*.5,rowSpacing:STAGE,w:STAGE,h:STAGE};
+// Every other engine's clone step (tx/ty += 1) moves exactly one STAGE unit, so a clone range of
+// -N..N always covers exactly N STAGE-widths of physical space in every direction - that's the
+// assumption render()'s repeat-mode clone range (and the zoom-out slider built on top of it) is
+// built on. Hexagon/ogee break that assumption on their OWN axis: colSpacing is deliberately less
+// than STAGE (750/500 - see HEX_LATTICE/OGEE_LATTICE above), so each tx step covers LESS than one
+// STAGE-width. Using the same clone count as every other engine then only fills roughly half
+// (ogee) or three-quarters (hexagon) of the physical area the zoom-out slider claims to show,
+// leaving the outer portion of a zoomed-out repeat view showing the guide lattice with no motifs
+// in it - exactly the "not actually filled when you zoom out" gap. These two report each engine's
+// real per-step pitch so the clone range can be widened on whichever axis needs it.
+function engineColPitch(engine){return engine==='hexagon'?HEX_LATTICE.colSpacing:engine==='ogee'?OGEE_LATTICE.colSpacing:STAGE;}
+function engineRowPitch(engine){return engine==='hexagon'?HEX_LATTICE.rowSpacing:engine==='ogee'?OGEE_LATTICE.rowSpacing:STAGE;}
 function engineOffset(tx,ty){ if(tilingEngine==='halfdrop'||tilingEngine==='halfdropflip'){return {x:tx*STAGE,y:ty*STAGE + (tx%2!==0?STAGE/2:0)}} if(tilingEngine==='halfbrick'){return {x:tx*STAGE + (ty%2!==0?STAGE/2:0),y:ty*STAGE}} if(tilingEngine==='diamond'){const half=STAGE/2;return {x:(tx+ty)*half,y:(tx-ty)*half}} if(tilingEngine==='hexagon'){return tessColRowOffset(tx,ty,HEX_LATTICE.colSpacing,HEX_LATTICE.rowSpacing);} if(tilingEngine==='ogee'){return tessColRowOffset(tx,ty,OGEE_LATTICE.colSpacing,OGEE_LATTICE.rowSpacing);} return {x:tx*STAGE,y:ty*STAGE};}
 function hexToRgba(hex,opacity){let h=(hex||'#000000').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,(+opacity||0)/100))})`;}
 function copyTexture(t){const x=JSON.parse(JSON.stringify(t||blankTexture())); if(x.patternScale==null)x.patternScale=100; return x;}
@@ -2635,9 +2643,16 @@ function render(){const stage=document.getElementById('stage');stage.className='
  }
  // In single-tile mode the clone range stays a fixed immediate-neighbour ring (just enough to
  // preview edge wrap); in repeat mode it grows with the zoom-out slider so clones fill every tile
- // the wider view now shows, not just the original fixed 3x3 window.
- const cloneHalf=mode==='repeat'?repeatHalf:1;const cloneRange=Array.from({length:cloneHalf*2+1},(_,i)=>i-cloneHalf);
- const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRange.forEach(tx=>cloneRange.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
+ // the wider view now shows, not just the original fixed 3x3 window. Widened per-axis by each
+ // engine's own pitch (see engineColPitch/engineRowPitch) so hexagon/ogee's tighter column
+ // spacing still gets enough clones to fill the same physical width every other engine does at
+ // this repeatSpan, instead of stopping partway and leaving bare guide lattice around the edges.
+ const cloneHalf=mode==='repeat'?repeatHalf:1;
+ const cloneHalfX=Math.ceil(cloneHalf*STAGE/engineColPitch(tilingEngine));
+ const cloneHalfY=Math.ceil(cloneHalf*STAGE/engineRowPitch(tilingEngine));
+ const cloneRangeX=Array.from({length:cloneHalfX*2+1},(_,i)=>i-cloneHalfX);
+ const cloneRangeY=Array.from({length:cloneHalfY*2+1},(_,i)=>i-cloneHalfY);
+ const drawList=[];bricks.forEach(b=>{drawList.push({b,tx:0,ty:0,clone:false}); if(edgeClones){cloneRangeX.forEach(tx=>cloneRangeY.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty,clone:true})}))}});
  let selGeom=null;
  drawList.forEach(({b,tx,ty,clone})=>{
   const g=brickScreenGeom(b,tx,ty,scale,origin);
