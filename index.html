@@ -2080,7 +2080,7 @@ async function renderPatternToCanvas(canvas,pxW,pxH,tilePx,transparentBg){
  if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
 
  let bgTileCanvas=null,classicTileCanvas=null;
- if(!transparentBg&&window.bgGetSnapshot){const rec=window.bgGetSnapshot();if(rec&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(rec,tilePx);}
+ if(!transparentBg&&window.bgGetSnapshot){const rec=window.bgGetSnapshot();if(rec&&rec.type==='pattern'&&rec.dataUrl)await loadImageCached(rec.dataUrl);if(rec&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(rec,tilePx);}
  if(window.tsRenderToTileCanvas)classicTileCanvas=window.tsRenderToTileCanvas(tilePx);
 
  tiles.forEach(([tx,ty])=>{
@@ -2163,6 +2163,7 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg
  if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
 
  let bgTileCanvas=null,classicTileCanvas=null;
+ if(!transparentBg&&t.background&&t.background.type==='pattern'&&t.background.dataUrl)await loadImageCached(t.background.dataUrl);
  if(!transparentBg&&t.background&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(t.background,tilePx);
  if(t.classicPattern&&t.classicPattern.state){classicTileCanvas=document.createElement('canvas');classicTileCanvas.width=tilePx;classicTileCanvas.height=tilePx;renderPreview(classicTileCanvas,tilePx,t.classicPattern.state,'single',false);}
 
@@ -2190,6 +2191,26 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg
   if(cx+bwPx<0||cy+bhPx<0||cx-bwPx>pxW||cy-bhPx>pxH)continue;
   await drawBrickToCanvas(ctx,b,cx,cy,bwPx,bhPx,mirrored);
  }
+}
+// Bakes an arbitrary SAVED pattern (not the live canvas) into its own seamless square PNG, using
+// the exact same "auto-repeat the true tile to fill a square" technique as the download panel's
+// "make it an exact square" export (see exportPatternPNG/squareRepeatCounts above) - reused here so
+// a saved pattern can be assigned as a Background Studio background (see its "use a saved pattern"
+// picker). This is a one-time snapshot baked at the moment a pattern is chosen, not a live link -
+// editing that pattern afterward never changes a background that already used it.
+async function renderSavedTemplateSquareDataUrl(t,targetPx=800){
+ const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');
+ const {nx,ny}=squareRepeatCounts(engine);
+ const unitW=tileDimsForEngine(engine,10000).w/10000;
+ const trueTilePx=Math.max(1,Math.round(targetPx/(nx*unitW)));
+ const trueDims=tileDimsForEngine(engine,trueTilePx);
+ const trueCanvas=document.createElement('canvas');trueCanvas.width=trueDims.w;trueCanvas.height=trueDims.h;
+ await renderSavedTemplateToCanvas(trueCanvas,t,trueDims.w,trueDims.h,trueTilePx,false);
+ const finalCanvas=document.createElement('canvas');finalCanvas.width=trueDims.w*nx;finalCanvas.height=trueDims.h*ny;
+ const ctx=finalCanvas.getContext('2d');
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,finalCanvas.width,finalCanvas.height);
+ for(let iy=0;iy<ny;iy++)for(let ix=0;ix<nx;ix++)ctx.drawImage(trueCanvas,ix*trueDims.w,iy*trueDims.h);
+ return finalCanvas.toDataURL('image/png');
 }
 function crc32(bytes){
  let table=crc32._t;
@@ -5776,8 +5797,9 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
           <button class="small heroOpenBtn">open</button>
         </div>
         </div></div>
-        <div class="bgBox"><h3>background type</h3><div class="bgPad" id="bgTypeList"></div></div>
-        
+        <div class="bgBox"><h3>background type</h3><div class="bgPad" id="bgTypeList"></div>
+        <div class="bgPad" style="padding-top:0"><button id="bgFromPatternBtn" class="full small">🧩 use a saved pattern as background</button><p class="bgHint">Bakes one of your saved patterns into a seamless tile - a snapshot, so editing that pattern later won't change this background.</p></div></div>
+
         <div class="bgBox"><h3>gradient modes</h3><div class="bgPad"><p class="bgHint">These are tile-safe: the edges meet when repeated.</p><div class="bgGradModes"><button data-bggrad="wave">wave</button><button data-bggrad="cloud">cloud</button><button data-bggrad="radial">centre glow</button><button data-bggrad="corner">corner mirror</button></div></div></div>
       </section>
       <section class="bgPreviewPanel">
@@ -5788,6 +5810,7 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
         <div class="bgBox"><h3>recipe controls</h3><div class="bgPad">
           <p class="bgHint" style="margin-top:0">Opacity, scale, density, softness and contrast work the same in either mode below — colour comes from the integrated colour mode / Mrs Palette, with grey mode kept as a manual fallback.</p>
           <div class="grid2" style="margin-bottom:9px"><button id="bgGreyModeBtn" class="small active">grey mode</button><button id="bgColourModeBtn" class="small">colour mode</button></div>
+          <div id="bgPatternInfo" class="bgHint hidden" style="margin:0 0 9px"><b></b> — baked from a saved pattern; colours come from that pattern itself, scale/opacity/contrast still apply.</div>
           <div id="bgGreyColourBox">
           <div class="bgControlsRow"><label>base</label><input id="bgBaseColor" type="color"><output></output></div>
           <div class="bgControlsRow"><label>texture</label><input id="bgTexColor" type="color"><output></output></div>
@@ -5795,8 +5818,8 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
           <div id="bgColourModeSlot" class="hidden"></div>
           <div class="bgControlsRow"><label>opacity</label><input id="bgOpacity" type="range" min="0" max="100"><output id="bgOpacityVal"></output></div>
           <div class="bgControlsRow"><label>scale</label><input id="bgScale" type="range" min="10" max="160"><output id="bgScaleVal"></output></div>
-          <div class="bgControlsRow"><label>density</label><input id="bgDensity" type="range" min="0" max="100"><output id="bgDensityVal"></output></div>
-          <div class="bgControlsRow"><label>softness</label><input id="bgSoftness" type="range" min="0" max="100"><output id="bgSoftnessVal"></output></div>
+          <div class="bgControlsRow" id="bgDensityRow"><label>density</label><input id="bgDensity" type="range" min="0" max="100"><output id="bgDensityVal"></output></div>
+          <div class="bgControlsRow" id="bgSoftnessRow"><label>softness</label><input id="bgSoftness" type="range" min="0" max="100"><output id="bgSoftnessVal"></output></div>
           <div class="bgControlsRow"><label>contrast</label><input id="bgContrast" type="range" min="0" max="100"><output id="bgContrastVal"></output></div>
           <button id="bgClear" class="full">clear PKM background</button>
           <p class="bgTiny">The background is rendered behind the plaid/check/dot structure. Use it alone or as the first surface layer.</p>
@@ -5827,6 +5850,15 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
       </aside>
     </div>
     <footer class="bgFilm"><div class="bgFilmHead"><b>🎞️ saved backgrounds</b><span id="bgStatus" class="saveStatus"></span><button id="bgSelectMode" class="small">select</button><button id="bgSelectAll" class="small hidden">select all</button><button id="bgSelectNone" class="small hidden">deselect all</button><button id="bgDownloadSelected" class="small primary hidden">download selected (zip)</button></div><div id="bgFilmstrip" class="bgFilmstrip"></div></footer>
+  </div>
+</div>
+<div id="bgPatternPickerOverlay" class="bgStudioOverlay" style="z-index:20000" aria-hidden="true">
+  <div class="bgStudioModal" style="grid-template-rows:auto 1fr;height:min(640px,90dvh);max-height:90dvh;width:min(560px,calc(100vw - 16px))">
+    <div class="bgStudioHeader">
+      <div><h2>choose a saved pattern</h2><p>bakes it into a seamless background tile - a one-time snapshot, editing that pattern later won't change this</p></div>
+      <button id="bgPatternPickerClose" class="small bgClose">×</button>
+    </div>
+    <div id="bgPatternPickerList" style="overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;align-content:start"></div>
   </div>
 </div>
 
@@ -6206,7 +6238,24 @@ function applyPostContrast(ctx,rec){
  for(let i=0;i<d.length;i+=4){d[i]=Math.max(0,Math.min(255,factor*(d[i]-128)+128));d[i+1]=Math.max(0,Math.min(255,factor*(d[i+1]-128)+128));d[i+2]=Math.max(0,Math.min(255,factor*(d[i+2]-128)+128));}
  ctx.putImageData(img,0,0);
 }
-function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('2d');ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=rec.base||'#fff';ctx.fillRect(0,0,W,H);let useObj=rec.editable&&rec.objects&&rec.objects.length&&editableKinds(rec.type);if(rec.type==='gradient')drawGradient(ctx,rec);if(rec.type==='paper')drawPaper(ctx,rec);if(rec.type==='linen')drawLinen(ctx,rec);if(rec.type==='speckles')drawSpeckles(ctx,rec);
+// Draws a baked "saved pattern" background (rec.dataUrl, produced once by
+// renderSavedTemplateSquareDataUrl when the pattern was chosen via the "use a saved pattern"
+// picker) tiled across the 720x720 recipe canvas. Reuses getLiveImage's async-decode-once cache -
+// the same one bricks' own motif images use - so this stays cheap on every redraw once the image
+// has decoded; only the very first draw right after picking a pattern shows a plain fallback until
+// decode finishes. getLiveImage's own decode-completion callback only re-runs the MAIN canvas's
+// render() though, which does nothing for Background Studio's own preview canvas if the studio
+// happens to be open at that moment - loadImageCached is safe to call again for the same URL (its
+// own promise cache resolves immediately once already decoded) so this piggybacks on it just to
+// refresh the studio's preview too, without duplicating the decode.
+function drawPatternBackgroundLayer(ctx,rec){
+ const img=getLiveImage(rec.dataUrl);
+ if(!img){ctx.fillStyle='#f2f2f2';ctx.fillRect(0,0,W,H);loadImageCached(rec.dataUrl).then(()=>{try{renderBgPreview();}catch(e){}});return;}
+ const tile=Math.max(30,Math.min(W,(rec.scale||75)*4));
+ for(let y=-tile;y<H+tile;y+=tile)for(let x=-tile;x<W+tile;x+=tile)ctx.drawImage(img,x,y,tile,tile);
+ if(rec.opacity!=null&&rec.opacity<100){ctx.save();ctx.globalAlpha=1-(rec.opacity/100);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.restore();}
+}
+function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('2d');ctx.save();ctx.clearRect(0,0,W,H);if(rec.type==='pattern'){drawPatternBackgroundLayer(ctx,rec);applyPostContrast(ctx,rec);ctx.restore();return canvas;}ctx.fillStyle=rec.base||'#fff';ctx.fillRect(0,0,W,H);let useObj=rec.editable&&rec.objects&&rec.objects.length&&editableKinds(rec.type);if(rec.type==='gradient')drawGradient(ctx,rec);if(rec.type==='paper')drawPaper(ctx,rec);if(rec.type==='linen')drawLinen(ctx,rec);if(rec.type==='speckles')drawSpeckles(ctx,rec);
  // "Picky designer edit mode" (useObj) swaps in individually-selectable/draggable objects instead
  // of the generative blob painter above - for watercolour specifically it used to skip straight to
  // bare colour with no paper tooth underneath at all, on top of the flatter wash objects fixed in
@@ -6215,9 +6264,21 @@ function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('
  if(rec.type==='watercolour'&&!useObj)drawWatercolour(ctx,rec);if(rec.type==='chalk'&&!useObj)drawChalk(ctx,rec);if(rec.type==='vintage')drawVintage(ctx,rec);if(rec.type==='splatter'&&!useObj)drawSplatter(ctx,rec);if(rec.type==='sprinkles'&&!useObj)drawSprinkles(ctx,rec);if(rec.type==='doodles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(25,rec.density),scale:Math.max(65,rec.scale)});if(rec.type==='scribbles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(30,rec.density),scale:Math.max(90,rec.scale)});if(rec.type==='crosshatch'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(45,rec.density),scale:Math.max(70,rec.scale)});if(useObj)drawEditableObjects(ctx,rec,true);applyPostContrast(ctx,rec);ctx.restore();return canvas}
 function recipeToUrl(rec=bgRecipe){let cn=document.createElement('canvas');cn.width=W;cn.height=H;drawBackgroundToCanvas(cn,rec);return cn.toDataURL('image/png')}
 function renderBgPreview(){bgScheduleWipAutosave();let can=q('bgPreviewCanvas'); if(!can)return; drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
- q('bgPreviewName').textContent=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
+ q('bgPreviewName').textContent=bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
 function updateRepeatBox(){let box=q('bgRepeatBox'),can=q('bgPreviewCanvas'); if(!box||!can)return; if(bgView==='single'){box.classList.add('hidden');can.classList.remove('hidden');return;} can.classList.add('hidden');box.classList.remove('hidden');box.style.display='grid';box.style.gridTemplateColumns='repeat(3,1fr)';box.style.gap='0';box.innerHTML='';for(let i=0;i<9;i++){let cn=document.createElement('canvas');cn.width=180;cn.height=180;cn.style.width='150px';cn.style.height='150px';cn.style.borderRadius='0';cn.getContext('2d').drawImage(can,0,0,180,180);box.appendChild(cn)}}
-function syncBgUI(){q('bgBaseColor').value=bgRecipe.base;q('bgTexColor').value=bgRecipe.tex;['Opacity','Scale','Density','Softness','Contrast'].forEach(k=>{let id='bg'+k;let val=q(id+'Val'),inp=q(id); if(inp){inp.value=bgRecipe[k.toLowerCase()]; if(val)val.textContent=inp.value;}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.classList.toggle('active',b.dataset.bggrad===bgRecipe.grad));document.querySelectorAll('.bgTypeBtn').forEach(b=>b.classList.toggle('active',b.dataset.bgtype===bgRecipe.type));renderBgPreview()}
+function syncBgUI(){q('bgBaseColor').value=bgRecipe.base||'#f2f2f2';q('bgTexColor').value=bgRecipe.tex||'#555555';['Opacity','Scale','Density','Softness','Contrast'].forEach(k=>{let id='bg'+k;let val=q(id+'Val'),inp=q(id); if(inp){inp.value=bgRecipe[k.toLowerCase()]||0; if(val)val.textContent=inp.value;}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.classList.toggle('active',b.dataset.bggrad===bgRecipe.grad));document.querySelectorAll('.bgTypeBtn').forEach(b=>b.classList.toggle('active',b.dataset.bgtype===bgRecipe.type));
+ // "pattern" backgrounds are a single baked image, not a generative recipe - base/tex colour and
+ // density/softness don't apply (there's no ink colour or mark density to tune), so hide those and
+ // surface which saved pattern this came from instead. Leaving pattern mode re-asserts whichever
+ // grey/colour mode was already active, since that toggle is otherwise independent of type.
+ const isPattern=bgRecipe.type==='pattern';
+ const patInfo=q('bgPatternInfo');if(patInfo){patInfo.classList.toggle('hidden',!isPattern);if(isPattern)patInfo.querySelector('b').textContent=bgRecipe.sourceName||'saved pattern';}
+ const densityRow=q('bgDensityRow'),softnessRow=q('bgSoftnessRow');
+ if(densityRow)densityRow.classList.toggle('hidden',isPattern);
+ if(softnessRow)softnessRow.classList.toggle('hidden',isPattern);
+ if(isPattern){const greyBox=q('bgGreyColourBox'),colourSlot=q('bgColourModeSlot');if(greyBox)greyBox.classList.add('hidden');if(colourSlot)colourSlot.classList.add('hidden');}
+ else bgShowMode(q('bgColourModeBtn')&&q('bgColourModeBtn').classList.contains('active')?'colour':'grey');
+ renderBgPreview()}
 function buildBgUI(){
  let list=q('bgTypeList'); if(!list)return;
  list.innerHTML=bgTypes.map(t=>`<button class="bgTypeBtn bgBrushBtn" data-bgtype="${t[0]}"><canvas width="96" height="96" aria-hidden="true"></canvas><span><b>${t[1]}</b><small>greyscale preview</small></span></button>`).join('');
@@ -6242,9 +6303,9 @@ function renderBackgroundToCanvasSized(rec,w){
  ctx.drawImage(small,0,0,720,720,0,0,w,w);
  return canvas;
 }
-async function renderBackgroundPNGBytes(rec,w,dpi){return await canvasToDpiPngBytes(renderBackgroundToCanvasSized(rec,w),dpi);}
+async function renderBackgroundPNGBytes(rec,w,dpi){if(rec&&rec.type==='pattern'&&rec.dataUrl)await loadImageCached(rec.dataUrl);return await canvasToDpiPngBytes(renderBackgroundToCanvasSized(rec,w),dpi);}
 async function bgDownloadSelectedZip(){
- await downloadSelectedAsZip(bgSaved,bgSelectedIdx,async(item,w)=>renderBackgroundToCanvasSized(item,w),'background');
+ await downloadSelectedAsZip(bgSaved,bgSelectedIdx,async(item,w)=>{if(item&&item.type==='pattern'&&item.dataUrl)await loadImageCached(item.dataUrl);return renderBackgroundToCanvasSized(item,w);},'background');
 }
 function applyBgToPKM(){bgRecipe.enabled=true;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){} if(typeof render==='function')render(); if(typeof renderGrid==='function')renderGrid();}
 function clearBg(){bgRecipe.enabled=false;bgDataUrl='';try{localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){} if(typeof render==='function')render();}
@@ -6283,7 +6344,40 @@ function wireBgEditTools(){
  wireBgCanvas(); updateBgEditUI();
 }
 
-function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgSwitchToTs')?.addEventListener('click',()=>{closeBg();window.openTextureStudio&&window.openTextureStudio();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName((bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
+// Lets a whole saved PATTERN (its own bricks/motifs/tiling engine, not just a generative texture)
+// be baked into a seamless square and used as a Background Studio background - see
+// renderSavedTemplateSquareDataUrl above (main script) for how the bake itself works, and
+// drawPatternBackgroundLayer above for how it's drawn once picked. Deliberately a snapshot: picking
+// a pattern here copies its rendered pixels in, once - editing that pattern afterward never changes
+// a background that already used it (same reasoning as every other saved-item picker in this app).
+function renderBgPatternPicker(){
+ const list=q('bgPatternPickerList');if(!list)return;
+ if(!savedTemplates.length){list.innerHTML='<p class="bgHint" style="grid-column:1/-1">No saved patterns yet - save one from the main canvas first, then come back here.</p>';return;}
+ list.innerHTML='';
+ savedTemplates.forEach(t=>{
+  const btn=document.createElement('button');
+  btn.className='small';
+  btn.style.cssText='display:flex;flex-direction:column;gap:6px;padding:8px;align-items:stretch;height:auto';
+  btn.innerHTML=`<canvas width="130" height="130" style="width:100%;height:auto;border-radius:8px;background:#fff"></canvas><span style="font-size:12px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(t.name||'pattern')}</span>`;
+  renderSavedTemplateToCanvas(btn.querySelector('canvas'),t,130,130,65,false);
+  btn.onclick=async()=>{
+   if(btn.disabled)return;
+   btn.disabled=true;btn.style.opacity=.5;
+   const dataUrl=await renderSavedTemplateSquareDataUrl(t,800);
+   bgRecipe={type:'pattern',dataUrl,sourceName:t.name||'pattern',base:'#f2f2f2',tex:'#555555',opacity:100,scale:75,density:0,softness:0,contrast:35,seed:12345,enabled:false,objects:[],editable:false,name:'pattern: '+(t.name||'pattern')};
+   bgSelectedIds=[];
+   closeBgPatternPicker();
+   syncBgUI();
+  };
+  list.appendChild(btn);
+ });
+}
+function openBgPatternPicker(){renderBgPatternPicker();const o=q('bgPatternPickerOverlay');if(o){o.classList.add('open');o.setAttribute('aria-hidden','false');}}
+function closeBgPatternPicker(){const o=q('bgPatternPickerOverlay');if(o){o.classList.remove('open');o.setAttribute('aria-hidden','true');}}
+function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q('bgClose')?.addEventListener('click',closeBg);q('backgroundStudioOverlay')?.addEventListener('click',e=>{if(e.target.id==='backgroundStudioOverlay')closeBg();});q('bgSwitchToTs')?.addEventListener('click',()=>{closeBg();window.openTextureStudio&&window.openTextureStudio();});q('bgTypeList')?.addEventListener('click',e=>{let b=e.target.closest('[data-bgtype]');if(!b)return;bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgSave').onclick=()=>{let name=(bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1])+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(bgRecipe.type==='pattern'?(bgRecipe.sourceName||'pattern'):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
+ q('bgFromPatternBtn')?.addEventListener('click',openBgPatternPicker);
+ q('bgPatternPickerClose')?.addEventListener('click',closeBgPatternPicker);
+ q('bgPatternPickerOverlay')?.addEventListener('click',e=>{if(e.target.id==='bgPatternPickerOverlay')closeBgPatternPicker();});
  if(q('bgSelectMode'))q('bgSelectMode').onclick=bgToggleSelectMode;
  if(q('bgSelectAll'))q('bgSelectAll').onclick=()=>{bgSaved.forEach((_,i)=>bgSelectedIdx.add(i));renderBgFilm();bgUpdateSelectUI();};
  if(q('bgSelectNone'))q('bgSelectNone').onclick=()=>{bgSelectedIdx.clear();renderBgFilm();bgUpdateSelectUI();};
