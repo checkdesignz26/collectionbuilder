@@ -2397,7 +2397,10 @@ async function saveTemplateToFilmstrip(){
  flashSaveStatus('saving…');
  saveCurrentBlueprint();
  const count=savedTemplates.length+1;
- const name=(presets[current]?.name||'layout')+' '+count;
+ // "free layout" itself isn't a meaningful pattern name (it only ever means "no placeholder
+ // shapes" - see layoutDisplayName/selectLayout) - a saved pattern's auto-name should say which
+ // repeat it actually uses instead, same as any named preset's save already does.
+ const name=(current==='blank'?(presets[tilingEngine]?.name||tilingEngine):(presets[current]?.name||'layout'))+' '+count;
  const key='saved_'+Date.now();
  savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,tilingEngine,colourways:[],activeColourwayId:null});
  renderFilmstrip();
