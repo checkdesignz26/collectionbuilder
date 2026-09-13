@@ -1465,8 +1465,16 @@ function sourceTilingEngineFor(key){
  if(tilingEngineStore[key])return tilingEngineStore[key];
  return 'grid';
 }
-function capture(){return JSON.stringify({current,activeLayoutKey,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null});}
-function restore(state){const data=JSON.parse(state);current=data.current;activeLayoutKey=data.activeLayoutKey||current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
+// Undo/redo snapshots go through the exact same motif dictionary as disk persistence
+// (compactSessionSnapshotForStorage/expandSessionStateFromStorage, defined below once
+// newMotifDict/compactBricksWithDict exist) - without it, every single history entry embedded
+// the full motifUrl string for every brick AND every other layout's blueprintStore all over
+// again, even when many bricks (or several layouts) share the exact same source image. Measured
+// ~11.7MB for one capture() with a dozen real motif images that only used 5 distinct source
+// files - the dictionary collapses each distinct image down to one shared copy per snapshot
+// instead of one copy per reference, and that saving multiplies by up to 80 (the history depth).
+function capture(){return JSON.stringify(compactSessionSnapshotForStorage({current,activeLayoutKey,bricks,blueprintStore,textureStore,backgroundStore,classicStore,texture,tilingEngine,tilingEngineStore,background:window.bgGetSnapshot?window.bgGetSnapshot():null,classic:window.tsGetSnapshot?window.tsGetSnapshot():null}));}
+function restore(state){const data=expandSessionStateFromStorage(JSON.parse(state));current=data.current;activeLayoutKey=data.activeLayoutKey||current;blueprintStore=data.blueprintStore||{};textureStore=data.textureStore||{};backgroundStore=data.backgroundStore||{};classicStore=data.classicStore||{};tilingEngineStore=data.tilingEngineStore||{};bricks=data.bricks||[];texture=data.texture?copyTexture(data.texture):sourceTextureFor(current);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(data.background!==undefined?data.background:sourceBackgroundFor(current));if(window.tsApplySnapshot)window.tsApplySnapshot(data.classic!==undefined?data.classic:sourceClassicFor(current));tilingEngine=data.tilingEngine||sourceTilingEngineFor(current);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;renderGrid();renderFilmstrip();render();syncControls();}
 function pushHistory(){history.push(capture());if(history.length>80)history.shift();redoStack=[];}
 function undo(){if(!history.length)return;redoStack.push(capture());restore(history.pop());}
 function redo(){if(!redoStack.length)return;history.push(capture());restore(redoStack.pop());}
@@ -1723,7 +1731,7 @@ function applySnapshotToLiveState(rawData,statusMsg){
  const motifBtn=document.getElementById('motifDisplayModeBtn');if(motifBtn){motifBtn.textContent='showing: '+(showMotifs?'motifs':'placeholders');motifBtn.classList.toggle('active',!showMotifs);}
  const styleBtn=document.getElementById('styleAllLayoutsBtn');if(styleBtn){styleBtn.textContent='apply to all layouts: '+(styleAllLayouts?'on':'off');styleBtn.classList.toggle('active',styleAllLayouts);}
  selected=bricks[0]?.id||null;
- document.getElementById('currentName').textContent=presets[current]?.name||(savedTemplates.find(t=>t.key===current)?.name)||current;
+ document.getElementById('currentName').textContent=presets[current]?layoutDisplayName(current):(savedTemplates.find(t=>t.key===current)?.name)||current;
  renderGrid();renderFilmstrip();render();syncControls();renderAssignedShapes();
  flashSaveStatus(statusMsg);
 }
@@ -2377,7 +2385,7 @@ function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const was
   // touching bricks/texture/background at all.
   current=t.base&&presets[t.base]?t.base:'grid';
   currentTemplateBase=null;
-  document.getElementById('currentName').textContent=presets[current]?.name||current;
+  document.getElementById('currentName').textContent=layoutDisplayName(current);
  }
  renderFilmstrip();
  showUndoToast('Deleted "'+t.name+'"',()=>{savedTemplates.splice(i,0,t);persistSavedTemplates();renderFilmstrip();});
@@ -2408,7 +2416,18 @@ function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory
 // active gives you the bigger working square without an extra tap, while every other layout's
 // mode preference is left alone.
 function autoSingleTileFor(engine){if(engine==='diamond'||engine==='hexagon'||engine==='ogee')mode='single';}
-function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;activeLayoutKey=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);autoSingleTileFor(tilingEngine);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=presets[key].name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+// presets.blank's own name is just "free layout" - accurate but silent about which repeat
+// structure is actually active while free-form (free layout only ever means "no placeholder
+// shapes", it keeps whatever tiling engine was already selected, per selectLayout below), so the
+// canvas header used to say the same bare "free layout" no matter which of grid/half-drop/
+// hexagon/etc you were actually tiling with. Every place that sets the header from a layout key
+// should go through this instead of presets[key].name directly, so "free layout" always also
+// names the real engine underneath it.
+function layoutDisplayName(key){
+ if(key==='blank')return 'free layout · '+(presets[tilingEngine]?.name||tilingEngine);
+ return presets[key]?.name||key;
+}
+function setPreset(key, keepHistory=false){if(keepHistory)pushHistory();saveCurrentBlueprint();current=key;activeLayoutKey=key;currentTemplateBase=null;bricks=sourceBricksFor(key);applyMotifShapesToBricks(bricks);applyShapeStylesToBricks(bricks);texture=sourceTextureFor(key);renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(sourceBackgroundFor(key));if(window.tsApplySnapshot)window.tsApplySnapshot(sourceClassicFor(key));tilingEngine=sourceTilingEngineFor(key);autoSingleTileFor(tilingEngine);syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=layoutDisplayName(key);renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // The "repeat layouts" grid used to be three separate pieces (a standalone "free layout" button, the
 // layout grid itself, and a whole second "tiling style" grid) because picking a repeat structure and
 // deciding whether to fill it with that layout's placeholder shapes were bundled into one action -
@@ -2435,7 +2454,7 @@ function selectLayout(key){
   tilingEngine=TILING_ENGINE_TYPES.includes(key)?key:'grid';
   autoSingleTileFor(tilingEngine);
  }
- document.getElementById('currentName').textContent=presets[key].name;
+ document.getElementById('currentName').textContent=layoutDisplayName(key);
  syncTilingEngineButtons();
  render();renderGrid();
 }
@@ -2450,6 +2469,7 @@ document.getElementById('layoutPlaceholdersToggle').addEventListener('change',fu
  const keepTiling=tilingEngine;
  setPreset('blank',true);
  tilingEngine=keepTiling;
+ document.getElementById('currentName').textContent=layoutDisplayName('blank');
  syncTilingEngineButtons();
  render();renderGrid();
 });
@@ -3624,7 +3644,13 @@ function updateLiveMini(){if(!current)return;
  _liveMiniRafPending=true;
  requestAnimationFrame(()=>{_liveMiniRafPending=false;updateLiveMiniNow();});
 }
-function updateLiveMiniNow(){if(!current)return;if(presets[current]){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
+function updateLiveMiniNow(){if(!current)return;
+ // Mirrors saveCurrentBlueprint's own current!=='blank' guard (see its comment above) - without
+ // it, "blank"/free-layout content was still getting written into blueprintStore on every frame
+ // via this path even though saveCurrentBlueprint deliberately never does, silently reintroducing
+ // the exact "blank canvas remembers scratch work forever" bug that guard exists to prevent, and
+ // duplicating every free motif's full image data into memory a second time for no reason.
+ if(presets[current]&&current!=='blank'){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
  // Reuses whatever render() just computed this same frame rather than asking
  // Background/Classics Studio to clone their recipe again immediately after.
  let liveMini;
@@ -3967,7 +3993,7 @@ function resetCurrentTemplate(){
   syncTilingEngineButtons();
   cmResetPanelControls();
   selected=bricks[0]?.id||null;
-  document.getElementById('currentName').textContent=presets[base].name;
+  document.getElementById('currentName').textContent=layoutDisplayName(base);
   renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();
 }
 // "reset pattern" discards the current canvas back to a preset with no trace kept - a deliberate
@@ -3985,7 +4011,7 @@ async function newPatternKeepingLayout(){
  if(window.tsApplySnapshot)window.tsApplySnapshot(null);
  cmResetPanelControls();
  selected=null;
- document.getElementById('currentName').textContent=presets[activeLayoutKey]?.name||presets.blank.name;
+ document.getElementById('currentName').textContent=layoutDisplayName(presets[activeLayoutKey]?activeLayoutKey:'blank');
  renderTextureUI();renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();
 }
 addRowBtn.onclick=()=>{pushHistory();[20,50,80].forEach(x=>bricks.push(p('oval',x,50,16,10,'filler')));render();renderUnassignedShapes();};addColBtn.onclick=()=>{pushHistory();[20,50,80].forEach(y=>bricks.push(p('oval',50,y,16,10,'filler')));render();renderUnassignedShapes();};resetBtn.onclick=()=>{pushHistory();resetCurrentTemplate();};newPatternBtn.onclick=()=>{newPatternKeepingLayout();};undoBtn.onclick=undo;redoBtn.onclick=redo;saveBtn.onclick=()=>{saveTemplateToFilmstrip();};quickSaveBtn.onclick=quickSave;quickLoadBtn.onclick=quickLoad;
