@@ -1058,7 +1058,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       </label>
       <div class="skeletonGrid" id="skeletonGrid"></div>
       <div class="filmstripBlock">
-        <div class="filmstripHead"><b>🎞️ saved patterns</b><span class="footerNote" id="savedFilmHint">tap to load · save pattern drops a live preview here</span><button id="savedSelectMode" class="small">select</button><button id="savedSelectAll" class="small hidden">select all</button><button id="savedSelectNone" class="small hidden">deselect all</button><button id="savedDownloadSelected" class="small primary hidden">download selected (zip)</button></div>
+        <div class="filmstripHead"><b>🎞️ saved patterns</b><span class="footerNote" id="savedFilmHint">tap to load · save pattern drops a live preview here</span><button id="savedSelectMode" class="small">select</button><button id="savedSelectAll" class="small hidden">select all</button><button id="savedSelectNone" class="small hidden">deselect all</button><button id="savedDownloadSelected" class="small primary hidden">download selected (zip)</button><button id="savedSelectUnsaved" class="small hidden" title="Selects every auto-archived &quot;unsaved work&quot; card (see the always-start-fresh boot behaviour) without having to tap through them one by one">select unsaved work</button><button id="savedDeleteSelected" class="small danger hidden">delete selected</button></div>
         <div class="filmstrip" id="savedFilmstrip"></div>
       </div>
     </div>
@@ -2431,9 +2431,39 @@ let savedSelectMode=false,savedSelectedIdx=new Set();
 let unsavedTemplateKeys=new Set();
 function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';const renameHTML=savedSelectMode?'':'<button class="filmRename" title="rename">✎</button>';const unsavedHTML=unsavedTemplateKeys.has(t.key)?'<div class="unsavedBadge" title="Only in this session - storage was full when this tried to save to disk. Free up room (delete an old pattern/motif) or download .pplayground now to back it up.">⚠ not saved to disk</div>':'';c.innerHTML=`${delHTML}${renameHTML}${checkHTML}${unsavedHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture,t.tilingEngine||sourceTilingEngineFor(t.base||'grid'))}</div><span>${escapeHtml(t.name)}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(e.target.closest('.filmRename')){e.stopPropagation();renameSavedTemplate(i);return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function renameSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const name=prompt('Rename this saved pattern:',t.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===t.name)return;t.name=trimmed;if(current===t.key)document.getElementById('currentName').textContent=trimmed;renderFilmstrip();persistSavedTemplates();}
-function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;}
-function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
+function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;const delBtn=document.getElementById('savedDeleteSelected');if(delBtn){delBtn.textContent=savedSelectedIdx.size?`delete ${savedSelectedIdx.size} selected`:'delete selected';delBtn.disabled=!savedSelectedIdx.size;}}
+function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedDeleteSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectUnsaved').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
 async function savedDownloadSelectedZip(){await downloadSelectedAsZip(savedTemplates,savedSelectedIdx,async(t,w)=>{const c=document.createElement('canvas');const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');const dims=tileDimsForEngine(engine,w);c.width=dims.w;c.height=dims.h;const transparentBg=!!document.getElementById('dlTransparentBg')?.checked;await renderSavedTemplateToCanvas(c,t,dims.w,dims.h,w,transparentBg);return c;},'pattern');}
+// One-tap cleanup for exactly the situation "always start fresh" (see archiveAutosaveIfAny) can
+// create over a long testing/editing session: many "unsaved work - ..." cards piling up, one per
+// launch that had real unsaved content. Deleting them individually (the only option before this)
+// is tedious once there are more than a handful - this removes every selected card in one action,
+// with a single combined undo instead of one per card.
+function savedDeleteSelected(){
+ if(!savedSelectedIdx.size)return;
+ if(!confirm(`Delete ${savedSelectedIdx.size} selected pattern${savedSelectedIdx.size===1?'':'s'}? This can be undone right after, but not once you navigate away.`))return;
+ const indices=[...savedSelectedIdx].sort((a,b)=>b-a);
+ const removed=[];
+ let currentBase=null;
+ indices.forEach(i=>{
+  const t=savedTemplates[i];if(!t)return;
+  if(current===t.key)currentBase=t.base;
+  savedTemplates.splice(i,1);
+  removed.unshift(t);
+ });
+ if(currentBase!==null){
+  current=presets[currentBase]?currentBase:'grid';
+  currentTemplateBase=null;
+  document.getElementById('currentName').textContent=layoutDisplayName(current);
+ }
+ savedSelectedIdx.clear();
+ persistSavedTemplates();
+ renderFilmstrip();
+ savedUpdateSelectUI();
+ showUndoToast(`Deleted ${removed.length} pattern${removed.length===1?'':'s'}`,()=>{removed.forEach(t=>savedTemplates.push(t));persistSavedTemplates();renderFilmstrip();});
+}
+document.getElementById('savedDeleteSelected').onclick=savedDeleteSelected;
+document.getElementById('savedSelectUnsaved').onclick=()=>{savedTemplates.forEach((t,i)=>{if(t.name&&t.name.indexOf('unsaved work - ')===0)savedSelectedIdx.add(i);});renderFilmstrip();savedUpdateSelectUI();};
 document.getElementById('savedSelectMode').onclick=savedToggleSelectMode;
 document.getElementById('savedSelectAll').onclick=()=>{savedTemplates.forEach((_,i)=>savedSelectedIdx.add(i));renderFilmstrip();savedUpdateSelectUI();};
 document.getElementById('savedSelectNone').onclick=()=>{savedSelectedIdx.clear();renderFilmstrip();savedUpdateSelectUI();};
