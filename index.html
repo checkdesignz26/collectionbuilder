@@ -1755,6 +1755,12 @@ async function archiveAutosaveIfAny(){
   if(data)idbSet(AUTOSAVE_KEY,data).then(()=>{try{localStorage.removeItem(AUTOSAVE_KEY);}catch(e){}}).catch(()=>{});
  }
  if(!data||!Array.isArray(data.bricks))return;
+ // The archiving work below must never be able to leave the autosave slot holding the same
+ // snapshot forever - if something about this specific data throws (a shape the synthetic tests
+ // didn't cover), retrying the exact same broken snapshot on every future launch would mean the
+ // app never boots past this point again. try/finally guarantees the slot gets cleared (and
+ // whatever this function's caller does next still runs) whether archiving succeeds or not.
+ try{
  const expanded=expandSessionStateFromStorage(data);
  const hasLiveBricks=(expanded.bricks||[]).length>0;
  const storedKeys=Object.keys(expanded.blueprintStore||{}).filter(k=>Array.isArray(expanded.blueprintStore[k])&&expanded.blueprintStore[k].length>0);
@@ -1790,6 +1796,7 @@ async function archiveAutosaveIfAny(){
   renderFilmstrip();
   await persistAllSavedItems();
  }
+ }catch(e){console.warn('archiveAutosaveIfAny failed - clearing the autosave slot anyway so this exact snapshot cannot get stuck retrying forever',e);}
  try{await idbSet(AUTOSAVE_KEY,{bricks:[],blueprintStore:{}});}catch(e){}
  try{localStorage.removeItem(AUTOSAVE_KEY);}catch(e){}
 }
@@ -4496,7 +4503,11 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
 // to disk, and doing that against the instant empty/legacy-fallback placeholder loadSavedTemplates
 // set above (real data hasn't arrived yet) would silently overwrite everything already saved with
 // just the newly-archived leftovers.
-hydrateSavedItemsFromIDB().then(()=>archiveAutosaveIfAny()).then(()=>setPreset('grid'));
+// Must never leave the app stuck without a canvas: if hydration or archiving throws on some
+// real-world data shape the synthetic tests didn't cover, log it but still fall through to
+// setPreset('grid') so the app boots into a usable (if not perfectly recovered) state instead of
+// hanging blank forever.
+hydrateSavedItemsFromIDB().then(()=>archiveAutosaveIfAny()).catch(e=>console.warn('boot hydrate/archive failed',e)).then(()=>setPreset('grid'));
 // Fixed-width side panels squeeze the canvas on small/landscape screens. Collapsing a panel down
 // to a thin strip (its box contents just hide, nothing is lost) hands that width straight to the
 // canvas column since it's the flexible 1fr track. render() is called immediately (for the parts
