@@ -2279,7 +2279,13 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg
  let bgTileCanvas=null,classicTileCanvas=null;
  if(!transparentBg&&t.background&&t.background.type==='pattern'&&t.background.dataUrl)await loadImageCached(t.background.dataUrl);
  if(!transparentBg&&t.background&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(t.background,tilePx);
- if(t.classicPattern&&t.classicPattern.state){classicTileCanvas=document.createElement('canvas');classicTileCanvas.width=tilePx;classicTileCanvas.height=tilePx;renderPreview(classicTileCanvas,tilePx,t.classicPattern.state,'single',false);}
+ // renderPreview itself is private to the Classics Studio IIFE - not callable by name from here.
+ // window.tsRenderSavedItemToCanvas (added for the collection portfolio) already wraps it for
+ // exactly this "render an arbitrary classic snapshot to a plain canvas" need, so reused here
+ // instead of a second export. (This call was previously bare `renderPreview(...)`, which threw a
+ // ReferenceError for every saved pattern with a classic applied - silently breaking its thumbnail
+ // in the zip export, the "use a saved pattern as background" picker, and the portfolio alike.)
+ if(t.classicPattern&&t.classicPattern.state&&window.tsRenderSavedItemToCanvas)classicTileCanvas=window.tsRenderSavedItemToCanvas(t.classicPattern,tilePx);
 
  tiles.forEach(([tx,ty])=>{
   const off=engineOffsetFor(engine,tx,ty);
