@@ -978,7 +978,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>pattern playground</h1><p>v63 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openPortfolio" class="small primary" title="See every saved repeat pattern, classic and background together in one gallery, and download it all as a single portfolio image"><svg class="btnIcon"><use href="#i-grid"/></svg>portfolio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save pattern</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this pattern's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><button id="downloadProjectBtn" class="small" title="Download everything - current pattern, all saved patterns, classics and backgrounds - as this app's own .pplayground file, independent of this browser/device"><svg class="btnIcon"><use href="#i-download"/></svg>download .pplayground</button><button id="loadProjectBtn" class="small" title="Restore from a .pplayground project file downloaded earlier"><svg class="btnIcon"><use href="#i-target"/></svg>load .pplayground</button><input id="loadProjectFile" type="file" accept=".pplayground,application/json,.json" style="display:none"><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset pattern</button><button id="newPatternBtn" class="small" title="Save this pattern to your saved patterns, then start a fresh empty canvas on the same repeat layout"><svg class="btnIcon"><use href="#i-sparkle"/></svg>new pattern</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
+  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openPortfolio" class="small primary" title="See your starred repeat patterns, classics and backgrounds together in one gallery - tap ★ on any saved item to add it - and download it as a portfolio image or ZIP"><svg class="btnIcon"><use href="#i-grid"/></svg>portfolio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save pattern</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this pattern's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><button id="downloadProjectBtn" class="small" title="Download everything - current pattern, all saved patterns, classics and backgrounds - as this app's own .pplayground file, independent of this browser/device"><svg class="btnIcon"><use href="#i-download"/></svg>download .pplayground</button><button id="loadProjectBtn" class="small" title="Restore from a .pplayground project file downloaded earlier"><svg class="btnIcon"><use href="#i-target"/></svg>load .pplayground</button><input id="loadProjectFile" type="file" accept=".pplayground,application/json,.json" style="display:none"><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset pattern</button><button id="newPatternBtn" class="small" title="Save this pattern to your saved patterns, then start a fresh empty canvas on the same repeat layout"><svg class="btnIcon"><use href="#i-sparkle"/></svg>new pattern</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
 </header>
 <main>
   <aside class="side left">
@@ -1581,6 +1581,7 @@ function applyHydratedSavedItems(blob){
  savedTemplates=expandTemplatesFromBlob(blob);
  if(window.tsGetSavedList){const list=window.tsGetSavedList();list.length=0;(blob.classics||[]).forEach(c=>list.push(c));}
  if(window.bgGetSavedList){const list=window.bgGetSavedList();list.length=0;(blob.backgrounds||[]).forEach(b=>list.push(b));}
+ portfolioItemIds=new Set(blob.portfolioIds||[]);
  motifTray=blob.motifTray||[];
  if(!activeMotifId)activeMotifId=motifTray[0]?.id||null;
  heroSetFromDataUrl(blob.heroImgDataUrl);
@@ -1676,6 +1677,24 @@ function expandSessionStateFromStorage(data){
 }
 window.__savedItemsBlob=loadAllSavedItemsBlob();
 window.__savedItemsBlob.templates=expandTemplatesFromBlob(window.__savedItemsBlob);
+// The collection portfolio is a curated SUBSET of what's saved, not a mirror of it - membership is
+// tracked here by id rather than by array position, since backgrounds get unshift()ed to the front
+// on every save (indices shift constantly) and nothing about a saved item's position is stable.
+// Repeat patterns already have a stable `key`; classics/backgrounds don't, so they get one lazily
+// (ensureSavedItemId) the first time they're actually added to the portfolio - an item that's never
+// been starred never needs one.
+let portfolioItemIds=new Set(window.__savedItemsBlob.portfolioIds||[]);
+function ensureSavedItemId(item){if(!item.id)item.id='pf_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);return item.id;}
+function portfolioIdFor(type,item){return type==='pattern'?item.key:ensureSavedItemId(item);}
+function isInPortfolio(type,item){return portfolioItemIds.has(type==='pattern'?item.key:item.id);}
+function togglePortfolioMembership(type,item){
+ const id=portfolioIdFor(type,item);
+ const nowIn=!portfolioItemIds.has(id);
+ if(nowIn)portfolioItemIds.add(id);else portfolioItemIds.delete(id);
+ persistAllSavedItems();
+ if(window.refreshPortfolioIfOpen)window.refreshPortfolioIfOpen();
+ return nowIn;
+}
 // Returns whether the write actually landed (now an IndexedDB write, so this is async) - the old
 // localStorage.setItem could throw QuotaExceededError once the combined blob got big enough, which
 // an earlier version of this function swallowed silently: every caller went on to report "saved ✓"
@@ -1686,7 +1705,7 @@ async function persistAllSavedItems(){
  try{
   const d=newMotifDict();
   const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
-  const blob={templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null};
+  const blob={templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null,portfolioIds:[...portfolioItemIds]};
   await idbSet(SAVED_ITEMS_IDB_KEY,blob);
   // A successful write here always serializes the FULL current savedTemplates array, so any
   // template that previously failed to persist (see saveTemplateToFilmstrip/unsavedTemplateKeys)
@@ -1867,7 +1886,7 @@ function buildProjectBackup(){
  const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
  return {app:'magic-collection-builder',kind:'project-backup',version:1,savedAt:new Date().toISOString(),
   session:compactSessionSnapshotForStorage(autosaveSnapshot()),
-  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[],motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null}};
+  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[],motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null,portfolioIds:[...portfolioItemIds]}};
 }
 function downloadProjectBackup(){
  const data=buildProjectBackup();
@@ -1888,6 +1907,7 @@ function restoreProjectBackup(raw){
   savedTemplates=expandTemplatesFromBlob(data.savedItems);
   if(window.tsGetSavedList){const list=window.tsGetSavedList();list.length=0;(data.savedItems.classics||[]).forEach(c=>list.push(c));}
   if(window.bgGetSavedList){const list=window.bgGetSavedList();list.length=0;(data.savedItems.backgrounds||[]).forEach(b=>list.push(b));}
+  portfolioItemIds=new Set(data.savedItems.portfolioIds||[]);
   motifTray=data.savedItems.motifTray||[];
   activeMotifId=motifTray[0]?.id||null;
   heroSetFromDataUrl(data.savedItems.heroImgDataUrl);
@@ -2460,7 +2480,7 @@ let savedSelectMode=false,savedSelectedIdx=new Set();
 // which template keys are only living in this session's memory and badge them so "it's right
 // there in the filmstrip" doesn't get mistaken for "it's safely on disk".
 let unsavedTemplateKeys=new Set();
-function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';const renameHTML=savedSelectMode?'':'<button class="filmRename" title="rename">✎</button>';const unsavedHTML=unsavedTemplateKeys.has(t.key)?'<div class="unsavedBadge" title="Only in this session - storage was full when this tried to save to disk. Free up room (delete an old pattern/motif) or download .pplayground now to back it up.">⚠ not saved to disk</div>':'';c.innerHTML=`${delHTML}${renameHTML}${checkHTML}${unsavedHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture,t.tilingEngine||sourceTilingEngineFor(t.base||'grid'))}</div><span>${escapeHtml(t.name)}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(e.target.closest('.filmRename')){e.stopPropagation();renameSavedTemplate(i);return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
+function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';const renameHTML=savedSelectMode?'':'<button class="filmRename" title="rename">✎</button>';const pfHTML=savedSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('pattern',t)?'active':''}" title="${isInPortfolio('pattern',t)?'remove from portfolio':'add to portfolio'}">★</button>`;const unsavedHTML=unsavedTemplateKeys.has(t.key)?'<div class="unsavedBadge" title="Only in this session - storage was full when this tried to save to disk. Free up room (delete an old pattern/motif) or download .pplayground now to back it up.">⚠ not saved to disk</div>':'';c.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}${unsavedHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture,t.tilingEngine||sourceTilingEngineFor(t.base||'grid'))}</div><span>${escapeHtml(t.name)}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(e.target.closest('.filmRename')){e.stopPropagation();renameSavedTemplate(i);return;}if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('pattern',t);renderFilmstrip();return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function renameSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const name=prompt('Rename this saved pattern:',t.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===t.name)return;t.name=trimmed;if(current===t.key)document.getElementById('currentName').textContent=trimmed;renderFilmstrip();persistSavedTemplates();}
 function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;const delBtn=document.getElementById('savedDeleteSelected');if(delBtn){delBtn.textContent=savedSelectedIdx.size?`delete ${savedSelectedIdx.size} selected`:'delete selected';delBtn.disabled=!savedSelectedIdx.size;}}
 function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedDeleteSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectUnsaved').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
@@ -5790,7 +5810,7 @@ async function saveTexture(){
  setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
 }
 let tsSelectMode=false,tsSelectedIdx=new Set();
-function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
 function renameSavedTexture(i){const s=saved[i];if(!s)return;const name=prompt('Rename this saved classic:',s.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===s.name)return;s.name=trimmed;renderFilmstrip();try{persistAllSavedItems();}catch(e){}}
 function tsUpdateSelectUI(){const btn=$('tsDownloadSelected');if(!btn)return;btn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!tsSelectedIdx.size;}
 function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);if($('tsSelectAll'))$('tsSelectAll').classList.toggle('hidden',!tsSelectMode);if($('tsSelectNone'))$('tsSelectNone').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
@@ -6005,29 +6025,45 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
 <div id="portfolioOverlay" class="bgStudioOverlay" aria-hidden="true">
   <div class="bgStudioModal" style="grid-template-rows:auto 1fr;height:min(880px,92dvh);max-height:92dvh;width:min(1100px,calc(100vw - 16px))">
     <div class="bgStudioHeader">
-      <div><h2>collection portfolio</h2><p>every saved repeat pattern, classic and background - together in one place</p></div>
+      <div><h2>collection portfolio</h2><p>your starred repeat patterns, classics and backgrounds - together in one place</p></div>
       <div class="topActions"><button id="portfolioDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download portfolio</button><button id="portfolioDownloadZipBtn" class="small primary" title="Download every saved item as its own full-size PNG, bundled into one ZIP"><svg class="btnIcon"><use href="#i-download"/></svg>download all (ZIP)</button><span id="portfolioDownloadStatus" class="saveStatus"></span><button id="portfolioClose" class="small bgClose">×</button></div>
     </div>
     <div id="portfolioBody" style="overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-content:start"></div>
   </div>
 </div>
 <style>
-.portfolioCard{padding:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,235,250,.14);border-radius:12px;}
+.portfolioCard{position:relative;padding:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,235,250,.14);border-radius:12px;}
 .portfolioCard img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:8px;background:#fff;display:block;}
+.portfolioCardRemove{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:999px;padding:0;display:grid;place-items:center;font-size:13px;line-height:1;background:rgba(20,10,24,.78)!important;border:1px solid rgba(255,255,255,.35)!important;color:#fff!important;z-index:2}
 .portfolioEmpty{grid-column:1/-1;font-size:13px;color:var(--muted);line-height:1.4;}
 body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:rgba(58,46,38,.24)!important;}
+body.theme-light .portfolioCardRemove{background:rgba(58,46,38,.7)!important;border:1px solid rgba(255,255,255,.5)!important;}
+/* Shared "add/remove from portfolio" star toggle, reused on all three studios' own filmstrip
+   cards (repeat patterns / classics / backgrounds) - one rule since it looks the same everywhere. */
+.filmPortfolio{position:absolute;right:53px;top:3px;width:22px;height:22px;border-radius:999px;padding:0;display:grid;place-items:center;font-size:13px;line-height:1;background:rgba(20,10,24,.78)!important;border:1px solid rgba(255,255,255,.35)!important;color:#fff!important;z-index:2}
+.filmPortfolio.active{background:rgba(255,196,64,.92)!important;border-color:rgba(255,196,64,.92)!important;color:#3a2500!important}
+body.theme-light .filmPortfolio{background:rgba(58,46,38,.7)!important;border:1px solid rgba(255,255,255,.5)!important;color:#fff!important;}
+body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important;border-color:rgba(200,140,10,.8)!important;color:#3a2500!important;}
 </style>
 <script id="v68-collection-portfolio">
 (function(){
- // Combines the three separate saved-item libraries (repeat patterns / classics / backgrounds)
- // into one flat list for the portfolio gallery and its downloadable collage - each rendered to a
- // plain square thumbnail with the same look regardless of which studio it came from, since the
- // point here is seeing the whole collection "come together", not where each piece was made.
+ // The portfolio is a CURATED subset of what's saved, not a mirror of every saved item - each
+ // studio's own filmstrip has a ★ "add/remove from portfolio" toggle (see the shared
+ // togglePortfolioMembership/isInPortfolio helpers, main script) that's the only thing that puts an
+ // item here. Combines the three separate saved-item libraries (repeat patterns / classics /
+ // backgrounds) into one flat list, each rendered to a plain square thumbnail with the same look
+ // regardless of which studio it came from, since the point is seeing the collection "come
+ // together", not where each piece was made.
  function allPortfolioItems(){
-  const patterns=(savedTemplates||[]).map(t=>({type:'pattern',ref:t}));
-  const classics=(window.tsGetSavedList?window.tsGetSavedList():[]).map(t=>({type:'classic',ref:t}));
-  const backgrounds=(window.bgGetSavedList?window.bgGetSavedList():[]).map(t=>({type:'background',ref:t}));
+  const patterns=(savedTemplates||[]).filter(t=>isInPortfolio('pattern',t)).map(t=>({type:'pattern',ref:t}));
+  const classics=(window.tsGetSavedList?window.tsGetSavedList():[]).filter(t=>isInPortfolio('classic',t)).map(t=>({type:'classic',ref:t}));
+  const backgrounds=(window.bgGetSavedList?window.bgGetSavedList():[]).filter(t=>isInPortfolio('background',t)).map(t=>({type:'background',ref:t}));
   return [...patterns,...classics,...backgrounds];
+ }
+ function removeFromPortfolio(item){
+  // togglePortfolioMembership already calls window.refreshPortfolioIfOpen (wired below) which
+  // re-renders this same body, so nothing further is needed here.
+  togglePortfolioMembership(item.type,item.ref);
  }
  // Not loadImageCached: that cache is keyed by (and kept forever for) the exact data URL string,
  // meant for stable assets reused across many exports - these portfolio thumbnails are freshly
@@ -6046,7 +6082,7 @@ body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:
   const body=document.getElementById('portfolioBody');
   const items=allPortfolioItems();
   body.innerHTML='';
-  if(!items.length){body.innerHTML='<p class="portfolioEmpty">Nothing saved yet — save a repeat pattern, a classic, or a background first and it\'ll show up here.</p>';return;}
+  if(!items.length){body.innerHTML='<p class="portfolioEmpty">Your portfolio is empty — tap the ★ on any saved repeat pattern, classic, or background to add it here.</p>';return;}
   const note=document.createElement('p');note.className='portfolioEmpty';note.textContent=`rendering ${items.length} preview${items.length===1?'':'s'}…`;
   body.appendChild(note);
   for(const item of items){
@@ -6055,7 +6091,9 @@ body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:
     if(!dataUrl)continue;
     const card=document.createElement('div');card.className='portfolioCard';
     const img=document.createElement('img');img.src=dataUrl;
-    card.appendChild(img);body.appendChild(card);
+    const removeBtn=document.createElement('button');removeBtn.className='portfolioCardRemove';removeBtn.title='remove from portfolio';removeBtn.textContent='×';
+    removeBtn.onclick=()=>removeFromPortfolio(item);
+    card.appendChild(removeBtn);card.appendChild(img);body.appendChild(card);
    }catch(e){console.warn('portfolio thumb failed',item.ref&&item.ref.name,e);}
   }
   note.remove();
@@ -6066,10 +6104,16 @@ body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:
   renderPortfolioBody();
  }
  function closePortfolio(){const o=document.getElementById('portfolioOverlay');o.classList.remove('open');o.setAttribute('aria-hidden','true');}
+ // Lets a studio's own ★ toggle keep an already-open portfolio gallery in sync immediately,
+ // instead of only reflecting the change the next time the portfolio is opened.
+ window.refreshPortfolioIfOpen=function(){
+  const o=document.getElementById('portfolioOverlay');
+  if(o&&o.classList.contains('open'))renderPortfolioBody();
+ };
  async function downloadPortfolio(){
   const items=allPortfolioItems();
   const btn=document.getElementById('portfolioDownloadBtn'),status=document.getElementById('portfolioDownloadStatus');
-  if(!items.length){if(status)status.textContent='nothing saved yet to put in a portfolio';setTimeout(()=>{if(status)status.textContent='';},4000);return;}
+  if(!items.length){if(status)status.textContent='your portfolio is empty — star a few saved items first';setTimeout(()=>{if(status)status.textContent='';},4000);return;}
   btn.disabled=true;if(status)status.textContent=`rendering ${items.length} pattern${items.length===1?'':'s'}…`;
   try{
    // A roughly square grid (rather than always-5-wide) so a tiny collection doesn't end up as
@@ -6111,7 +6155,7 @@ body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:
   const items=allPortfolioItems();
   if(!items.length){
    const status=document.getElementById('portfolioDownloadStatus');
-   if(status){status.textContent='nothing saved yet to zip up';setTimeout(()=>{status.textContent='';},4000);}
+   if(status){status.textContent='your portfolio is empty — star a few saved items first';setTimeout(()=>{status.textContent='';},4000);}
    return;
   }
   window.openDownloadPanel(`download whole collection (${items.length} items) as ZIP`,async(w,dpi)=>{
@@ -6577,7 +6621,7 @@ function buildBgUI(){
  syncBgUI();
 }
 let bgSelectMode=false,bgSelectedIdx=new Set();
-function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';const renameHTML=bgSelectMode?'':'<button class="bgFilmRename" title="rename">✎</button>';const useHTML=bgSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${escapeHtml(rec.name||'background')}</span>${useHTML}`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();const removed=bgSaved[i];bgSaved.splice(i,1);persistAllSavedItems();renderBgFilm();showUndoToast('Deleted "'+(removed.name||'background')+'"',()=>{bgSaved.splice(i,0,removed);persistAllSavedItems();renderBgFilm();});return;}if(e.target.classList.contains('bgFilmRename')){e.stopPropagation();renameSavedBackground(i);return;}if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.bgApplySavedItem(rec);q('bgStatus').textContent='applied ✓';setTimeout(()=>q('bgStatus').textContent='',1200);return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
+function renderBgFilm(){let fs=q('bgFilmstrip'); if(!fs)return; fs.innerHTML=''; if(!bgSaved.length){fs.innerHTML='<div class="tsEmpty">No saved backgrounds yet — make the first texturoholic recipe 😄</div>';return;} bgSaved.forEach((rec,i)=>{let card=document.createElement('div');card.className='bgFilmCard';const checkHTML=bgSelectMode?`<div class="filmCheck ${bgSelectedIdx.has(i)?'checked':''}">${bgSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=bgSelectMode?'':'<button class="bgFilmDelete">×</button>';const renameHTML=bgSelectMode?'':'<button class="bgFilmRename" title="rename">✎</button>';const pfHTML=bgSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('background',rec)?'active':''}" title="${isInPortfolio('background',rec)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=bgSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="160" height="160"></canvas><span>${escapeHtml(rec.name||'background')}</span>${useHTML}`;drawBackgroundToCanvas(card.querySelector('canvas'),rec);card.onclick=e=>{if(e.target.classList.contains('bgFilmDelete')){e.stopPropagation();const removed=bgSaved[i];bgSaved.splice(i,1);persistAllSavedItems();renderBgFilm();showUndoToast('Deleted "'+(removed.name||'background')+'"',()=>{bgSaved.splice(i,0,removed);persistAllSavedItems();renderBgFilm();});return;}if(e.target.classList.contains('bgFilmRename')){e.stopPropagation();renameSavedBackground(i);return;}if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('background',rec);renderBgFilm();return;}if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.bgApplySavedItem(rec);q('bgStatus').textContent='applied ✓';setTimeout(()=>q('bgStatus').textContent='',1200);return;}if(bgSelectMode){if(bgSelectedIdx.has(i))bgSelectedIdx.delete(i);else bgSelectedIdx.add(i);renderBgFilm();bgUpdateSelectUI();return;}bgRecipe={...rec,enabled:true,objects:rec.objects||[],editable:!!rec.editable};bgSelectedIds=[];syncBgUI();applyBgToPKM();};fs.appendChild(card);});}
 function renameSavedBackground(i){const rec=bgSaved[i];if(!rec)return;const name=prompt('Rename this saved background:',rec.name||'background');if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===rec.name)return;rec.name=trimmed;renderBgFilm();persistAllSavedItems();}
 function bgUpdateSelectUI(){const btn=q('bgDownloadSelected');if(!btn)return;btn.textContent=bgSelectedIdx.size?`download ${bgSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!bgSelectedIdx.size;}
 function bgToggleSelectMode(){bgSelectMode=!bgSelectMode;bgSelectedIdx.clear();const btn=q('bgSelectMode');btn.textContent=bgSelectMode?'done':'select';btn.classList.toggle('active',bgSelectMode);q('bgDownloadSelected').classList.toggle('hidden',!bgSelectMode);if(q('bgSelectAll'))q('bgSelectAll').classList.toggle('hidden',!bgSelectMode);if(q('bgSelectNone'))q('bgSelectNone').classList.toggle('hidden',!bgSelectMode);bgUpdateSelectUI();renderBgFilm();}
