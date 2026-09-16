@@ -1021,6 +1021,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
           <b class="heroLabel" style="font-size:13px">reference photo</b>
           <div class="heroStatus footerNote" style="margin-top:2px">not uploaded yet - visible from every studio</div>
         </div>
+        <button class="small heroPortfolioToggle hidden" title="add to portfolio">★ portfolio</button>
         <button class="small heroOpenBtn">open</button>
       </div>
     </div></div>
@@ -1705,13 +1706,18 @@ window.__savedItemsBlob.templates=expandTemplatesFromBlob(window.__savedItemsBlo
 // been starred never needs one.
 let portfolioItemIds=new Set(window.__savedItemsBlob.portfolioIds||[]);
 function ensureSavedItemId(item){if(!item.id)item.id='pf_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);return item.id;}
-function portfolioIdFor(type,item){return type==='pattern'?item.key:ensureSavedItemId(item);}
-function isInPortfolio(type,item){return portfolioItemIds.has(type==='pattern'?item.key:item.id);}
+// The hero image is a single global slot, not a list entry - 'hero' is a fixed id rather than
+// something minted per-item like ensureSavedItemId does for classics/backgrounds.
+function portfolioIdFor(type,item){if(type==='pattern')return item.key;if(type==='hero')return 'hero';return ensureSavedItemId(item);}
+function isInPortfolio(type,item){return portfolioItemIds.has(portfolioIdFor(type,item));}
 function togglePortfolioMembership(type,item){
  const id=portfolioIdFor(type,item);
  const nowIn=!portfolioItemIds.has(id);
  if(nowIn)portfolioItemIds.add(id);else portfolioItemIds.delete(id);
  persistAllSavedItems();
+ // Keeps the hero image's own ★ button (shown in three different studio panels) in sync when
+ // membership changes from elsewhere - e.g. removing it via the portfolio's own × button.
+ if(type==='hero'&&typeof refreshHeroThumbs==='function')refreshHeroThumbs();
  if(window.refreshPortfolioIfOpen)window.refreshPortfolioIfOpen();
  return nowIn;
 }
@@ -4935,7 +4941,20 @@ function refreshHeroThumbs(){
  document.querySelectorAll('.heroThumb').forEach(el=>{el.style.backgroundImage=heroImgDataUrl?`url("${heroImgDataUrl}")`:'none';});
  document.querySelectorAll('.heroStatus').forEach(el=>{el.textContent=heroImgDataUrl?'uploaded - tap open to view or trace out another motif':'not uploaded yet - upload your reference photo once, then trace motifs out of it from any studio';});
  document.querySelectorAll('.heroOpenBtn').forEach(el=>{el.textContent=heroImgDataUrl?'open':'upload';el.title=heroImgDataUrl?'Open the hero image at full size to trace out another motif':'Upload the photo you\'re building this collection from - once it\'s up, lasso individual motifs out of it from here or any studio';});
+ const heroInPortfolio=!!heroImgDataUrl&&isInPortfolio('hero',null);
+ document.querySelectorAll('.heroPortfolioToggle').forEach(el=>{
+  el.classList.toggle('hidden',!heroImgDataUrl);
+  el.classList.toggle('active',heroInPortfolio);
+  el.title=heroInPortfolio?'remove from portfolio':'add to portfolio';
+ });
+ if(window.refreshPortfolioIfOpen)window.refreshPortfolioIfOpen();
 }
+document.addEventListener('click',e=>{
+ const btn=e.target.closest('.heroPortfolioToggle');
+ if(!btn||!heroImgDataUrl)return;
+ togglePortfolioMembership('hero',null);
+ refreshHeroThumbs();
+});
 window.openHeroStudio=openHeroStudio;
 document.getElementById('heroStudioUploadBtn').onclick=()=>document.getElementById('heroStudioFile').click();
 document.getElementById('heroStudioFile').addEventListener('change',heroHandleUpload);
@@ -5049,6 +5068,7 @@ refreshHeroThumbs();
         <div style="display:flex;gap:9px;align-items:center">
           <div class="heroThumb"></div>
           <div style="flex:1;min-width:0"><div class="heroStatus" style="font-size:12px;color:var(--muted)">not uploaded yet</div></div>
+          <button class="small heroPortfolioToggle hidden" title="add to portfolio">★</button>
           <button class="small heroOpenBtn">open</button>
         </div>
         </div></div>
@@ -5990,6 +6010,7 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
         <div style="display:flex;gap:9px;align-items:center">
           <div class="heroThumb"></div>
           <div style="flex:1;min-width:0"><div class="heroStatus" style="font-size:12px;color:var(--muted)">not uploaded yet</div></div>
+          <button class="small heroPortfolioToggle hidden" title="add to portfolio">★</button>
           <button class="small heroOpenBtn">open</button>
         </div>
         </div></div>
@@ -6070,6 +6091,9 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
 <style>
 .portfolioCard{position:relative;padding:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,235,250,.14);border-radius:12px;}
 .portfolioCard img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:8px;background:#fff;display:block;}
+/* The hero image keeps its own real transparency instead of getting boxed onto white like every
+   other tile - a transparent-background upload should still look transparent in the gallery. */
+.portfolioCard[data-type="hero"] img{background:transparent;}
 .portfolioCardRemove{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:999px;padding:0;display:grid;place-items:center;font-size:13px;line-height:1;background:rgba(20,10,24,.78)!important;border:1px solid rgba(255,255,255,.35)!important;color:#fff!important;z-index:2}
 .portfolioEmpty{grid-column:1/-1;font-size:13px;color:var(--muted);line-height:1.4;}
 body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:rgba(58,46,38,.24)!important;}
@@ -6080,6 +6104,7 @@ body.theme-light .portfolioCardRemove{background:rgba(58,46,38,.7)!important;bor
 .filmPortfolio.active{background:rgba(255,196,64,.92)!important;border-color:rgba(255,196,64,.92)!important;color:#3a2500!important}
 body.theme-light .filmPortfolio{background:rgba(58,46,38,.7)!important;border:1px solid rgba(255,255,255,.5)!important;color:#fff!important;}
 body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important;border-color:rgba(200,140,10,.8)!important;color:#3a2500!important;}
+.heroPortfolioToggle.active{background:rgba(255,196,64,.92)!important;border-color:rgba(255,196,64,.92)!important;color:#3a2500!important}
 </style>
 <script id="v68-collection-portfolio">
 (function(){
@@ -6094,7 +6119,10 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
   const patterns=(savedTemplates||[]).filter(t=>isInPortfolio('pattern',t)).map(t=>({type:'pattern',ref:t}));
   const classics=(window.tsGetSavedList?window.tsGetSavedList():[]).filter(t=>isInPortfolio('classic',t)).map(t=>({type:'classic',ref:t}));
   const backgrounds=(window.bgGetSavedList?window.bgGetSavedList():[]).filter(t=>isInPortfolio('background',t)).map(t=>({type:'background',ref:t}));
-  return [...patterns,...classics,...backgrounds];
+  // The hero image is a single global slot (not a list) - included only while it's both uploaded
+  // AND starred, same "curated, not automatic" rule as everything else here.
+  const hero=(typeof heroImgDataUrl!=='undefined'&&heroImgDataUrl&&isInPortfolio('hero',null))?[{type:'hero',ref:{name:'hero image'}}]:[];
+  return [...patterns,...classics,...backgrounds,...hero];
  }
  function removeFromPortfolio(item){
   // togglePortfolioMembership already calls window.refreshPortfolioIfOpen (wired below) which
@@ -6107,7 +6135,7 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
  function sortPortfolioItems(items){
   if(portfolioSortMode==='name')return items.slice().sort((a,b)=>(a.ref.name||'').localeCompare(b.ref.name||''));
   if(portfolioSortMode==='type'){
-   const typeRank={pattern:0,classic:1,background:2};
+   const typeRank={pattern:0,classic:1,background:2,hero:3};
    return items.slice().sort((a,b)=>(typeRank[a.type]-typeRank[b.type])||(a.ref.name||'').localeCompare(b.ref.name||''));
   }
   // 'added' (default): most-recently-starred first. portfolioItemIds is a Set, which iterates in
@@ -6123,17 +6151,30 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
  function loadImageOnce(src){
   return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('image failed to load'));img.src=src;});
  }
+ // Every other tile is a clean pre-rendered square, so stretching it to exactly fill its cell is
+ // fine - the hero image is an arbitrary uploaded photo (any aspect ratio, and often genuinely
+ // transparent), so it's scaled to fit inside its cell instead of stretched, and drawn without the
+ // white fill every other tile gets behind it so real transparency survives onto the page.
+ function drawContained(ctx,img,x,y,size){
+  const scale=Math.min(size/img.width,size/img.height);
+  const w=img.width*scale,h=img.height*scale;
+  ctx.drawImage(img,x+(size-w)/2,y+(size-h)/2,w,h);
+ }
  async function portfolioItemDataUrl(item,size){
   if(item.type==='pattern')return await renderSavedTemplateSquareDataUrl(item.ref,size);
   if(item.type==='classic'&&window.tsRenderSavedItemToCanvas)return window.tsRenderSavedItemToCanvas(item.ref,size).toDataURL('image/png');
   if(item.type==='background'&&window.bgRenderSavedItemToCanvas)return (await window.bgRenderSavedItemToCanvas(item.ref,size)).toDataURL('image/png');
+  // The raw upload, untouched - no resizing/re-encoding, so if it's already a transparent PNG
+  // that transparency survives exactly as uploaded (see drawPortfolioThumb/the ZIP export below
+  // for how the transparent parts are kept from being flattened onto white when drawn).
+  if(item.type==='hero')return heroImgDataUrl||null;
   return null;
  }
  async function renderPortfolioBody(){
   const body=document.getElementById('portfolioBody');
   const items=sortPortfolioItems(allPortfolioItems());
   body.innerHTML='';
-  if(!items.length){body.innerHTML='<p class="portfolioEmpty">Your portfolio is empty — tap the ★ on any saved repeat pattern, classic, or background to add it here.</p>';return;}
+  if(!items.length){body.innerHTML='<p class="portfolioEmpty">Your portfolio is empty — tap the ★ on any saved repeat pattern, classic, background, or the hero image to add it here.</p>';return;}
   const note=document.createElement('p');note.className='portfolioEmpty';note.textContent=`rendering ${items.length} preview${items.length===1?'':'s'}…`;
   body.appendChild(note);
   for(const item of items){
@@ -6184,8 +6225,8 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
      const dataUrl=await portfolioItemDataUrl(items[i],tile*2);
      if(!dataUrl)continue;
      const img=await loadImageOnce(dataUrl);
-     ctx.fillStyle='#fff';ctx.fillRect(x,y,tile,tile);
-     ctx.drawImage(img,x,y,tile,tile);
+     if(items[i].type==='hero'){drawContained(ctx,img,x,y,tile);}
+     else{ctx.fillStyle='#fff';ctx.fillRect(x,y,tile,tile);ctx.drawImage(img,x,y,tile,tile);}
     }catch(e){console.warn('portfolio download: skipped item',items[i].ref&&items[i].ref.name,e);}
    }
    const bytes=await canvasToDpiPngBytes(canvas,150);
@@ -6197,6 +6238,17 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
   }
   btn.disabled=false;
   setTimeout(()=>{if(status)status.textContent='';},3000);
+ }
+ // Decodes a data: URL straight to raw bytes, keeping whatever format it actually is (PNG, JPEG,
+ // ...) rather than round-tripping it through a canvas - the hero image is used as-is exactly as
+ // uploaded, so a transparent PNG stays exactly as transparent as the original file, no re-encode.
+ function dataUrlToBytesAndExt(dataUrl){
+  const m=/^data:image\/(\w+);base64,(.*)$/.exec(dataUrl||'');
+  if(!m)return null;
+  const bin=atob(m[2]);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return {bytes,ext:m[1]==='jpeg'?'jpg':m[1]};
  }
  // Full-size individual PNGs (not the small collage thumbnails above), one per saved item,
  // bundled into a single ZIP - the same "select some, download as ZIP" machinery each studio's own
@@ -6214,6 +6266,13 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
    for(const item of items){
     const t=item.ref;
     try{
+     if(item.type==='hero'){
+      const decoded=dataUrlToBytesAndExt(heroImgDataUrl);
+      if(!decoded)throw new Error('hero image data URL was not a decodable image');
+      let base=slugName('hero-image'),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
+      files.push({name:`${name}.${decoded.ext}`,data:decoded.bytes});
+      continue;
+     }
      let canvas=null;
      if(item.type==='pattern'){
       const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');
@@ -6238,7 +6297,7 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
    triggerBlobDownload(makeZip(files),`pattern-collection-${files.length}.zip`);
    if(failed.length)return `downloaded ${files.length}/${items.length} — ${failed.length} failed (see console): ${failed.slice(0,5).join(', ')}${failed.length>5?'…':''}`;
    return `downloaded ${files.length} ✓`;
-  },w=>`Exports all ${items.length} saved items (patterns, classics, backgrounds) as their own ${w}×${w}px PNGs, bundled in one ZIP.`,items.length>10?1200:2200);
+  },w=>`Exports all ${items.length} saved items (patterns, classics, backgrounds, hero image) as their own ${w}×${w}px PNGs, bundled in one ZIP - the hero image keeps its original file untouched.`,items.length>10?1200:2200);
  }
  document.getElementById('openPortfolio').onclick=openPortfolio;
  document.getElementById('portfolioClose').onclick=closePortfolio;
