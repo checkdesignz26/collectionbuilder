@@ -3115,6 +3115,9 @@ function brickLocalPoint(b,cx,cy,px,py){
 const MIN_TAP_PX=44;
 function pointInBrick(local,bwPx,bhPx){const hw=Math.max(bwPx,MIN_TAP_PX)/2,hh=Math.max(bhPx,MIN_TAP_PX)/2;return Math.abs(local.x)<=hw&&Math.abs(local.y)<=hh;}
 const HANDLE_SIZE=18,ROT_HANDLE_SIZE=16,ROT_OFFSET=30,DOT_SIZE=12;
+// Below this, the resize handle floats out to a fixed minimum distance from centre instead of
+// sitting glued to the shape's own (tiny) corner - see RESIZE_MIN_OFFSET below.
+const RESIZE_MIN_OFFSET=40;
 // Hit radius is deliberately larger than the visual handle (touch target, not just the drawn
 // pixels) - matches how a real finger is far less precise than a mouse cursor.
 function getHandleForLocalPoint(lx,ly,bwPx,bhPx){
@@ -3126,15 +3129,16 @@ function getHandleForLocalPoint(lx,ly,bwPx,bhPx){
  // rotatable via the on-canvas handle almost never, only via the sidebar rotation slider.
  const rotX=0,rotY=-hh-ROT_OFFSET;
  if(Math.hypot(lx-rotX,ly-rotY)<=ROT_HANDLE_SIZE*1.4)return 'rotate';
- // Below a certain rendered size (the same MIN_TAP_PX floor pointInBrick already uses), the
- // corner-anchored resize handle's hit-circle gets big enough relative to the shape to reach past
- // the corner and swallow the shape's own centre - so a plain tap or double-tap on a small motif
- // (routine once the default repeat view got denser - see repeatSpan) could misfire as a resize
- // grab instead of a select/duplicate. There's no usable on-canvas resize target below that size
- // anyway (the visible handle itself would dwarf the shape) - resize that shape from the sidebar
- // sliders instead, and let every tap here mean "the shape", never "a resize handle".
- if(Math.min(bwPx,bhPx)<MIN_TAP_PX)return null;
- const rx=hw,ry=hh;
+ // On a small shape, the resize handle used to just be disabled below MIN_TAP_PX (there was no
+ // room for its own hit-circle without it swallowing the shape's centre, since pointInBrick floors
+ // the BODY hit-box at 44px too - the corner and the body box overlapped). That meant every tap on
+ // a small motif fell straight to a body hit, and a follow-up tap aimed at where a resize handle
+ // "should" be - within the double-tap window - silently duplicated the shape instead of doing
+ // nothing, reading as "the bounding box just disappeared". Floating the resize target out to at
+ // least RESIZE_MIN_OFFSET on each axis (mirroring how rotate already floats clear of the edge)
+ // keeps it outside that 44px body box with room to spare, so it's a real, reachable target on any
+ // size shape instead of silently vanishing on small ones.
+ const rx=Math.max(hw,RESIZE_MIN_OFFSET),ry=Math.max(hh,RESIZE_MIN_OFFSET);
  if(Math.hypot(lx-rx,ly-ry)<=HANDLE_SIZE*1.1)return 'resize';
  return null;
 }
@@ -3198,7 +3202,12 @@ function drawSelectionUI(ctx,b,cx,cy,bwPx,bhPx){
  ctx.strokeRect(-hw-off,-hh-off,bwPx+off*2,bhPx+off*2);
  ctx.fillStyle='#1a1420';ctx.strokeStyle=pink;ctx.lineWidth=2;
  [[-hw,-hh],[hw,-hh],[-hw,hh]].forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,DOT_SIZE/2,0,Math.PI*2);ctx.fill();ctx.stroke();});
- roundRectPath(ctx,hw-HANDLE_SIZE/2,hh-HANDLE_SIZE/2,HANDLE_SIZE,HANDLE_SIZE,6);
+ // Draw the resize handle at the same floated position getHandleForLocalPoint hit-tests against
+ // (see RESIZE_MIN_OFFSET) - on a small shape that's out past its own corner, so a short connecting
+ // line (mirroring the rotate handle's stem above) shows it's still tied to this shape.
+ const rhx=Math.max(hw,RESIZE_MIN_OFFSET),rhy=Math.max(hh,RESIZE_MIN_OFFSET);
+ if(rhx>hw||rhy>hh){ctx.beginPath();ctx.moveTo(hw,hh);ctx.lineTo(rhx,rhy);ctx.strokeStyle=pink;ctx.lineWidth=2;ctx.stroke();}
+ roundRectPath(ctx,rhx-HANDLE_SIZE/2,rhy-HANDLE_SIZE/2,HANDLE_SIZE,HANDLE_SIZE,6);
  ctx.fillStyle=pink;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
  ctx.beginPath();ctx.moveTo(0,-hh);ctx.lineTo(0,-hh-ROT_OFFSET+ROT_HANDLE_SIZE/2);ctx.strokeStyle=pink;ctx.lineWidth=2;ctx.stroke();
  ctx.beginPath();ctx.arc(0,-hh-ROT_OFFSET,ROT_HANDLE_SIZE/2,0,Math.PI*2);ctx.fillStyle=pink;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
