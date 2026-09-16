@@ -4177,9 +4177,41 @@ function syncMultiSelectUI(){const b=document.getElementById('clearGroupBtn');if
 document.getElementById('multiSelectBtn').onclick=toggleMultiSelectMode;
 document.getElementById('clearGroupBtn').onclick=clearMultiSelect;
 function scopedBricks(){if(multiSelected.size>1)return bricks.filter(b=>multiSelected.has(b.id));const b=selectedBrick();if(!b)return[]; if(alignScope==='single')return [b]; if(alignScope==='all')return bricks; if(alignScope==='role')return bricks.filter(x=>x.role===b.role); return bricks.filter(x=>x.type===b.type);}
-function edgeX(b,side){return side==='left'?b.x-b.w/2:side==='right'?b.x+b.w/2:b.x}
-function edgeY(b,side){return side==='top'?b.y-b.h/2:side==='bottom'?b.y+b.h/2:b.y}
-function alignGroup(kind){const anchor=selectedBrick();if(!anchor)return;pushHistory();const arr=scopedBricks();arr.forEach(b=>{if(kind==='left')b.x=edgeX(anchor,'left')+b.w/2; if(kind==='right')b.x=edgeX(anchor,'right')-b.w/2; if(kind==='centre')b.x=anchor.x; if(kind==='top')b.y=edgeY(anchor,'top')+b.h/2; if(kind==='bottom')b.y=edgeY(anchor,'bottom')-b.h/2; if(kind==='middle')b.y=anchor.y;});render();syncControls();}
+// A rotated brick's true screen-space edges don't sit at x±w/2 - that's only its UNROTATED
+// nominal box. Align/flip/duplicate-row all need the real (axis-aligned) bounding half-extents of
+// the rotated shape so an edge/centre they compute actually lands where the shape visually is,
+// not where it would be at rot:0.
+function brickAABBHalf(b){
+ const rad=(b.rot||0)*Math.PI/180,hw=b.w/2,hh=b.h/2;
+ return {hw:Math.abs(hw*Math.cos(rad))+Math.abs(hh*Math.sin(rad)),hh:Math.abs(hw*Math.sin(rad))+Math.abs(hh*Math.cos(rad))};
+}
+function edgeX(b,side){const{hw}=brickAABBHalf(b);return side==='left'?b.x-hw:side==='right'?b.x+hw:b.x}
+function edgeY(b,side){const{hh}=brickAABBHalf(b);return side==='top'?b.y-hh:side==='bottom'?b.y+hh:b.y}
+// With nothing else in scope to align against (every freely-placed motif gets its own unique
+// type - see placeMotifFreely - so the default "same shape" scope never finds a partner unless
+// bricks are grouped by hand via "select multiple" first), aligning used to just silently do
+// nothing: the anchor "aligned" against itself. Falling back to aligning the one shape against the
+// STAGE's own edges/centre instead makes align always do something sensible, whether or not
+// anything's grouped yet - the general case a group align (below) narrows once 2+ bricks are in
+// scope.
+function alignGroup(kind){
+ const anchor=selectedBrick();if(!anchor)return;
+ pushHistory();
+ const arr=scopedBricks();
+ if(arr.length<2){
+  const{hw,hh}=brickAABBHalf(anchor);
+  if(kind==='left')anchor.x=hw; if(kind==='right')anchor.x=100-hw; if(kind==='centre')anchor.x=50;
+  if(kind==='top')anchor.y=hh; if(kind==='bottom')anchor.y=100-hh; if(kind==='middle')anchor.y=50;
+  render();syncControls();
+  return;
+ }
+ arr.forEach(b=>{
+  const{hw,hh}=brickAABBHalf(b);
+  if(kind==='left')b.x=edgeX(anchor,'left')+hw; if(kind==='right')b.x=edgeX(anchor,'right')-hw; if(kind==='centre')b.x=anchor.x;
+  if(kind==='top')b.y=edgeY(anchor,'top')+hh; if(kind==='bottom')b.y=edgeY(anchor,'bottom')-hh; if(kind==='middle')b.y=anchor.y;
+ });
+ render();syncControls();
+}
 // "Space evenly" treats the row/column as one period of an infinitely-repeating strip, not just
 // the span between the first and last brick - the LAST gap (off the tile edge, wrapping around to
 // where the first brick reappears on the next tile) is sized equal to every other gap too, so a
@@ -4214,8 +4246,8 @@ function flipScope(axis){
  const arr=scopedBricks();if(!arr.length)return;
  pushHistory();
  if(arr.length>1){
-  const minX=Math.min(...arr.map(b=>b.x-b.w/2)),maxX=Math.max(...arr.map(b=>b.x+b.w/2));
-  const minY=Math.min(...arr.map(b=>b.y-b.h/2)),maxY=Math.max(...arr.map(b=>b.y+b.h/2));
+  const minX=Math.min(...arr.map(b=>b.x-brickAABBHalf(b).hw)),maxX=Math.max(...arr.map(b=>b.x+brickAABBHalf(b).hw));
+  const minY=Math.min(...arr.map(b=>b.y-brickAABBHalf(b).hh)),maxY=Math.max(...arr.map(b=>b.y+brickAABBHalf(b).hh));
   const cx=(minX+maxX)/2,cy=(minY+maxY)/2;
   arr.forEach(b=>{if(axis==='x'){b.x=2*cx-b.x;b.flipX=!b.flipX;}else{b.y=2*cy-b.y;b.flipY=!b.flipY;}});
  }else{
@@ -4229,8 +4261,8 @@ function flipScope(axis){
 function duplicateRowGroup(axis){
  const arr=scopedBricks();if(!arr.length)return;
  pushHistory();
- const minX=Math.min(...arr.map(b=>b.x-b.w/2)),maxX=Math.max(...arr.map(b=>b.x+b.w/2));
- const minY=Math.min(...arr.map(b=>b.y-b.h/2)),maxY=Math.max(...arr.map(b=>b.y+b.h/2));
+ const minX=Math.min(...arr.map(b=>b.x-brickAABBHalf(b).hw)),maxX=Math.max(...arr.map(b=>b.x+brickAABBHalf(b).hw));
+ const minY=Math.min(...arr.map(b=>b.y-brickAABBHalf(b).hh)),maxY=Math.max(...arr.map(b=>b.y+brickAABBHalf(b).hh));
  const dx=axis==='h'?(maxX-minX):0,dy=axis==='v'?(maxY-minY):0;
  const clones=arr.map(b=>cloneBrick(b,dx,dy));
  bricks.push(...clones);
