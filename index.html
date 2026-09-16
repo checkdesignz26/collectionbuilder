@@ -3230,6 +3230,7 @@ let _pointerHitBrickOrHandle=false;
 // target device here) doesn't support at all.
 let bgEyedropperArmed=false;
 function armBgEyedropper(){
+ if(window.bgGetWorkingSnapshot&&window.bgGetWorkingSnapshot()&&window.bgGetWorkingSnapshot().locked){flashSaveStatus('background is locked - unlock it in Background Studio first',false,2500);return;}
  bgEyedropperArmed=true;
  const btn=document.getElementById('bgEyedropperBtn');if(btn)btn.classList.add('active');
  const c=stageCanvasEl();if(c)c.style.cursor='crosshair';
@@ -6788,6 +6789,14 @@ function updateRepeatBox(){let box=q('bgRepeatBox'),can=q('bgPreviewCanvas'); if
 function syncBgUI(){
  const lockBtn=q('bgLockToggle');
  if(lockBtn){lockBtn.textContent=bgRecipe.locked?'🔒 unlock background':'🔓 lock background';lockBtn.classList.toggle('active',!!bgRecipe.locked);}
+ // A locked background staying locked across a layout switch (free layout especially - it
+ // deliberately keeps everything as-is, the same way it keeps your bricks/motifs) is correct, not
+ // a leak - but a disabled, greyed-out "apply"/"clear" makes that obvious the moment this panel is
+ // opened, instead of the button looking clickable and just silently doing nothing (the only
+ // previous sign was a status line easy to miss entirely).
+ const bgApplyBtn=q('bgApply'),bgClearBtn=q('bgClear');
+ if(bgApplyBtn){bgApplyBtn.disabled=!!bgRecipe.locked;bgApplyBtn.title=bgRecipe.locked?'Background is locked - tap "unlock background" below first':'';}
+ if(bgClearBtn){bgClearBtn.disabled=!!bgRecipe.locked;bgClearBtn.title=bgRecipe.locked?'Background is locked - tap "unlock background" below first':'';}
  q('bgBaseColor').value=bgRecipe.base||'#f2f2f2';q('bgTexColor').value=bgRecipe.tex||'#555555';['Opacity','Scale','Density','Softness','Contrast'].forEach(k=>{let id='bg'+k;let val=q(id+'Val'),inp=q(id); if(inp){inp.value=bgRecipe[k.toLowerCase()]||0; if(val)val.textContent=inp.value;}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.classList.toggle('active',b.dataset.bggrad===bgRecipe.grad));document.querySelectorAll('.bgTypeBtn').forEach(b=>b.classList.toggle('active',b.dataset.bgtype===bgRecipe.type));
  // "pattern" backgrounds are a single baked image, not a generative recipe - base/tex colour and
  // density/softness don't apply (there's no ink colour or mark density to tune), so hide those and
