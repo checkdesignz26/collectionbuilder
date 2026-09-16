@@ -870,6 +870,8 @@ body.theme-light #openTextureStudio{background:linear-gradient(90deg,#cdbdf2,var
 body.theme-light #openBackgroundStudio{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
 body.theme-light #openDownload,body.theme-light #dlDownloadBtn.primary{background:linear-gradient(90deg,#f6d98a,var(--gold))!important;border:0!important;color:var(--goldInk)!important;}
 body.theme-light #saveBtn{background:linear-gradient(90deg,#a9dfc9,var(--teal))!important;border:0!important;color:var(--tealInk)!important;}
+#saveBtn{position:relative;}
+#saveBtn.hasUnsaved::after{content:'';position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#ff7a45;box-shadow:0 0 0 2px var(--panel,#1c1c1c);}
 body.theme-light #resetBtn,body.theme-light #tsReset{background:var(--btnTan)!important;border:1px solid rgba(240,145,122,.6)!important;color:var(--coralInk)!important;}
 body.theme-light #placeMotifBtn{background:linear-gradient(90deg,#f3b6c9,var(--rose))!important;border:0!important;color:var(--roseInk)!important;}
 body.theme-light main .box .full.primary{background:linear-gradient(90deg,#f6c2b0,var(--coral))!important;border:0!important;color:var(--coralInk)!important;}
@@ -1443,6 +1445,40 @@ const skeletonOrder=['blank','grid','halfdrop','halfbrick','halfdropflip','diamo
 // free - at a fraction of the cost (measured ~14ms/call for 10 bricks with real motif images,
 // down to sub-millisecond).
 function copyBricks(arr){return (arr||[]).map(b=>({...b,id:'b'+Math.random().toString(36).slice(2)}));}
+// Content-compares two bricks arrays ignoring the auto-generated id field (fresh per copyBricks
+// call, so it's never meaningful for "is this actually the same pattern" checks). Shared by the
+// boot-time archiving skip-if-untouched check and the live "do I have unsaved work right now" check.
+function bricksContentEqual(a,b){
+ a=a||[];b=b||[];
+ if(a.length!==b.length)return false;
+ return a.every((x,i)=>{
+  const y=b[i];
+  const xKeys=Object.keys(x).filter(k=>k!=='id'),yKeys=Object.keys(y).filter(k=>k!=='id');
+  if(xKeys.length!==yKeys.length)return false;
+  return xKeys.every(k=>JSON.stringify(x[k])===JSON.stringify(y[k]));
+ });
+}
+// Drives both the "save pattern" button's unsaved-work dot and the beforeunload warning. Deliberately
+// mirrors archiveAutosaveIfAny's own "is this actually different from a pristine default" logic
+// (via the same bricksContentEqual helper) so the two never disagree about what counts as real work:
+// an untouched preset, or a saved template loaded and not edited since, is "nothing to lose".
+function hasUnsavedWorkRightNow(){
+ if(!bricks||!bricks.length)return false;
+ if(presets[current]&&bricksContentEqual(bricks,presets[current].bricks))return false;
+ // Matches by CONTENT rather than by `current===t.key`: "save pattern" deliberately saves a new
+ // copy without switching `current` onto it (so repeated saves while still editing the same live
+ // layout produce "grid 1", "grid 2", ... rather than hijacking what you're looking at), so the
+ // moment you hit save, the live bricks are already durably persisted in some savedTemplates entry
+ // even though `current` still points at the original preset/layout key.
+ if(savedTemplates.some(t=>bricksContentEqual(bricks,t.bricks)))return false;
+ return true;
+}
+function refreshSaveIndicator(){
+ if(!saveBtn)return;
+ const dirty=hasUnsavedWorkRightNow();
+ saveBtn.classList.toggle('hasUnsaved',dirty);
+ saveBtn.title=dirty?'You have unsaved changes - tap to save':'';
+}
 // 'blank canvas' never saves its bricks/texture into blueprintStore/textureStore - unlike every
 // named preset (which is meant to remember your edits when you switch away and back), "blank" is
 // a scratch space: clicking it should always hand you a genuinely empty canvas, matching what
@@ -1773,13 +1809,8 @@ async function archiveAutosaveIfAny(){
   // specifically, since the same applies to any preset the user opened but never actually edited.
   const isUntouchedDefault=(key,bricksArr)=>{
    const def=presets[key]&&presets[key].bricks;
-   if(!def||def.length!==bricksArr.length)return false;
-   return bricksArr.every((b,i)=>{
-    const d=def[i];
-    const bKeys=Object.keys(b).filter(k=>k!=='id'),dKeys=Object.keys(d).filter(k=>k!=='id');
-    if(bKeys.length!==dKeys.length)return false;
-    return bKeys.every(k=>JSON.stringify(b[k])===JSON.stringify(d[k]));
-   });
+   if(!def)return false;
+   return bricksContentEqual(bricksArr,def);
   };
   const stamp=new Date().toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
   const archiveOne=(key,bricksArr,textureVal,backgroundVal,classicVal,tilingEngineVal)=>{
@@ -2460,7 +2491,8 @@ function savedDeleteSelected(){
  persistSavedTemplates();
  renderFilmstrip();
  savedUpdateSelectUI();
- showUndoToast(`Deleted ${removed.length} pattern${removed.length===1?'':'s'}`,()=>{removed.forEach(t=>savedTemplates.push(t));persistSavedTemplates();renderFilmstrip();});
+ refreshSaveIndicator();
+ showUndoToast(`Deleted ${removed.length} pattern${removed.length===1?'':'s'}`,()=>{removed.forEach(t=>savedTemplates.push(t));persistSavedTemplates();renderFilmstrip();refreshSaveIndicator();});
 }
 document.getElementById('savedDeleteSelected').onclick=savedDeleteSelected;
 document.getElementById('savedSelectUnsaved').onclick=()=>{savedTemplates.forEach((t,i)=>{if(t.name&&t.name.indexOf('unsaved work - ')===0)savedSelectedIdx.add(i);});renderFilmstrip();savedUpdateSelectUI();};
@@ -2482,7 +2514,8 @@ function deleteSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const was
   document.getElementById('currentName').textContent=layoutDisplayName(current);
  }
  renderFilmstrip();
- showUndoToast('Deleted "'+t.name+'"',()=>{savedTemplates.splice(i,0,t);persistSavedTemplates();renderFilmstrip();});
+ refreshSaveIndicator();
+ showUndoToast('Deleted "'+t.name+'"',()=>{savedTemplates.splice(i,0,t);persistSavedTemplates();renderFilmstrip();refreshSaveIndicator();});
 }
 async function saveTemplateToFilmstrip(){
  if(saveBusy)return;
@@ -2498,6 +2531,7 @@ async function saveTemplateToFilmstrip(){
  const key='saved_'+Date.now();
  savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,tilingEngine,colourways:[],activeColourwayId:null});
  renderFilmstrip();
+ refreshSaveIndicator();
  // Let the new card appear immediately, then write to IndexedDB right after.
  if(await persistSavedTemplates()){unsavedTemplateKeys.clear();flashSaveStatus('saved ✓');}
  else{unsavedTemplateKeys.add(key);flashSaveStatus('couldn\'t save to disk - this pattern is only in this browser tab for now. Use "download .pplayground" above to back it up right now.',false,9000);}
@@ -3748,6 +3782,9 @@ function updateLiveMiniNow(){if(!current)return;
  // the exact "blank canvas remembers scratch work forever" bug that guard exists to prevent, and
  // duplicating every free motif's full image data into memory a second time for no reason.
  if(presets[current]&&current!=='blank'){blueprintStore[current]=copyBricks(bricks||[]);textureStore[current]=copyTexture(texture);}
+ // Piggybacks on this already rAF-throttled, already-called-after-every-edit path to keep the
+ // save button's "you have unsaved work" dot live for free, rather than adding a second listener.
+ refreshSaveIndicator();
  // Reuses whatever render() just computed this same frame rather than asking
  // Background/Classics Studio to clone their recipe again immediately after.
  let liveMini;
@@ -4526,6 +4563,14 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 cmRenderSwatches(DEFAULT_COLORS);
 
 window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();
+// Native "leave site?" warning as a last line of defence for real unsaved edits - autosave already
+// covers a crash/close (see archiveAutosaveIfAny above), but that only surfaces again on the NEXT
+// launch, which is cold comfort to someone who just quit mid-edit not realising anything was at risk.
+// The browser shows its own generic wording no matter what's put in e.returnValue (a security
+// restriction, not a bug here) - this is deliberately best-effort only, since iOS Safari in
+// particular does not reliably fire beforeunload for tab-close/backgrounding. See the "hasUnsaved"
+// dot on the save button (wired up in updateLiveMiniNow) for the platform-independent fallback.
+window.addEventListener('beforeunload',e=>{if(hasUnsavedWorkRightNow()){e.preventDefault();e.returnValue='';}});
 // hydrateSavedItemsFromIDB (called here, before the studio scripts below even parse, since
 // IndexedDB never resolves as fast as the remaining synchronous script - see its own comment)
 // must fully finish loading the REAL saved-patterns library into savedTemplates before
@@ -4537,7 +4582,7 @@ window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();
 // real-world data shape the synthetic tests didn't cover, log it but still fall through to
 // setPreset('grid') so the app boots into a usable (if not perfectly recovered) state instead of
 // hanging blank forever.
-hydrateSavedItemsFromIDB().then(()=>archiveAutosaveIfAny()).catch(e=>console.warn('boot hydrate/archive failed',e)).then(()=>setPreset('grid'));
+hydrateSavedItemsFromIDB().then(()=>archiveAutosaveIfAny()).catch(e=>console.warn('boot hydrate/archive failed',e)).then(()=>{setPreset('grid');refreshSaveIndicator();});
 // Fixed-width side panels squeeze the canvas on small/landscape screens. Collapsing a panel down
 // to a thin strip (its box contents just hide, nothing is lost) hands that width straight to the
 // canvas column since it's the flexible 1fr track. render() is called immediately (for the parts
