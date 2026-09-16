@@ -975,6 +975,26 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
 </defs>
 </svg>
+<style>
+/* Boot loading overlay: covers the app until hydrateSavedItemsFromIDB/archiveAutosaveIfAny/
+   setPreset('grid') finish (see the boot sequence, main script). Static HTML like the header
+   buttons paints instantly regardless of JS, but the canvas and side panels stay empty until that
+   chain resolves - on a large saved-items library this can take several seconds, and without this
+   overlay that reads as "the app is broken" rather than "the app is still loading". Colors are
+   fixed (not theme-aware) since the real theme class isn't applied until JS runs - this only ever
+   shows for a few seconds, so it doesn't need to match either theme, just be readable on its own. */
+#bootLoadingOverlay{position:fixed;inset:0;z-index:99999;background:#171020;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;transition:opacity .25s ease}
+#bootLoadingOverlay.bootDone{opacity:0;pointer-events:none}
+.bootSpinner{width:44px;height:44px;border-radius:50%;border:4px solid rgba(255,255,255,.18);border-top-color:#ff8ed6;animation:bootSpin 0.9s linear infinite}
+@keyframes bootSpin{to{transform:rotate(360deg)}}
+#bootLoadingText{color:#fff8fb;font-size:15px;font-weight:800;margin:0}
+#bootLoadingSlow{color:#d8cede;font-size:13px;line-height:1.4;margin:0;max-width:420px}
+</style>
+<div id="bootLoadingOverlay">
+  <div class="bootSpinner"></div>
+  <p id="bootLoadingText">loading your collection…</p>
+  <p id="bootLoadingSlow" class="hidden">Still going — a large saved collection can take a while on this device. Once it's open, the "select unsaved work" cleanup tool in the saved-patterns filmstrip can trim it down.</p>
+</div>
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>pattern playground</h1><p>v63 · visible editable blueprint classics 🐕🎨</p></div></div>
@@ -4602,7 +4622,17 @@ window.addEventListener('beforeunload',e=>{if(hasUnsavedWorkRightNow()){e.preven
 // real-world data shape the synthetic tests didn't cover, log it but still fall through to
 // setPreset('grid') so the app boots into a usable (if not perfectly recovered) state instead of
 // hanging blank forever.
-hydrateSavedItemsFromIDB().then(()=>archiveAutosaveIfAny()).catch(e=>console.warn('boot hydrate/archive failed',e)).then(()=>{setPreset('grid');refreshSaveIndicator();});
+// Shows the "still going" hint only if boot is genuinely slow (not on every normal load) - cleared
+// the instant the overlay is dismissed below, whichever path got there.
+const _bootSlowTimer=setTimeout(()=>{const el=document.getElementById('bootLoadingSlow');if(el)el.classList.remove('hidden');},4000);
+function _dismissBootOverlay(){
+ clearTimeout(_bootSlowTimer);
+ const o=document.getElementById('bootLoadingOverlay');
+ if(!o)return;
+ o.classList.add('bootDone');
+ setTimeout(()=>o.remove(),300);
+}
+hydrateSavedItemsFromIDB().then(()=>archiveAutosaveIfAny()).catch(e=>console.warn('boot hydrate/archive failed',e)).then(()=>{setPreset('grid');refreshSaveIndicator();_dismissBootOverlay();});
 // Fixed-width side panels squeeze the canvas on small/landscape screens. Collapsing a panel down
 // to a thin strip (its box contents just hide, nothing is lost) hands that width straight to the
 // canvas column since it's the flexible 1fr track. render() is called immediately (for the parts
