@@ -1389,6 +1389,16 @@ function stripeDefaultTexture(){return {enabled:true,bgEnabled:false,bgColor:'#f
 let texture=blankTexture();
 let textureStore={};
 let mode='repeat', edgeClones=true, current=null, selected=null, activeColor='hero';
+// Edge-clone tile range for export (renderPatternToCanvas/renderSavedTemplateToCanvas below). A
+// plain grid's true repeat unit is exactly one STAGE tile, so neighbours one step out (-1..1) are
+// enough to cover every brick's wraparound overflow. But halfdrop/halfdropflip/halfbrick's true
+// seamless unit is TWO stage tiles wide or tall (see tileDimsForEngine) - the far edge of that
+// second tile still needs its own neighbour one step beyond IT (tx/ty=2) to wrap correctly, which
+// -1..1 never reaches. The existing per-tile bounds check already culls anything that lands off
+// the export canvas, so widening this range costs a bit of cheap bounds-check math, not extra
+// actual drawing - safe to keep generous enough to cover every engine's true unit at once instead
+// of special-casing each one.
+const EDGE_CLONE_RANGE=[-2,-1,0,1,2];
 // Which layout CARD should highlight - separate from `current` (which also doubles as the key
 // blueprintStore/updateLiveMini save live edits under, every render, forever, as long as it's
 // active). Retiling while keeping your existing bricks (see selectLayout's unchecked path) can't
@@ -2198,7 +2208,7 @@ async function renderPatternToCanvas(canvas,pxW,pxH,tilePx,transparentBg){
  if(!transparentBg){ctx.fillStyle='#fff';ctx.fillRect(0,0,pxW,pxH);}
  const scale=tilePx/STAGE;
  const tiles=[[0,0]];
- if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
+ if(edgeClones){EDGE_CLONE_RANGE.forEach(tx=>EDGE_CLONE_RANGE.forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
 
  let bgTileCanvas=null,classicTileCanvas=null;
  if(!transparentBg&&window.bgGetSnapshot){const rec=window.bgGetSnapshot();if(rec&&rec.type==='pattern'&&rec.dataUrl)await loadImageCached(rec.dataUrl);if(rec&&window.bgRenderToTileCanvas)bgTileCanvas=window.bgRenderToTileCanvas(rec,tilePx);}
@@ -2216,7 +2226,7 @@ async function renderPatternToCanvas(canvas,pxW,pxH,tilePx,transparentBg){
  });
 
  const drawList=[];
- bricks.forEach(b=>{drawList.push({b,tx:0,ty:0});if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty});}));}});
+ bricks.forEach(b=>{drawList.push({b,tx:0,ty:0});if(edgeClones){EDGE_CLONE_RANGE.forEach(tx=>EDGE_CLONE_RANGE.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty});}));}});
  const sf=getPatternScale(texture)/100;
  for(const {b,tx,ty} of drawList){
   const off=engineOffset(tx,ty);
@@ -2281,7 +2291,7 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg
  const scale=tilePx/STAGE;
  const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');
  const tiles=[[0,0]];
- if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
+ if(edgeClones){EDGE_CLONE_RANGE.forEach(tx=>EDGE_CLONE_RANGE.forEach(ty=>{if(tx||ty)tiles.push([tx,ty]);}));}
 
  let bgTileCanvas=null,classicTileCanvas=null;
  if(!transparentBg&&t.background&&t.background.type==='pattern'&&t.background.dataUrl)await loadImageCached(t.background.dataUrl);
@@ -2306,7 +2316,7 @@ async function renderSavedTemplateToCanvas(canvas,t,pxW,pxH,tilePx,transparentBg
  });
 
  const drawList=[];
- (t.bricks||[]).forEach(b=>{drawList.push({b,tx:0,ty:0});if(edgeClones){[-1,0,1].forEach(tx=>[-1,0,1].forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty});}));}});
+ (t.bricks||[]).forEach(b=>{drawList.push({b,tx:0,ty:0});if(edgeClones){EDGE_CLONE_RANGE.forEach(tx=>EDGE_CLONE_RANGE.forEach(ty=>{if(tx||ty)drawList.push({b,tx,ty});}));}});
  const sf=getPatternScale(t.texture)/100;
  for(const {b,tx,ty} of drawList){
   const off=engineOffsetFor(engine,tx,ty);
