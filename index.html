@@ -978,7 +978,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🧱</div><div><h1>pattern playground</h1><p>v63 · visible editable blueprint classics 🐕🎨</p></div></div>
-  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save pattern</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this pattern's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><button id="downloadProjectBtn" class="small" title="Download everything - current pattern, all saved patterns, classics and backgrounds - as this app's own .pplayground file, independent of this browser/device"><svg class="btnIcon"><use href="#i-download"/></svg>download .pplayground</button><button id="loadProjectBtn" class="small" title="Restore from a .pplayground project file downloaded earlier"><svg class="btnIcon"><use href="#i-target"/></svg>load .pplayground</button><input id="loadProjectFile" type="file" accept=".pplayground,application/json,.json" style="display:none"><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset pattern</button><button id="newPatternBtn" class="small" title="Save this pattern to your saved patterns, then start a fresh empty canvas on the same repeat layout"><svg class="btnIcon"><use href="#i-sparkle"/></svg>new pattern</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
+  <div class="topActions"><span class="pill"><svg class="btnIcon"><use href="#i-dice"/></svg>v60 seamless classics</span><button id="openTextureStudio" class="small primary"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="openBackgroundStudio" class="small primary"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="openPortfolio" class="small primary" title="See every saved repeat pattern, classic and background together in one gallery, and download it all as a single portfolio image"><svg class="btnIcon"><use href="#i-grid"/></svg>portfolio</button><button id="openDownload" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download</button><button id="undoBtn" class="small"><svg class="btnIcon"><use href="#i-undo"/></svg>undo</button><button id="redoBtn" class="small"><svg class="btnIcon"><use href="#i-redo"/></svg>redo</button><button id="saveBtn" class="small"><svg class="btnIcon"><use href="#i-save"/></svg>save pattern</button><button id="quickSaveBtn" class="small" title="Instantly save a single checkpoint you can jump back to"><svg class="btnIcon"><use href="#i-save"/></svg>quick save</button><button id="quickLoadBtn" class="small" title="Jump back to your last quick save"><svg class="btnIcon"><use href="#i-target"/></svg>quick load</button><button id="exportForPlayground" class="small" title="Export this pattern's layout for Pattern Playground"><svg class="btnIcon"><use href="#i-download"/></svg>export for playground</button><button id="downloadProjectBtn" class="small" title="Download everything - current pattern, all saved patterns, classics and backgrounds - as this app's own .pplayground file, independent of this browser/device"><svg class="btnIcon"><use href="#i-download"/></svg>download .pplayground</button><button id="loadProjectBtn" class="small" title="Restore from a .pplayground project file downloaded earlier"><svg class="btnIcon"><use href="#i-target"/></svg>load .pplayground</button><input id="loadProjectFile" type="file" accept=".pplayground,application/json,.json" style="display:none"><span id="saveStatus" class="saveStatus"></span><button id="resetBtn" class="small"><svg class="btnIcon"><use href="#i-refresh"/></svg>reset pattern</button><button id="newPatternBtn" class="small" title="Save this pattern to your saved patterns, then start a fresh empty canvas on the same repeat layout"><svg class="btnIcon"><use href="#i-sparkle"/></svg>new pattern</button><button id="themeToggle" class="small" title="Switch theme"><svg class="btnIcon" id="themeToggleIcon"><use href="#i-moon"/></svg><span id="themeToggleLabel">dark mode</span></button></div>
 </header>
 <main>
   <aside class="side left">
@@ -5797,6 +5797,10 @@ function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();c
 async function tsDownloadSelectedZip(){
  await downloadSelectedAsZip(saved,tsSelectedIdx,async(item,w)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,item.state,'single',false);return canvas;},'classic pattern');
 }
+// renderPreview is private to this IIFE - the collection portfolio (main script, outside this
+// closure) needs a way to render an arbitrary saved classic to a square canvas the same way this
+// filmstrip's own zip export does above.
+window.tsRenderSavedItemToCanvas=function(item,size){const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;renderPreview(canvas,size,item.state,'single',false);return canvas;};
 /* v66 template-mode bridge: Classics Studio is a self-contained canvas editor with no
    link to the live template. "apply to template" snapshots the edited pattern into
    tsAppliedState, which is what actually shows on the main stage / travels with a
@@ -5997,6 +6001,114 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
     <div id="bgPatternPickerList" style="overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;align-content:start"></div>
   </div>
 </div>
+
+<div id="portfolioOverlay" class="bgStudioOverlay" style="z-index:20000" aria-hidden="true">
+  <div class="bgStudioModal" style="grid-template-rows:auto 1fr;height:min(880px,92dvh);max-height:92dvh;width:min(1100px,calc(100vw - 16px))">
+    <div class="bgStudioHeader">
+      <div><h2>collection portfolio</h2><p>every saved repeat pattern, classic and background - together in one place</p></div>
+      <div class="topActions"><button id="portfolioDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download portfolio</button><span id="portfolioDownloadStatus" class="saveStatus"></span><button id="portfolioClose" class="small bgClose">×</button></div>
+    </div>
+    <div id="portfolioBody" style="overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-content:start"></div>
+  </div>
+</div>
+<style>
+.portfolioCard{padding:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,235,250,.14);border-radius:12px;}
+.portfolioCard img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:8px;background:#fff;display:block;}
+.portfolioEmpty{grid-column:1/-1;font-size:13px;color:var(--muted);line-height:1.4;}
+body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:rgba(58,46,38,.24)!important;}
+</style>
+<script id="v68-collection-portfolio">
+(function(){
+ // Combines the three separate saved-item libraries (repeat patterns / classics / backgrounds)
+ // into one flat list for the portfolio gallery and its downloadable collage - each rendered to a
+ // plain square thumbnail with the same look regardless of which studio it came from, since the
+ // point here is seeing the whole collection "come together", not where each piece was made.
+ function allPortfolioItems(){
+  const patterns=(savedTemplates||[]).map(t=>({type:'pattern',ref:t}));
+  const classics=(window.tsGetSavedList?window.tsGetSavedList():[]).map(t=>({type:'classic',ref:t}));
+  const backgrounds=(window.bgGetSavedList?window.bgGetSavedList():[]).map(t=>({type:'background',ref:t}));
+  return [...patterns,...classics,...backgrounds];
+ }
+ // Not loadImageCached: that cache is keyed by (and kept forever for) the exact data URL string,
+ // meant for stable assets reused across many exports - these portfolio thumbnails are freshly
+ // baked, one-off, unique-per-open data URLs, so caching them would just leak memory every time
+ // the gallery is opened or re-downloaded.
+ function loadImageOnce(src){
+  return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('image failed to load'));img.src=src;});
+ }
+ async function portfolioItemDataUrl(item,size){
+  if(item.type==='pattern')return await renderSavedTemplateSquareDataUrl(item.ref,size);
+  if(item.type==='classic'&&window.tsRenderSavedItemToCanvas)return window.tsRenderSavedItemToCanvas(item.ref,size).toDataURL('image/png');
+  if(item.type==='background'&&window.bgRenderSavedItemToCanvas)return (await window.bgRenderSavedItemToCanvas(item.ref,size)).toDataURL('image/png');
+  return null;
+ }
+ async function renderPortfolioBody(){
+  const body=document.getElementById('portfolioBody');
+  const items=allPortfolioItems();
+  body.innerHTML='';
+  if(!items.length){body.innerHTML='<p class="portfolioEmpty">Nothing saved yet — save a repeat pattern, a classic, or a background first and it\'ll show up here.</p>';return;}
+  const note=document.createElement('p');note.className='portfolioEmpty';note.textContent=`rendering ${items.length} preview${items.length===1?'':'s'}…`;
+  body.appendChild(note);
+  for(const item of items){
+   try{
+    const dataUrl=await portfolioItemDataUrl(item,300);
+    if(!dataUrl)continue;
+    const card=document.createElement('div');card.className='portfolioCard';
+    const img=document.createElement('img');img.src=dataUrl;
+    card.appendChild(img);body.appendChild(card);
+   }catch(e){console.warn('portfolio thumb failed',item.ref&&item.ref.name,e);}
+  }
+  note.remove();
+ }
+ function openPortfolio(){
+  const o=document.getElementById('portfolioOverlay');
+  o.classList.add('open');o.setAttribute('aria-hidden','false');
+  renderPortfolioBody();
+ }
+ function closePortfolio(){const o=document.getElementById('portfolioOverlay');o.classList.remove('open');o.setAttribute('aria-hidden','true');}
+ async function downloadPortfolio(){
+  const items=allPortfolioItems();
+  const btn=document.getElementById('portfolioDownloadBtn'),status=document.getElementById('portfolioDownloadStatus');
+  if(!items.length){if(status)status.textContent='nothing saved yet to put in a portfolio';setTimeout(()=>{if(status)status.textContent='';},4000);return;}
+  btn.disabled=true;if(status)status.textContent=`rendering ${items.length} pattern${items.length===1?'':'s'}…`;
+  try{
+   // A roughly square grid (rather than always-5-wide) so a tiny collection doesn't end up as
+   // one long thin strip, and a huge one doesn't end up absurdly wide.
+   const tile=320,gap=16,margin=28;
+   const cols=Math.max(3,Math.min(6,Math.ceil(Math.sqrt(items.length))));
+   const rows=Math.ceil(items.length/cols);
+   const canvas=document.createElement('canvas');
+   canvas.width=margin*2+cols*tile+(cols-1)*gap;
+   canvas.height=margin*2+rows*tile+(rows-1)*gap;
+   const ctx=canvas.getContext('2d');
+   ctx.fillStyle='#f2e6d3';ctx.fillRect(0,0,canvas.width,canvas.height);
+   for(let i=0;i<items.length;i++){
+    const col=i%cols,row=Math.floor(i/cols);
+    const x=margin+col*(tile+gap),y=margin+row*(tile+gap);
+    try{
+     const dataUrl=await portfolioItemDataUrl(items[i],tile*2);
+     if(!dataUrl)continue;
+     const img=await loadImageOnce(dataUrl);
+     ctx.fillStyle='#fff';ctx.fillRect(x,y,tile,tile);
+     ctx.drawImage(img,x,y,tile,tile);
+    }catch(e){console.warn('portfolio download: skipped item',items[i].ref&&items[i].ref.name,e);}
+   }
+   const bytes=await canvasToDpiPngBytes(canvas,150);
+   triggerBlobDownload(new Blob([bytes],{type:'image/png'}),'pattern-collection-portfolio.png');
+   if(status)status.textContent='downloaded ✓';
+  }catch(e){
+   console.error('portfolio download failed',e);
+   if(status)status.textContent='download failed — see console';
+  }
+  btn.disabled=false;
+  setTimeout(()=>{if(status)status.textContent='';},3000);
+ }
+ document.getElementById('openPortfolio').onclick=openPortfolio;
+ document.getElementById('portfolioClose').onclick=closePortfolio;
+ document.getElementById('portfolioOverlay').addEventListener('click',e=>{if(e.target.id==='portfolioOverlay')closePortfolio();});
+ document.getElementById('portfolioDownloadBtn').onclick=downloadPortfolio;
+})();
+</script>
 
 
 <script>
@@ -6443,6 +6555,10 @@ async function renderBackgroundPNGBytes(rec,w,dpi){if(rec&&rec.type==='pattern'&
 async function bgDownloadSelectedZip(){
  await downloadSelectedAsZip(bgSaved,bgSelectedIdx,async(item,w)=>{if(item&&item.type==='pattern'&&item.dataUrl)await loadImageCached(item.dataUrl);return renderBackgroundToCanvasSized(item,w);},'background');
 }
+// renderBackgroundToCanvasSized is private to this IIFE - the collection portfolio (main script,
+// outside this closure) needs a way to render an arbitrary saved background to a square canvas
+// the same way this filmstrip's own zip export does above.
+window.bgRenderSavedItemToCanvas=async function(item,w){if(item&&item.type==='pattern'&&item.dataUrl)await loadImageCached(item.dataUrl);return renderBackgroundToCanvasSized(item,w);};
 function applyBgToPKM(){bgRecipe.enabled=true;bgDataUrl=recipeToUrl(bgRecipe);try{localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){} if(typeof render==='function')render(); if(typeof renderGrid==='function')renderGrid();}
 function clearBg(){bgRecipe.enabled=false;bgDataUrl='';try{localStorage.removeItem('pkmActiveBackgroundV34');}catch(e){} if(typeof render==='function')render();}
 function openBg(){q('backgroundStudioOverlay').classList.add('open');q('backgroundStudioOverlay').setAttribute('aria-hidden','false');buildBgUI();renderBgFilm();if(window.mountColourMode){window.mountColourMode('bgColourModeSlot');}bgShowMode('colour');if(bgRecipe.type==='watercolour')window.cmSetBgTarget?.('tex');}
