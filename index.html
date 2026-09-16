@@ -6177,9 +6177,15 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
   if(!items.length){body.innerHTML='<p class="portfolioEmpty">Your portfolio is empty — tap the ★ on any saved repeat pattern, classic, background, or the hero image to add it here.</p>';return;}
   const note=document.createElement('p');note.className='portfolioEmpty';note.textContent=`rendering ${items.length} preview${items.length===1?'':'s'}…`;
   body.appendChild(note);
+  // Cards render at up to ~280 CSS px wide (grid-template-columns:repeat(auto-fill,minmax(150px,1fr))
+  // inside a modal up to 1100px). Rendering the thumbnail at exactly that CSS size looks fine on a
+  // standard display, but on a retina/iPad screen (devicePixelRatio 2-3) it's then upscaled past its
+  // own resolution by the browser and looks soft - multiplying by devicePixelRatio (capped at 2.5 so
+  // a very high-DPI device doesn't render absurdly large thumbnails) keeps it crisp at actual size.
+  const previewPx=Math.round(280*Math.min(window.devicePixelRatio||1,2.5));
   for(const item of items){
    try{
-    const dataUrl=await portfolioItemDataUrl(item,300);
+    const dataUrl=await portfolioItemDataUrl(item,previewPx);
     if(!dataUrl)continue;
     const card=document.createElement('div');card.className='portfolioCard';card.dataset.type=item.type;card.dataset.name=item.ref.name||'';
     const img=document.createElement('img');img.src=dataUrl;img.alt=`${item.type}: ${item.ref.name||'untitled'}`;
