@@ -6026,7 +6026,7 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
   <div class="bgStudioModal" style="grid-template-rows:auto 1fr;height:min(880px,92dvh);max-height:92dvh;width:min(1100px,calc(100vw - 16px))">
     <div class="bgStudioHeader">
       <div><h2>collection portfolio</h2><p>your starred repeat patterns, classics and backgrounds - together in one place</p></div>
-      <div class="topActions"><button id="portfolioDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download portfolio</button><button id="portfolioDownloadZipBtn" class="small primary" title="Download every saved item as its own full-size PNG, bundled into one ZIP"><svg class="btnIcon"><use href="#i-download"/></svg>download all (ZIP)</button><span id="portfolioDownloadStatus" class="saveStatus"></span><button id="portfolioClose" class="small bgClose">×</button></div>
+      <div class="topActions"><label style="font-size:12px;color:var(--muted);font-weight:800;display:flex;align-items:center;gap:5px">sort<select id="portfolioSortSelect" class="small"><option value="added">recently added</option><option value="name">name (A–Z)</option><option value="type">by type</option></select></label><button id="portfolioDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download portfolio</button><button id="portfolioDownloadZipBtn" class="small primary" title="Download every saved item as its own full-size PNG, bundled into one ZIP"><svg class="btnIcon"><use href="#i-download"/></svg>download all (ZIP)</button><span id="portfolioDownloadStatus" class="saveStatus"></span><button id="portfolioClose" class="small bgClose">×</button></div>
     </div>
     <div id="portfolioBody" style="overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-content:start"></div>
   </div>
@@ -6065,6 +6065,21 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
   // re-renders this same body, so nothing further is needed here.
   togglePortfolioMembership(item.type,item.ref);
  }
+ // Persisted as a plain UI preference (not part of the saved-items blob) - it's how the gallery
+ // looks, not data that needs to travel with a .pplayground backup or survive on another device.
+ let portfolioSortMode=localStorage.getItem('portfolioSortMode')||'added';
+ function sortPortfolioItems(items){
+  if(portfolioSortMode==='name')return items.slice().sort((a,b)=>(a.ref.name||'').localeCompare(b.ref.name||''));
+  if(portfolioSortMode==='type'){
+   const typeRank={pattern:0,classic:1,background:2};
+   return items.slice().sort((a,b)=>(typeRank[a.type]-typeRank[b.type])||(a.ref.name||'').localeCompare(b.ref.name||''));
+  }
+  // 'added' (default): most-recently-starred first. portfolioItemIds is a Set, which iterates in
+  // insertion order, so its position there doubles as a free "when was this starred" timestamp -
+  // no separate bookkeeping needed.
+  const order=[...portfolioItemIds];
+  return items.slice().sort((a,b)=>order.indexOf(portfolioIdFor(b.type,b.ref))-order.indexOf(portfolioIdFor(a.type,a.ref)));
+ }
  // Not loadImageCached: that cache is keyed by (and kept forever for) the exact data URL string,
  // meant for stable assets reused across many exports - these portfolio thumbnails are freshly
  // baked, one-off, unique-per-open data URLs, so caching them would just leak memory every time
@@ -6080,7 +6095,7 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
  }
  async function renderPortfolioBody(){
   const body=document.getElementById('portfolioBody');
-  const items=allPortfolioItems();
+  const items=sortPortfolioItems(allPortfolioItems());
   body.innerHTML='';
   if(!items.length){body.innerHTML='<p class="portfolioEmpty">Your portfolio is empty — tap the ★ on any saved repeat pattern, classic, or background to add it here.</p>';return;}
   const note=document.createElement('p');note.className='portfolioEmpty';note.textContent=`rendering ${items.length} preview${items.length===1?'':'s'}…`;
@@ -6089,8 +6104,8 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
    try{
     const dataUrl=await portfolioItemDataUrl(item,300);
     if(!dataUrl)continue;
-    const card=document.createElement('div');card.className='portfolioCard';
-    const img=document.createElement('img');img.src=dataUrl;
+    const card=document.createElement('div');card.className='portfolioCard';card.dataset.type=item.type;card.dataset.name=item.ref.name||'';
+    const img=document.createElement('img');img.src=dataUrl;img.alt=`${item.type}: ${item.ref.name||'untitled'}`;
     const removeBtn=document.createElement('button');removeBtn.className='portfolioCardRemove';removeBtn.title='remove from portfolio';removeBtn.textContent='×';
     removeBtn.onclick=()=>removeFromPortfolio(item);
     card.appendChild(removeBtn);card.appendChild(img);body.appendChild(card);
@@ -6111,7 +6126,7 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
   if(o&&o.classList.contains('open'))renderPortfolioBody();
  };
  async function downloadPortfolio(){
-  const items=allPortfolioItems();
+  const items=sortPortfolioItems(allPortfolioItems());
   const btn=document.getElementById('portfolioDownloadBtn'),status=document.getElementById('portfolioDownloadStatus');
   if(!items.length){if(status)status.textContent='your portfolio is empty — star a few saved items first';setTimeout(()=>{if(status)status.textContent='';},4000);return;}
   btn.disabled=true;if(status)status.textContent=`rendering ${items.length} pattern${items.length===1?'':'s'}…`;
@@ -6152,7 +6167,7 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
  // filmstrip already uses (downloadSelectedAsZip/makeZip/openDownloadPanel), just driven across all
  // three libraries at once instead of one filmstrip's current selection.
  async function downloadAllAsZip(){
-  const items=allPortfolioItems();
+  const items=sortPortfolioItems(allPortfolioItems());
   if(!items.length){
    const status=document.getElementById('portfolioDownloadStatus');
    if(status){status.textContent='your portfolio is empty — star a few saved items first';setTimeout(()=>{status.textContent='';},4000);}
@@ -6194,6 +6209,9 @@ body.theme-light .filmPortfolio.active{background:rgba(255,196,64,.92)!important
  document.getElementById('portfolioOverlay').addEventListener('click',e=>{if(e.target.id==='portfolioOverlay')closePortfolio();});
  document.getElementById('portfolioDownloadBtn').onclick=downloadPortfolio;
  document.getElementById('portfolioDownloadZipBtn').onclick=downloadAllAsZip;
+ const sortSelect=document.getElementById('portfolioSortSelect');
+ sortSelect.value=portfolioSortMode;
+ sortSelect.onchange=()=>{portfolioSortMode=sortSelect.value;try{localStorage.setItem('portfolioSortMode',portfolioSortMode);}catch(e){}renderPortfolioBody();};
 })();
 </script>
 
