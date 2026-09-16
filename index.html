@@ -6002,11 +6002,11 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
   </div>
 </div>
 
-<div id="portfolioOverlay" class="bgStudioOverlay" style="z-index:20000" aria-hidden="true">
+<div id="portfolioOverlay" class="bgStudioOverlay" aria-hidden="true">
   <div class="bgStudioModal" style="grid-template-rows:auto 1fr;height:min(880px,92dvh);max-height:92dvh;width:min(1100px,calc(100vw - 16px))">
     <div class="bgStudioHeader">
       <div><h2>collection portfolio</h2><p>every saved repeat pattern, classic and background - together in one place</p></div>
-      <div class="topActions"><button id="portfolioDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download portfolio</button><span id="portfolioDownloadStatus" class="saveStatus"></span><button id="portfolioClose" class="small bgClose">×</button></div>
+      <div class="topActions"><button id="portfolioDownloadBtn" class="small primary"><svg class="btnIcon"><use href="#i-download"/></svg>download portfolio</button><button id="portfolioDownloadZipBtn" class="small primary" title="Download every saved item as its own full-size PNG, bundled into one ZIP"><svg class="btnIcon"><use href="#i-download"/></svg>download all (ZIP)</button><span id="portfolioDownloadStatus" class="saveStatus"></span><button id="portfolioClose" class="small bgClose">×</button></div>
     </div>
     <div id="portfolioBody" style="overflow:auto;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-content:start"></div>
   </div>
@@ -6103,10 +6103,53 @@ body.theme-light .portfolioCard{background:var(--btnTan)!important;border-color:
   btn.disabled=false;
   setTimeout(()=>{if(status)status.textContent='';},3000);
  }
+ // Full-size individual PNGs (not the small collage thumbnails above), one per saved item,
+ // bundled into a single ZIP - the same "select some, download as ZIP" machinery each studio's own
+ // filmstrip already uses (downloadSelectedAsZip/makeZip/openDownloadPanel), just driven across all
+ // three libraries at once instead of one filmstrip's current selection.
+ async function downloadAllAsZip(){
+  const items=allPortfolioItems();
+  if(!items.length){
+   const status=document.getElementById('portfolioDownloadStatus');
+   if(status){status.textContent='nothing saved yet to zip up';setTimeout(()=>{status.textContent='';},4000);}
+   return;
+  }
+  window.openDownloadPanel(`download whole collection (${items.length} items) as ZIP`,async(w,dpi)=>{
+   const files=[],used=new Set(),failed=[];
+   for(const item of items){
+    const t=item.ref;
+    try{
+     let canvas=null;
+     if(item.type==='pattern'){
+      const engine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');
+      const dims=tileDimsForEngine(engine,w);
+      canvas=document.createElement('canvas');canvas.width=dims.w;canvas.height=dims.h;
+      await renderSavedTemplateToCanvas(canvas,t,dims.w,dims.h,w,false);
+     }else if(item.type==='classic'&&window.tsRenderSavedItemToCanvas){
+      canvas=window.tsRenderSavedItemToCanvas(t,w);
+     }else if(item.type==='background'&&window.bgRenderSavedItemToCanvas){
+      canvas=await window.bgRenderSavedItemToCanvas(t,w);
+     }
+     if(!canvas)throw new Error('no renderer for item type '+item.type);
+     const bytes=await canvasToDpiPngBytes(canvas,dpi);
+     let base=slugName(item.type+'-'+(t.name||'untitled')),name=base,n=2;while(used.has(name)){name=base+'-'+n;n++;}used.add(name);
+     files.push({name:`${name}.png`,data:bytes});
+    }catch(e){
+     console.warn('portfolio zip: skipped item',t&&t.name,e);
+     failed.push((t&&t.name)||item.type);
+    }
+   }
+   if(!files.length)throw new Error('nothing exported - every item failed to render');
+   triggerBlobDownload(makeZip(files),`pattern-collection-${files.length}.zip`);
+   if(failed.length)return `downloaded ${files.length}/${items.length} — ${failed.length} failed (see console): ${failed.slice(0,5).join(', ')}${failed.length>5?'…':''}`;
+   return `downloaded ${files.length} ✓`;
+  },w=>`Exports all ${items.length} saved items (patterns, classics, backgrounds) as their own ${w}×${w}px PNGs, bundled in one ZIP.`,items.length>10?1200:2200);
+ }
  document.getElementById('openPortfolio').onclick=openPortfolio;
  document.getElementById('portfolioClose').onclick=closePortfolio;
  document.getElementById('portfolioOverlay').addEventListener('click',e=>{if(e.target.id==='portfolioOverlay')closePortfolio();});
  document.getElementById('portfolioDownloadBtn').onclick=downloadPortfolio;
+ document.getElementById('portfolioDownloadZipBtn').onclick=downloadAllAsZip;
 })();
 </script>
 
