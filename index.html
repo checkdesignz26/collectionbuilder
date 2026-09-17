@@ -1090,7 +1090,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
   <aside class="side right">
     <button class="sideCollapseBtn" id="sideCollapseRight" title="collapse this panel to give the canvas more room">collapse ▶</button>
     <div class="box"><h2>control room ✨</h2><div class="body">
-      <p class="hint">Alignment uses the selected brick as the anchor. Scope decides what follows it.</p>
+      <p class="hint">Align snaps the selected brick to the tile's real edge/middle - scope decides what else comes along with it.</p>
       <div class="scopeRow"><button id="scopeSingle"><svg class="btnIcon"><use href="#i-one"/></svg>just this one</button><button id="scopeType" class="active"><svg class="btnIcon"><use href="#i-target"/></svg>same shape</button><button id="scopeRole"><svg class="btnIcon"><use href="#i-palette"/></svg>same colour</button><button id="scopeAll"><svg class="btnIcon"><use href="#i-grid"/></svg>all bricks</button></div>
       <p class="hint">Or group specific bricks by hand - tap "select multiple" then tap each one (handy for a row of freely-placed motifs that don't share a shape). While 2+ are grouped, drag/flip/align/etc. above move only that group; everything else on the canvas stays put.</p>
       <div class="grid2"><button id="multiSelectBtn"><svg class="btnIcon"><use href="#i-target"/></svg>select multiple</button><button id="clearGroupBtn" class="hidden"><svg class="btnIcon"><use href="#i-x-circle"/></svg>clear group</button></div>
@@ -4187,28 +4187,32 @@ function brickAABBHalf(b){
 }
 function edgeX(b,side){const{hw}=brickAABBHalf(b);return side==='left'?b.x-hw:side==='right'?b.x+hw:b.x}
 function edgeY(b,side){const{hh}=brickAABBHalf(b);return side==='top'?b.y-hh:side==='bottom'?b.y+hh:b.y}
-// With nothing else in scope to align against (every freely-placed motif gets its own unique
-// type - see placeMotifFreely - so the default "same shape" scope never finds a partner unless
-// bricks are grouped by hand via "select multiple" first), aligning used to just silently do
-// nothing: the anchor "aligned" against itself. Falling back to aligning the one shape against the
-// STAGE's own edges/centre instead makes align always do something sensible, whether or not
-// anything's grouped yet - the general case a group align (below) narrows once 2+ bricks are in
-// scope.
+// "left"/"centre"/"right"/"top"/"middle"/"bottom" name an absolute place on the TILE, not "wherever
+// the anchor happens to be sitting" - so the anchor itself always snaps to that true tile edge/
+// centre first, then anything else in scope (a shared-shape/colour/all group, or a hand-picked
+// "select multiple" group) matches that same true position. Two things this fixes at once:
+// - A lone selected brick (every freely-placed motif gets its own unique type - see
+//   placeMotifFreely - so the default "same shape" scope often finds no partner unless bricks are
+//   grouped by hand first) used to "align" against itself and visibly do nothing. Now it always
+//   moves to the tile's real edge/centre, group or no group.
+// - A brick selected inside a bigger same-shape/colour scope (several placeholders of one shape
+//   dropped across a repeat layout, say) used to leave the anchor exactly where it was and pull
+//   every OTHER matching brick to that possibly off-centre spot - so tapping "middle" on a brick
+//   sitting in a corner of its own tile visibly did nothing to IT, even though other bricks
+//   elsewhere may have jumped. Now every scoped brick, anchor included, ends up on the tile's
+//   actual middle line together.
 function alignGroup(kind){
  const anchor=selectedBrick();if(!anchor)return;
  pushHistory();
  const arr=scopedBricks();
- if(arr.length<2){
-  const{hw,hh}=brickAABBHalf(anchor);
-  if(kind==='left')anchor.x=hw; if(kind==='right')anchor.x=100-hw; if(kind==='centre')anchor.x=50;
-  if(kind==='top')anchor.y=hh; if(kind==='bottom')anchor.y=100-hh; if(kind==='middle')anchor.y=50;
-  render();syncControls();
-  return;
- }
+ const{hw,hh}=brickAABBHalf(anchor);
+ if(kind==='left')anchor.x=hw; if(kind==='right')anchor.x=100-hw; if(kind==='centre')anchor.x=50;
+ if(kind==='top')anchor.y=hh; if(kind==='bottom')anchor.y=100-hh; if(kind==='middle')anchor.y=50;
  arr.forEach(b=>{
-  const{hw,hh}=brickAABBHalf(b);
-  if(kind==='left')b.x=edgeX(anchor,'left')+hw; if(kind==='right')b.x=edgeX(anchor,'right')-hw; if(kind==='centre')b.x=anchor.x;
-  if(kind==='top')b.y=edgeY(anchor,'top')+hh; if(kind==='bottom')b.y=edgeY(anchor,'bottom')-hh; if(kind==='middle')b.y=anchor.y;
+  if(b===anchor)return;
+  const{hw:bhw,hh:bhh}=brickAABBHalf(b);
+  if(kind==='left')b.x=edgeX(anchor,'left')+bhw; if(kind==='right')b.x=edgeX(anchor,'right')-bhw; if(kind==='centre')b.x=anchor.x;
+  if(kind==='top')b.y=edgeY(anchor,'top')+bhh; if(kind==='bottom')b.y=edgeY(anchor,'bottom')-bhh; if(kind==='middle')b.y=anchor.y;
  });
  render();syncControls();
 }
