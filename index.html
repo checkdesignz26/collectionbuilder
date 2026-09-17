@@ -1135,6 +1135,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     </div></div>
     <div class="box"><h2>repeat rules</h2><div class="body">
       <button id="edgeBtn" class="full active">edge clones on</button>
+      <button id="snapToggle" class="full active" title="Snaps a dragged brick onto the tile's own centre/edges or another brick's centre/edges once it's close, with a guide line while it's snapped - like Procreate's Snapping. Turn off to drag completely freely.">snap to align: on</button>
       <button id="addRowBtn" class="full">add placeholder row</button>
       <button id="addColBtn" class="full">add placeholder column</button>
       <p class="footerNote">Edge clones now work in single tile and 3×3 repeat. Move a brick over an edge and the opposite side should update live.</p>
@@ -1389,6 +1390,13 @@ function stripeDefaultTexture(){return {enabled:true,bgEnabled:false,bgColor:'#f
 let texture=blankTexture();
 let textureStore={};
 let mode='repeat', edgeClones=true, current=null, selected=null, activeColor='hero';
+// Smart guides (Procreate calls this "Snapping"): dragging a brick pulls it onto the tile's own
+// centre/edges or another brick's centre/edges once it's within a few px, same as every vector/
+// design tool's drag-to-align. _snapGuideX/Y hold the world (0-100 stage) position of whichever
+// guide line is currently active so render() can draw it - null means no guide is showing right
+// now. Both reset to null the instant a drag ends (see startDrag's onUp) so a guide never lingers
+// after the brick that triggered it stops moving.
+let snapGuidesOn=true,_snapGuideX=null,_snapGuideY=null;
 // Edge-clone tile range for export (renderPatternToCanvas/renderSavedTemplateToCanvas below). A
 // plain grid's true repeat unit is exactly one STAGE tile, so neighbours one step out (-1..1) are
 // enough to cover every brick's wraparound overflow. But halfdrop/halfdropflip/halfbrick's true
@@ -3010,6 +3018,10 @@ function render(){const stage=document.getElementById('stage');stage.className='
   }
  });
  if(selGeom)drawSelectionUI(ctx,bricks.find(x=>x.id===selected),selGeom.cx,selGeom.cy,selGeom.bwPx,selGeom.bhPx);
+ // Smart-guide lines (see findDragSnap/_snapGuideX/Y above) - drawn last so they sit on top of
+ // every brick, same as every design tool's drag-alignment guide.
+ if(_snapGuideX!=null){const gx=(_snapGuideX+origin)*scale;ctx.save();ctx.strokeStyle='rgba(255,70,170,.9)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,size);ctx.stroke();ctx.restore();}
+ if(_snapGuideY!=null){const gy=(_snapGuideY+origin)*scale;ctx.save();ctx.strokeStyle='rgba(255,70,170,.9)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(size,gy);ctx.stroke();ctx.restore();}
  // An empty canvas (freshest on "free layout", but also reachable by deleting every brick from
  // any other layout) used to just be a plain white square - indistinguishable from something
  // broken. A centred hint makes it read as an intentional starting point instead, and disappears
@@ -3781,12 +3793,19 @@ function startDrag(e,id){e.preventDefault();
   const tilePx=(mode==='repeat'?_lastStageSize/repeatSpan:_lastStageSize);
   if(group){
    group.forEach(m=>{m.b.x=Math.max(-20,Math.min(120,m.ox+dx/tilePx*100));m.b.y=Math.max(-20,Math.min(120,m.oy+dy/tilePx*100));});
+   _snapGuideX=null;_snapGuideY=null;
   }else{
-   b.x=Math.max(-20,Math.min(120,ox+dx/tilePx*100));b.y=Math.max(-20,Math.min(120,oy+dy/tilePx*100));
+   let nx=Math.max(-20,Math.min(120,ox+dx/tilePx*100)),ny=Math.max(-20,Math.min(120,oy+dy/tilePx*100));
+   _snapGuideX=null;_snapGuideY=null;
+   if(snapGuidesOn){
+    const snapped=findDragSnap(b,id,nx,ny,tilePx);
+    nx=snapped.x;ny=snapped.y;_snapGuideX=snapped.guideX;_snapGuideY=snapped.guideY;
+   }
+   b.x=nx;b.y=ny;
   }
   render();syncControls(false);
  };
- const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressHoldId=null;suppressLiveMiniDuringDrag=false;render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
+ const onUp=()=>{clearTimeout(warnTimer);clearTimeout(killTimer);pressHoldId=null;suppressLiveMiniDuringDrag=false;_snapGuideX=null;_snapGuideY=null;render();window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);};
  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);render();syncControls();
 }
 // Dragging the on-canvas resize handle follows the exact same rules as the sidebar width/height
@@ -4154,7 +4173,8 @@ document.getElementById('motifDisplayModeBtn').onclick=()=>{
 };
 document.getElementById('zoomOutValue').textContent=repeatSpan+'×'+repeatSpan;
 document.getElementById('repeatBtnLabel').textContent=repeatSpan+'×'+repeatSpan;
-document.getElementById('edgeBtn').onclick=()=>{edgeClones=!edgeClones;edgeBtn.classList.toggle('active',edgeClones);render();};document.getElementById('deleteBtn').onclick=()=>{pushHistory();bricks=bricks.filter(b=>b.id!==selected);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();};document.getElementById('arrowsBtn').onclick=()=>{const b=selectedBrick();if(b){pushHistory();const flows=['','↑','→','↓','←','↗','↘','↙','↖','↻','↔','↕'];const i=flows.indexOf(b.flow||'');b.flow=flows[(i+1)%flows.length];render();}};document.getElementById('dup').onclick=()=>{const b=selectedBrick();if(!b)return;pushHistory();const n={...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:b.x+6,y:b.y+6};bricks.push(n);selected=n.id;render();syncControls();renderUnassignedShapes();};
+document.getElementById('edgeBtn').onclick=()=>{edgeClones=!edgeClones;edgeBtn.classList.toggle('active',edgeClones);render();};
+document.getElementById('snapToggle').onclick=()=>{snapGuidesOn=!snapGuidesOn;const btn=document.getElementById('snapToggle');btn.textContent='snap to align: '+(snapGuidesOn?'on':'off');btn.classList.toggle('active',snapGuidesOn);if(!snapGuidesOn){_snapGuideX=null;_snapGuideY=null;render();}};document.getElementById('deleteBtn').onclick=()=>{pushHistory();bricks=bricks.filter(b=>b.id!==selected);selected=bricks[0]?.id||null;render();syncControls();renderUnassignedShapes();};document.getElementById('arrowsBtn').onclick=()=>{const b=selectedBrick();if(b){pushHistory();const flows=['','↑','→','↓','←','↗','↘','↙','↖','↻','↔','↕'];const i=flows.indexOf(b.flow||'');b.flow=flows[(i+1)%flows.length];render();}};document.getElementById('dup').onclick=()=>{const b=selectedBrick();if(!b)return;pushHistory();const n={...JSON.parse(JSON.stringify(b)),id:'b'+Math.random().toString(36).slice(2),x:b.x+6,y:b.y+6};bricks.push(n);selected=n.id;render();syncControls();renderUnassignedShapes();};
 let alignScope='type';
 function setScope(scope){alignScope=scope;[scopeSingle,scopeType,scopeRole,scopeAll].forEach(b=>b.classList.remove('active'));({single:scopeSingle,type:scopeType,role:scopeRole,all:scopeAll}[scope]).classList.add('active');}
 scopeSingle.onclick=()=>setScope('single');scopeType.onclick=()=>setScope('type');scopeRole.onclick=()=>setScope('role');scopeAll.onclick=()=>setScope('all');
@@ -4187,6 +4207,26 @@ function brickAABBHalf(b){
 }
 function edgeX(b,side){const{hw}=brickAABBHalf(b);return side==='left'?b.x-hw:side==='right'?b.x+hw:b.x}
 function edgeY(b,side){const{hh}=brickAABBHalf(b);return side==='top'?b.y-hh:side==='bottom'?b.y+hh:b.y}
+// Drag-time smart guides (startDrag's onMove) - snaps the dragged brick's own left/centre/right
+// (resp. top/middle/bottom) onto the tile's own edges/centre or any OTHER brick's matching edge/
+// centre, once within SNAP_PX screen pixels, the same "drag near an alignment and it grabs" every
+// vector/design tool has (Procreate calls it Snapping). Checks all three of the dragged brick's own
+// reference points against all three of every candidate's, so edge-to-edge and centre-to-centre
+// both work, not just centre-to-centre. Returns the possibly-adjusted x/y plus which world
+// position (if any) the guide line should be drawn at, so a snapped edge still shows a guide
+// exactly on that edge, not through the brick's centre.
+const SNAP_PX=7;
+function findDragSnap(b,id,nx,ny,tilePx){
+ const thresholdUnits=SNAP_PX/tilePx*100;
+ const{hw,hh}=brickAABBHalf(b);
+ const xTargets=[0,50,100],yTargets=[0,50,100];
+ bricks.forEach(o=>{if(o.id===id)return;const{hw:ohw,hh:ohh}=brickAABBHalf(o);xTargets.push(o.x-ohw,o.x,o.x+ohw);yTargets.push(o.y-ohh,o.y,o.y+ohh);});
+ let x=nx,guideX=null,bestXDist=thresholdUnits;
+ [[nx-hw,hw],[nx,0],[nx+hw,-hw]].forEach(([ref,off])=>{xTargets.forEach(t=>{const d=Math.abs(ref-t);if(d<bestXDist){bestXDist=d;x=t+off;guideX=t;}});});
+ let y=ny,guideY=null,bestYDist=thresholdUnits;
+ [[ny-hh,hh],[ny,0],[ny+hh,-hh]].forEach(([ref,off])=>{yTargets.forEach(t=>{const d=Math.abs(ref-t);if(d<bestYDist){bestYDist=d;y=t+off;guideY=t;}});});
+ return {x,y,guideX,guideY};
+}
 // "left"/"centre"/"right"/"top"/"middle"/"bottom" name an absolute place on the TILE, not "wherever
 // the anchor happens to be sitting" - so the anchor itself always snaps to that true tile edge/
 // centre first, then anything else in scope (a shared-shape/colour/all group, or a hand-picked
