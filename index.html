@@ -6872,7 +6872,13 @@ function applyPostContrast(ctx,rec){
  // watercolour keeps "contrast" a real, usable control there - richer at higher settings - without
  // ever fully crushing it.
  if(rec.type==='watercolour')c=35+(c-35)*0.45;
- let img=ctx.getImageData(0,0,W,H),d=img.data; let factor=(259*(c+155))/(155*(259-c));
+ // Reads the CURRENT canvas's own actual pixel size rather than the fixed 720 logical constant -
+ // this is the one thing that let the live-drag low-res preview (see renderBgPreview) render onto
+ // a genuinely smaller physical canvas and have this pass scale down with it too, instead of
+ // requesting a 720x720 region off a smaller buffer (silently reading transparent black for
+ // whatever fell outside the actual canvas).
+ const cw=ctx.canvas.width,ch=ctx.canvas.height;
+ let img=ctx.getImageData(0,0,cw,ch),d=img.data; let factor=(259*(c+155))/(155*(259-c));
  for(let i=0;i<d.length;i+=4){d[i]=Math.max(0,Math.min(255,factor*(d[i]-128)+128));d[i+1]=Math.max(0,Math.min(255,factor*(d[i+1]-128)+128));d[i+2]=Math.max(0,Math.min(255,factor*(d[i+2]-128)+128));}
  ctx.putImageData(img,0,0);
 }
@@ -6901,7 +6907,36 @@ function drawBackgroundToCanvas(canvas,rec=bgRecipe){let ctx=canvas.getContext('
  if(rec.type==='watercolour'&&useObj)drawPaper(ctx,{...rec,opacity:Math.min(12,Math.max(4,(rec.opacity||45)*.12)),density:12,scale:Math.max(35,(rec.scale||120)*.45),contrast:22});
  if(rec.type==='watercolour'&&!useObj)drawWatercolour(ctx,rec);if(rec.type==='chalk'&&!useObj)drawChalk(ctx,rec);if(rec.type==='vintage')drawVintage(ctx,rec);if(rec.type==='splatter'&&!useObj)drawSplatter(ctx,rec);if(rec.type==='sprinkles'&&!useObj)drawSprinkles(ctx,rec);if(rec.type==='doodles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(25,rec.density),scale:Math.max(65,rec.scale)});if(rec.type==='scribbles'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(30,rec.density),scale:Math.max(90,rec.scale)});if(rec.type==='crosshatch'&&!useObj)drawSprinkles(ctx,{...rec,density:Math.max(45,rec.density),scale:Math.max(70,rec.scale)});if(useObj)drawEditableObjects(ctx,rec,true);applyPostContrast(ctx,rec);ctx.restore();return canvas}
 function recipeToUrl(rec=bgRecipe){let cn=document.createElement('canvas');cn.width=W;cn.height=H;drawBackgroundToCanvas(cn,rec);return cn.toDataURL('image/png')}
-function renderBgPreview(){bgScheduleWipAutosave();let can=q('bgPreviewCanvas'); if(!can)return; drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
+// A generative recipe (watercolour worst of all - dozens of gradient-filled blobs, paper grain,
+// then a whole-canvas contrast pass) measures ~60-80ms per full 720x720 draw - once for every
+// single 'input' tick a slider fires while being dragged, with nothing coalescing or downsampling
+// them. On a real device that's enough to visibly lag behind the finger. While a slider is being
+// actively dragged (see bgIsLiveDragging, set by wireBg's pointerdown/pointerup below), this draws
+// into a much smaller offscreen buffer instead - draw cost scales with pixel AREA, so a 3x linear
+// shrink is roughly a 9x cheaper draw - then stretches that up over the real preview canvas. Soft/
+// blurry while actively dragging is an acceptable, expected trade for staying responsive; the
+// instant the drag ends this renders one final full-resolution pass to snap back to crisp.
+const BG_LIVE_DRAG_SIZE=240;
+let bgIsLiveDragging=false,_bgLiveDragCanvas=null;
+function bgDrawPreviewFast(can,rec){
+ if(!_bgLiveDragCanvas){_bgLiveDragCanvas=document.createElement('canvas');_bgLiveDragCanvas.width=BG_LIVE_DRAG_SIZE;_bgLiveDragCanvas.height=BG_LIVE_DRAG_SIZE;}
+ // Every draw call inside drawBackgroundToCanvas works in the fixed 720x720 LOGICAL space (W/H) -
+ // scaling the context down first (getContext keeps returning this same context, so the transform
+ // set here is still active once drawBackgroundToCanvas grabs it) makes that same logical drawing
+ // rasterise onto the small PHYSICAL buffer instead of just cropping its corner. getImageData/
+ // putImageData (applyPostContrast's contrast pass) ignore the transform entirely and read real
+ // physical pixels either way, which is exactly why that pass was switched to ctx.canvas.width/
+ // height above - it already shrinks along with the buffer with no further change needed here.
+ const sctx=_bgLiveDragCanvas.getContext('2d');
+ sctx.setTransform(BG_LIVE_DRAG_SIZE/W,0,0,BG_LIVE_DRAG_SIZE/H,0,0);
+ drawBackgroundToCanvas(_bgLiveDragCanvas,rec);
+ sctx.setTransform(1,0,0,1,0,0);
+ const ctx=can.getContext('2d');
+ ctx.clearRect(0,0,can.width,can.height);
+ ctx.imageSmoothingEnabled=true;
+ ctx.drawImage(_bgLiveDragCanvas,0,0,BG_LIVE_DRAG_SIZE,BG_LIVE_DRAG_SIZE,0,0,can.width,can.height);
+}
+function renderBgPreview(){bgScheduleWipAutosave();let can=q('bgPreviewCanvas'); if(!can)return; if(bgIsLiveDragging&&!bgShowGuides&&bgView==='single')bgDrawPreviewFast(can,bgRecipe);else drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
  q('bgPreviewName').textContent=bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
 function updateRepeatBox(){let box=q('bgRepeatBox'),can=q('bgPreviewCanvas'); if(!box||!can)return; if(bgView==='single'){box.classList.add('hidden');can.classList.remove('hidden');return;} can.classList.add('hidden');box.classList.remove('hidden');box.style.display='grid';box.style.gridTemplateColumns='repeat(3,1fr)';box.style.gap='0';box.innerHTML='';for(let i=0;i<9;i++){let cn=document.createElement('canvas');cn.width=180;cn.height=180;cn.style.width='150px';cn.style.height='150px';cn.style.borderRadius='0';cn.getContext('2d').drawImage(can,0,0,180,180);box.appendChild(cn)}}
 function syncBgUI(){
@@ -7043,7 +7078,27 @@ function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q(
  // a different type, and applyBgToPKM (checking the NEW draft, which was never locked) would have
  // no way to tell the old one was ever protected.
  const wasLocked=bgRecipe.locked;
- bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false,locked:wasLocked};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>q(id).oninput=e=>{bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;syncBgUI();});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgLockToggle').onclick=toggleBgLock;q('bgSave').onclick=()=>{let name=(bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1])+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(bgRecipe.type==='pattern'?(bgRecipe.sourceName||'pattern'):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
+ bgRecipe={...bgDemoRecipe(b.dataset.bgtype,Math.floor(Math.random()*9999999)),enabled:false,objects:[],editable:false,locked:wasLocked};bgSelectedIds=[];syncBgUI();if(b.dataset.bgtype==='watercolour'){window.cmSetBgTarget?.('tex');}});document.querySelectorAll('[data-bggrad]').forEach(b=>b.onclick=()=>{bgRecipe.type='gradient';bgRecipe.grad=b.dataset.bggrad;if((bgRecipe.opacity||0)<70)bgRecipe.opacity=100;ensureGradientStops(bgRecipe);syncBgUI();});['bgOpacity','bgScale','bgDensity','bgSoftness','bgContrast'].forEach(id=>{
+ const el=q(id);
+ // Marks an active drag so renderBgPreview (via syncBgUI) switches to the cheap low-res path -
+ // pointerdown/up bracket the whole gesture (unlike 'input', which only fires per tick), and the
+ // up listener sits on window so releasing off the slider (a real risk on a touch device) still
+ // clears it and fires the one final full-resolution render.
+ el.addEventListener('pointerdown',()=>{bgIsLiveDragging=true;});
+ const endDrag=()=>{if(!bgIsLiveDragging)return;bgIsLiveDragging=false;syncBgUI();};
+ window.addEventListener('pointerup',endDrag);
+ window.addEventListener('pointercancel',endDrag);
+ // Multiple 'input' events can land within one animation frame (faster than this recipe can
+ // actually redraw) - coalescing to one syncBgUI per frame keeps the queue from backing up behind
+ // a slow draw, on top of the low-res path above already making each one much cheaper.
+ let bgInputRafPending=false;
+ el.oninput=e=>{
+  bgRecipe[id.replace('bg','').toLowerCase()]=+e.target.value;
+  if(bgInputRafPending)return;
+  bgInputRafPending=true;
+  requestAnimationFrame(()=>{bgInputRafPending=false;syncBgUI();});
+ };
+});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgLockToggle').onclick=toggleBgLock;q('bgSave').onclick=()=>{let name=(bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1])+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(bgRecipe.type==='pattern'?(bgRecipe.sourceName||'pattern'):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
  q('bgFromPatternBtn')?.addEventListener('click',openBgPatternPicker);
  q('bgPatternPickerClose')?.addEventListener('click',closeBgPatternPicker);
  q('bgPatternPickerOverlay')?.addEventListener('click',e=>{if(e.target.id==='bgPatternPickerOverlay')closeBgPatternPicker();});
