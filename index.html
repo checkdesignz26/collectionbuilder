@@ -6691,11 +6691,17 @@ function drawWatercolour(ctx,rec){
       // Thinner, water-diluted centre; pigment builds outward and peaks in a visible bloom ring
       // just inside the edge (bloom, 0-1, how pronounced that ring is) before a sharp cutoff -
       // rather than the old version's monotonic centre-out fade, which read as a soft blur.
-      g.addColorStop(0,rgba(wash,a*(.38+.10*soft)));
-      g.addColorStop(.30,rgba(wash,a*(.48+.08*soft)));
-      g.addColorStop(.58,rgba(wash,a*(.42+.06*soft)));
-      g.addColorStop(.80,rgba(wash,a*(.55+.35*bloom)));
-      g.addColorStop(.94,rgba(wash,a*(.62+.38*bloom)));
+      // v70: every stop trimmed down from its previous peak - a tile has a dozen-plus of these
+      // blobs overlapping in 'multiply', and multiply stacks: three overlapping blobs each already
+      // near their old peak alpha left almost no light getting through at all, crushing straight to
+      // a near-opaque core wherever a few pools overlapped (what read as "tie-dye"/oil-slick rather
+      // than a wash). Lower per-blob peaks mean overlap still reads as a visibly richer/darker
+      // pool - real pigment does build up where washes overlap - without an actual black core.
+      g.addColorStop(0,rgba(wash,a*(.32+.09*soft)));
+      g.addColorStop(.30,rgba(wash,a*(.40+.07*soft)));
+      g.addColorStop(.58,rgba(wash,a*(.35+.05*soft)));
+      g.addColorStop(.80,rgba(wash,a*(.45+.28*bloom)));
+      g.addColorStop(.94,rgba(wash,a*(.50+.30*bloom)));
       g.addColorStop(1,rgba(wash,0));
       ctx.fillStyle=g;
       ctx.beginPath();
@@ -6744,8 +6750,14 @@ function drawWatercolour(ctx,rec){
   }
   ctx.restore();
 
-  // Extremely subtle paper tooth — the wash remains the star of the show.
-  drawPaper(ctx,{...rec,opacity:Math.min(12,Math.max(4,(rec.opacity||45)*.12)),density:12,scale:Math.max(35,(rec.scale||120)*.45),contrast:22});
+  // Paper tooth - real watercolour is inseparable from the paper it's painted on; without this
+  // the wash reads as flat digital blobs (an oil-slick/plastic sheen) no matter how soft the blob
+  // gradients above are. v70: was capped at a token 4-12% opacity regardless of the intensity
+  // slider, so it barely registered - scaled it to actually track rec.opacity (the closest thing
+  // to an "intensity" control here) up to a still-restrained 30%, so pushing intensity up gives
+  // more visible grain along with more wash, instead of the grain staying fixed while everything
+  // else changes.
+  drawPaper(ctx,{...rec,opacity:Math.min(30,Math.max(10,(rec.opacity||45)*.32)),density:16,scale:Math.max(35,(rec.scale||120)*.45),contrast:22});
 }
 
 function drawLinen(ctx,rec){
@@ -6849,6 +6861,17 @@ function drawEditableObjects(ctx,rec=bgRecipe,withSelection=false){(rec.objects|
 
 function applyPostContrast(ctx,rec){
  let c=(rec.contrast==null?35:rec.contrast); if(c===35)return;
+ // Watercolour already gets its own richness from many overlapping translucent washes (see
+ // drawWatercolour/blob) - this curve then runs on top of that AND the paper grain, as a
+ // straight S-curve over the whole finished pixel buffer. At the high end that pushed every
+ // already-darkened multiply overlap straight to near-black and every pale area to flat white -
+ // exactly the harsh "tie-dye"/oil-slick look instead of a soft wash, and it flattened the paper
+ // grain into hard specks too. Classics Studio's shape-fill version of this texture (which reuses
+ // this exact renderer) even runs ~18pt hotter than Background Studio's own default, so this was
+ // never just an edge case at the sliders' extremes. Halving how far the curve can swing for
+ // watercolour keeps "contrast" a real, usable control there - richer at higher settings - without
+ // ever fully crushing it.
+ if(rec.type==='watercolour')c=35+(c-35)*0.45;
  let img=ctx.getImageData(0,0,W,H),d=img.data; let factor=(259*(c+155))/(155*(259-c));
  for(let i=0;i<d.length;i+=4){d[i]=Math.max(0,Math.min(255,factor*(d[i]-128)+128));d[i+1]=Math.max(0,Math.min(255,factor*(d[i+1]-128)+128));d[i+2]=Math.max(0,Math.min(255,factor*(d[i+2]-128)+128));}
  ctx.putImageData(img,0,0);
