@@ -2685,7 +2685,18 @@ let repeatSpan=3;
 // just keeps working unmodified, and .stageViewport's overflow:auto gives free native panning
 // (mouse drag-scroll, touch swipe, trackpad) once the zoomed stage no longer fits its window.
 let stageZoom=1;
-function setStageZoom(z){stageZoom=Math.max(1,Math.min(2.5,z));document.getElementById('stageZoomPill').textContent=Math.round(stageZoom*100)+'%';render();}
+// A watercolour (or any generative-recipe) background/classic pattern applied to the repeat
+// layout costs the same ~60-80ms per regen as it does live inside Background Studio - and zoom
+// (stage zoom in/out/reset, or the zoom-out/repeat-span slider) changes the backdrop's own
+// signature (scale/origin/size all feed it - see renderBackdropOffscreen), so every zoom step
+// forces exactly that regen. Rapidly stepping through zoom levels used to pay that cost in full
+// every single time with nothing coalescing it. While _zoomInteracting is true (set on every zoom
+// action, cleared 180ms after the last one), renderBackdropOffscreen asks bgRenderToTileCanvas for
+// a fast/low-res tile instead - one settle-render at full quality fires automatically once zooming
+// stops, the same "cheap while moving, crisp once still" trade Background Studio's own sliders use.
+let _zoomInteracting=false,_zoomInteractingTimer=null;
+function markZoomInteraction(){_zoomInteracting=true;clearTimeout(_zoomInteractingTimer);_zoomInteractingTimer=setTimeout(()=>{_zoomInteracting=false;render();},180);}
+function setStageZoom(z){stageZoom=Math.max(1,Math.min(2.5,z));document.getElementById('stageZoomPill').textContent=Math.round(stageZoom*100)+'%';markZoomInteraction();render();}
 function tileOffsets(){if(mode==='single')return [[0,0,'center']];const r=(repeatSpan-1)/2;const out=[];for(let ty=-r;ty<=r;ty++)for(let tx=-r;tx<=r;tx++)out.push(tx===0&&ty===0?[0,0,'center']:[tx,ty]);return out;}
 // Reads tilingEngine, not `current` - decoupled so a blank canvas of freely-placed motifs (or any
 // preset) can preview any of the 5 stagger styles, not just whichever one its own name implies. See
@@ -2853,7 +2864,7 @@ function ensureStageCanvas(stage){
 // drawImage of the cached result plus the (also cheap) brick draws on top.
 let _backdropCanvas=null,_backdropSig=null;
 let _lastScale=1,_lastOrigin=0,_lastStageSize=720;
-function renderBackdropOffscreen(scale,origin,size){
+function renderBackdropOffscreen(scale,origin,size,fast){
  if(!_backdropCanvas)_backdropCanvas=document.createElement('canvas');
  if(_backdropCanvas.width!==size||_backdropCanvas.height!==size){_backdropCanvas.width=size;_backdropCanvas.height=size;}
  const bctx=_backdropCanvas.getContext('2d');
@@ -2861,7 +2872,13 @@ function renderBackdropOffscreen(scale,origin,size){
  bctx.fillStyle='#fff';bctx.fillRect(0,0,size,size);
  const tilePx=STAGE*scale;
  let bgTile=null,classicTile=null;
- if(lastBgSnap&&window.bgRenderToTileCanvas)bgTile=window.bgRenderToTileCanvas(lastBgSnap,tilePx);
+ // A generative background recipe (watercolour worst of all) costs the same ~60-80ms here as it
+ // does live inside Background Studio's own preview - `fast` (set true while rapidly stepping
+ // through zoom levels, see markZoomInteraction) asks for the same lower-resolution render that
+ // studio's own slider-drag uses, so zooming stays responsive; the settle-render 180ms after the
+ // last zoom change (still forced via _zoomInteracting being part of backdropSig above) redraws
+ // this one last time at full quality.
+ if(lastBgSnap&&window.bgRenderToTileCanvas)bgTile=window.bgRenderToTileCanvas(lastBgSnap,tilePx,fast);
  if(window.tsRenderToTileCanvas)classicTile=window.tsRenderToTileCanvas(tilePx);
  tileOffsets().forEach(([tx,ty,center])=>{
   const off=engineOffset(tx,ty);
@@ -2965,9 +2982,14 @@ function render(){const stage=document.getElementById('stage');stage.className='
  try{
   lastBgSnap=window.bgGetSnapshot?window.bgGetSnapshot():null;
   lastClassicSnap=window.tsGetSnapshot?window.tsGetSnapshot():null;
-  const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,lastBgSnap,lastClassicSnap,tilingEngine,size]);
+  // _zoomInteracting is part of the signature (not just an input to renderBackdropOffscreen) so
+  // the settle-render that follows a flurry of zoom changes - same scale/origin/size as the very
+  // last fast one, only _zoomInteracting flipping back to false - still counts as "changed" and
+  // actually regenerates at full quality, instead of matching the cached fast signature and
+  // leaving the blurry backdrop cached forever.
+  const backdropSig=JSON.stringify([mode,Math.round(scale*1000),origin,texture,lastBgSnap,lastClassicSnap,tilingEngine,size,_zoomInteracting]);
   if(backdropSig!==_backdropSig){
-   renderBackdropOffscreen(scale,origin,size);
+   renderBackdropOffscreen(scale,origin,size,_zoomInteracting);
    _backdropSig=backdropSig;
   }
   if(_backdropCanvas)ctx.drawImage(_backdropCanvas,0,0);
@@ -4146,7 +4168,7 @@ syncZoomOutVisibility();
 // back from a bolt of fabric. The existing drag/resize/rotate motif-suppression fix already keys
 // off pointer movement rather than tile count, so it protects this the same way at any zoom level.
 const zoomOutSpans=[3,5,7,9];
-document.getElementById('zoomOutRange').oninput=e=>{repeatSpan=zoomOutSpans[+e.target.value];document.getElementById('zoomOutValue').textContent=repeatSpan+'×'+repeatSpan;document.getElementById('repeatBtnLabel').textContent=repeatSpan+'×'+repeatSpan;render();};
+document.getElementById('zoomOutRange').oninput=e=>{repeatSpan=zoomOutSpans[+e.target.value];document.getElementById('zoomOutValue').textContent=repeatSpan+'×'+repeatSpan;document.getElementById('repeatBtnLabel').textContent=repeatSpan+'×'+repeatSpan;markZoomInteraction();render();};
 document.getElementById('stageZoomIn').onclick=()=>setStageZoom(stageZoom+0.25);
 document.getElementById('stageZoomOut').onclick=()=>setStageZoom(stageZoom-0.25);
 document.getElementById('stageZoomResetBtn').onclick=()=>setStageZoom(1);
@@ -7223,7 +7245,15 @@ window.bgRecipeThumbUrl=function(rec){
 // the target canvas's actual size, so the main pattern export renders natively at
 // 720 then scales that up to whatever tile size it needs - same approach as
 // Background Studio's own high-res download.
-window.bgRenderToTileCanvas=function(rec,tilePx){if(!rec)return null;const small=document.createElement('canvas');small.width=720;small.height=720;drawBackgroundToCanvas(small,rec);const out=document.createElement('canvas');out.width=tilePx;out.height=tilePx;const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(small,0,0,720,720,0,0,tilePx,tilePx);return out;};
+// `fast` (opt-in, every existing caller keeps full quality by default) renders that internal step
+// onto a much smaller physical buffer instead - draw cost scales with pixel area, so this is a
+// real speedup, not just a smaller output - using the same context-transform trick as Background
+// Studio's own live-drag preview (bgDrawPreviewFast) so every draw call's 720x720 LOGICAL
+// coordinate math keeps working unmodified. Used by the main pattern canvas's backdrop while
+// rapidly stepping through zoom levels (see renderBackdropOffscreen/markZoomInteraction) so a
+// generative background recipe applied to the repeat layout doesn't pay its full ~60-80ms cost on
+// every single zoom step.
+window.bgRenderToTileCanvas=function(rec,tilePx,fast){if(!rec)return null;const srcSize=fast?240:720;const small=document.createElement('canvas');small.width=srcSize;small.height=srcSize;if(fast){const sctx=small.getContext('2d');sctx.setTransform(srcSize/W,0,0,srcSize/H,0,0);drawBackgroundToCanvas(small,rec);sctx.setTransform(1,0,0,1,0,0);}else drawBackgroundToCanvas(small,rec);const out=document.createElement('canvas');out.width=tilePx;out.height=tilePx;const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(small,0,0,srcSize,srcSize,0,0,tilePx,tilePx);return out;};
 window.bgDemoRecipe=bgDemoRecipe;
 window.bgSetRoleColours=function(base,tex){if(!bgRecipe)return;bgRecipe.base=base||bgRecipe.base||'#ffffff';bgRecipe.tex=tex||bgRecipe.tex||'#555555';bgDataUrl=recipeToUrl(bgRecipe);try{if(bgRecipe.enabled)localStorage.setItem('pkmActiveBackgroundV34',JSON.stringify(bgRecipe));}catch(e){}if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();if(typeof render==='function'&&bgRecipe.enabled)render();};
 window.bgSetWatercolourTuning=function(){if(!bgRecipe||bgRecipe.type!=='watercolour')return;bgRecipe.opacity=42;bgRecipe.scale=128;bgRecipe.density=30;bgRecipe.softness=90;bgRecipe.contrast=40;bgDataUrl=recipeToUrl(bgRecipe);if(q('backgroundStudioOverlay')&&q('backgroundStudioOverlay').classList.contains('open'))syncBgUI();};
