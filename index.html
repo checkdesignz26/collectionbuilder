@@ -1118,7 +1118,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
        <input type="color" id="addRecolorPaletteColorInput" style="display:none">
        <button id="recolorFromMoodBtn" class="full small" title="Same adaptive mood/season palette generator as Classics Studio and Background Studio - pick a vibe, tap a colour"><svg class="btnIcon"><use href="#i-dice"/></svg>pick from mood palette</button>
        <div class="miniControl"><label>vibe</label><select id="recolorMoodSelect" class="selectTiny">
-         <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="luxe">luxurious / opulent</option><option value="jewel">jewel tones</option><option value="christmas">christmas / festive</option>
+         <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="pastel">pastel</option><option value="luxe">luxurious / opulent</option><option value="jewel">jewel tones</option><option value="christmas">christmas / festive</option>
         </select></div>
        <div class="swatches" id="recolorMoodSwatches"></div>
        <button id="saveRecolorAsMotifBtn" class="full small" title="Bakes this recoloured version into a brand new, independent motif in your tray - place it anywhere, on any shape, without touching the original"><svg class="btnIcon"><use href="#i-copy"/></svg>save as new motif</button>
@@ -1168,7 +1168,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
       <button id="cmApplyExtracted" class="full primary" style="display:none;margin-top:7px">use extracted palette</button>
     </div></div>
     <div class="miniControl"><label>vibe</label><select id="cmMood" class="selectTiny">
-      <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="luxe">luxurious / opulent</option><option value="jewel">jewel tones</option><option value="christmas">christmas / festive</option>
+      <option value="spring">spring</option><option value="summer" selected>summer</option><option value="autumn">autumn</option><option value="winter">winter</option><option value="retro">retro</option><option value="neon">neon</option><option value="focused">focused / minimal</option><option value="romantic">romantic / intimate</option><option value="bold">bold / confident</option><option value="nostalgic">nostalgic / vintage</option><option value="fresh">fresh / clean</option><option value="pastel">pastel</option><option value="luxe">luxurious / opulent</option><option value="jewel">jewel tones</option><option value="christmas">christmas / festive</option>
     </select></div>
     <div class="range"><label>richness</label><input id="cmRichness" type="range" min="0" max="100" value="40"></div>
     <div class="range"><label>extra swatches</label><input id="cmVariationCount" type="range" min="0" max="24" value="8"></div>
@@ -1235,6 +1235,12 @@ const MOOD_CURVES={
  bold:     {sat:[70,95],val:[20,45],spread:0.9,accentPunch:1.8,damp:0.35},
  nostalgic:{sat:[22,38],val:[55,72],spread:0.55,accentPunch:0.9,damp:0.85},
  fresh:    {sat:[25,45],val:[85,97],spread:0.75,accentPunch:1.0,damp:1.0},
+ // Soft/light across every role, not just the hero - noticeably lower saturation ceiling than
+ // even "fresh" or "spring" (both can still land fairly vivid at high richness), a consistently
+ // high value floor so nothing drifts toward a deep/dark tone, a narrower hue spread so the
+ // derived roles read as one soft family instead of spreading widely round the wheel, and damped
+ // accent/secondary punch so no single role jumps out bold against the rest.
+ pastel:   {sat:[14,28],val:[88,97],spread:0.6,accentPunch:0.65,damp:0.72},
  luxe:     {sat:[55,85],val:[30,55],spread:1.15,accentPunch:1.3,damp:1.0},
  // Deep, saturated, wide-hue-spread stones (emerald/sapphire/ruby/amethyst/topaz) -
  // works with any hero the way the other moods do, since "jewel" is a richness
