@@ -1578,7 +1578,22 @@ const SAVED_ITEMS_KEY='pkmSavedItemsV1';
 // device's actual free disk space instead (typically hundreds of MB to GB), which is the real fix
 // rather than another warning about the same small ceiling.
 const IDB_NAME='pkmDB',IDB_STORE='kv',SAVED_ITEMS_IDB_KEY='items';
-function idbOpen(){
+// Safari's Private Browsing mode has a long-standing IndexedDB quirk: instead of failing fast
+// (onerror) the way a real quota/permission problem does everywhere else, an open/transaction
+// request in that mode can just sit there forever - neither onsuccess nor onerror ever fires. Every
+// caller here awaits a promise chain rooted in idbOpen(), so a hang there means "save classic" (or
+// autosave, quickload, anything touching this) looks like it's still "saving…" indefinitely, with
+// no error to show and no way to tell the difference from a real, still-in-progress save - exactly
+// "nothing shows a message" rather than the "save failed - could not reach disk" a real failure
+// would surface. Racing every IDB call against a timeout turns that silent hang into an actual
+// rejection, so callers reliably get a failure to react to either way.
+function idbWithTimeout(promise,label){
+ return Promise.race([
+  promise,
+  new Promise((_,reject)=>setTimeout(()=>reject(new Error(label+' timed out (Private Browsing can hang IndexedDB requests instead of failing them)')),6000))
+ ]);
+}
+function idbOpenRaw(){
  return new Promise((resolve,reject)=>{
   if(!window.indexedDB){reject(new Error('IndexedDB unavailable'));return;}
   const req=indexedDB.open(IDB_NAME,1);
@@ -1587,25 +1602,30 @@ function idbOpen(){
   req.onerror=()=>reject(req.error);
  });
 }
+function idbOpen(){return idbWithTimeout(idbOpenRaw(),'IndexedDB open');}
 async function idbGet(key){
  try{
-  const db=await idbOpen();
-  return await new Promise((resolve,reject)=>{
-   const tx=db.transaction(IDB_STORE,'readonly');
-   const req=tx.objectStore(IDB_STORE).get(key);
-   req.onsuccess=()=>resolve(req.result);
-   req.onerror=()=>reject(req.error);
-  });
+  return await idbWithTimeout((async()=>{
+   const db=await idbOpenRaw();
+   return await new Promise((resolve,reject)=>{
+    const tx=db.transaction(IDB_STORE,'readonly');
+    const req=tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+   });
+  })(),'IndexedDB read');
  }catch(e){console.warn('idbGet failed',e);return undefined;}
 }
 async function idbSet(key,value){
- const db=await idbOpen();
- return new Promise((resolve,reject)=>{
-  const tx=db.transaction(IDB_STORE,'readwrite');
-  tx.objectStore(IDB_STORE).put(value,key);
-  tx.oncomplete=()=>resolve(true);
-  tx.onerror=()=>reject(tx.error);
- });
+ return idbWithTimeout((async()=>{
+  const db=await idbOpenRaw();
+  return new Promise((resolve,reject)=>{
+   const tx=db.transaction(IDB_STORE,'readwrite');
+   tx.objectStore(IDB_STORE).put(value,key);
+   tx.oncomplete=()=>resolve(true);
+   tx.onerror=()=>reject(tx.error);
+  });
+ })(),'IndexedDB write');
 }
 // Synchronous last-resort default so the app can paint instantly on load, before the async
 // IndexedDB read below has a chance to resolve - hydrateSavedItemsFromIDB overwrites this (and
