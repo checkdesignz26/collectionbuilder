@@ -5742,10 +5742,34 @@ function selectLayerAtPoint(pt){
 // silently falls outside the pinning check and drifts inward the next time distribute runs.
 const EDGE_SNAP=3;
 function snapStripeEdge(v){if(v<=EDGE_SNAP)return 0; if(v>=100-EDGE_SNAP)return 100; return v;}
+// Live drag-time snapping for dots/diamonds/squares, mirroring the main canvas's smart-guides:
+// while dragging one, its centre is pulled onto the tile's true edges/centre (0/50/100) and onto
+// any OTHER dot/diamond/square's matching x or y the moment it comes within DOT_SNAP_PX of it, and
+// a pink guide line is drawn at that position so the alignment is visible, not just felt.
+const DOT_SNAP_PX=3;
+let dotSnapGuideX=null, dotSnapGuideY=null;
+function findDotSnap(pt,excludeIdx){
+ let gx=null,bestDX=DOT_SNAP_PX,snapX=pt.x;
+ let gy=null,bestDY=DOT_SNAP_PX,snapY=pt.y;
+ [0,50,100].forEach(v=>{
+  const dx=Math.abs(pt.x-v); if(dx<bestDX){bestDX=dx;snapX=v;gx=v;}
+  const dy=Math.abs(pt.y-v); if(dy<bestDY){bestDY=dy;snapY=v;gy=v;}
+ });
+ (state.layers||[]).forEach((l,i)=>{
+  if(i===excludeIdx||l.visible===false||!(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'))return;
+  const lx=l.x??l.pos??50, ly=l.y??l.rotate??50;
+  const dx=Math.abs(pt.x-lx); if(dx<bestDX){bestDX=dx;snapX=lx;gx=lx;}
+  const dy=Math.abs(pt.y-ly); if(dy<bestDY){bestDY=dy;snapY=ly;gy=ly;}
+ });
+ return {x:snapX,y:snapY,guideX:gx,guideY:gy};
+}
 function moveSelectedToPoint(pt){
  const l=currentLayer(); if(!l)return;
+ dotSnapGuideX=null; dotSnapGuideY=null;
  if(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'){
-  l.x=pt.x; l.y=pt.y; l.pos=pt.x; l.rotate=pt.y;
+  const snap=findDotSnap(pt,selected);
+  l.x=snap.x; l.y=snap.y; l.pos=snap.x; l.rotate=snap.y;
+  dotSnapGuideX=snap.guideX; dotSnapGuideY=snap.guideY;
  }else if(l.direction==='horizontal'){
   l.pos=snapStripeEdge(pt.y);
  }else if(l.direction==='diag1'){
@@ -5768,8 +5792,8 @@ function wireCanvasDrag(){
  canvas.style.touchAction='none';
  canvas.addEventListener('pointerdown',ev=>{if(!state)return; ev.preventDefault(); canvas.setPointerCapture(ev.pointerId); const pt=canvasPointToTile(ev); selectLayerAtPoint(pt); startPt=pt; dragging=true; moved=false; historyPushed=false;});
  canvas.addEventListener('pointermove',ev=>{if(!dragging)return; ev.preventDefault(); const pt=canvasPointToTile(ev); if(!moved){if(Math.hypot(pt.x-startPt.x,pt.y-startPt.y)<TAP_TOLERANCE)return; moved=true;} if(!historyPushed){tsPushHistory();historyPushed=true;} moveSelectedToPoint(pt);});
- canvas.addEventListener('pointerup',ev=>{dragging=false;});
- canvas.addEventListener('pointercancel',ev=>{dragging=false;});
+ canvas.addEventListener('pointerup',ev=>{dragging=false; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ canvas.addEventListener('pointercancel',ev=>{dragging=false; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
 }
 function wire(){
  const tsMutate=(fn)=>{tsPushHistory();fn();renderAll();};
@@ -6081,9 +6105,17 @@ function drawTile(ctx,x,y,w,st){ctx.save();ctx.translate(x,y);ctx.beginPath();ct
  // do exactly that). Capping at `w` means a single exported/previewed tile is always a whole,
  // genuinely seamless period, at any scale setting.
  let cell=Math.max(40,Math.min(w,w*scale));for(let yy=-cell;yy<w+cell;yy+=cell){for(let xx=-cell;xx<w+cell;xx+=cell){drawOneCell(ctx,cell,st,xx,yy);}}ctx.restore();}
+function drawDotSnapGuides(ctx,size){
+ if(dotSnapGuideX==null&&dotSnapGuideY==null)return;
+ ctx.save();
+ ctx.strokeStyle='rgba(255,70,170,.9)';ctx.lineWidth=1.5;
+ if(dotSnapGuideX!=null){const gx=dotSnapGuideX/100*size; ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,size);ctx.stroke();}
+ if(dotSnapGuideY!=null){const gy=dotSnapGuideY/100*size; ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(size,gy);ctx.stroke();}
+ ctx.restore();
+}
 function renderPreview(canvas,size,st,mode,guides){
  let ctx=canvas.getContext('2d');ctx.clearRect(0,0,size,size);ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);
- if(mode==='single'){drawTile(ctx,0,0,size,st);return;}
+ if(mode==='single'){drawTile(ctx,0,0,size,st); if(canvas.id==='tsPreview')drawDotSnapGuides(ctx,size); return;}
  // Repeat/brick preview: march ONE shared cell size across the whole canvas in a single pass,
  // instead of the old approach of drawing 3 independent size/3 "repeat squares" that each
  // restarted their own internal tiling from local (0,0). Whenever the pattern's real cell size
