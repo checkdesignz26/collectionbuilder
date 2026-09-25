@@ -5332,6 +5332,8 @@ refreshHeroThumbs();
         <p class="tsHint" style="margin-top:9px">Arrange every dot into a clean, evenly-spaced grid, or line them all up with whichever one is selected.</p>
         <button id="tsArrangeDotsGrid" class="full">⊞ arrange in even grid</button>
         <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsAlignDotsRow">align to row</button><button id="tsAlignDotsColumn">align to column</button></div>
+        <p class="tsHint" style="margin-top:9px">Even out the gaps between dots along a line - the two outermost dots stay put, everything between them spreads out equally.</p>
+        <div class="tsGlobalGrid"><button id="tsDistributeDotsH">distribute horizontally</button><button id="tsDistributeDotsV">distribute vertically</button></div>
       </div></div>
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
@@ -5637,6 +5639,24 @@ function alignDotsToSelected(axis){
  dots.forEach(x=>{if(axis==='row')x.y=l.y;else{x.x=l.x;x.pos=l.x;}});
  renderAll();
 }
+// "Align" lines dots up on a shared row/column; "distribute" is the separate, complementary move -
+// it keeps the two outermost dots exactly where they are and re-spaces everything between them so
+// every gap along that axis is equal, the same "distribute spacing" a design tool would offer
+// alongside align.
+function distributeDots(axis){
+ const dots=allDotLayers();if(dots.length<3)return;
+ tsPushHistory();
+ const key=axis==='horizontal'?'x':'y';
+ const sorted=[...dots].sort((a,b)=>(a[key]??50)-(b[key]??50));
+ const lo=sorted[0][key]??0, hi=sorted[sorted.length-1][key]??100;
+ const step=(hi-lo)/(sorted.length-1);
+ sorted.forEach((l,i)=>{
+  const v=Math.round((lo+step*i)*10)/10;
+  l[key]=v;
+  if(key==='x')l.pos=v;
+ });
+ renderAll();
+}
 function markActiveSwatches(root){
  const l=currentLayer();
  if(!root||!l)return;
@@ -5848,6 +5868,8 @@ function wire(){
  if($('tsArrangeDotsGrid'))$('tsArrangeDotsGrid').onclick=arrangeDotsGrid;
  if($('tsAlignDotsRow'))$('tsAlignDotsRow').onclick=()=>alignDotsToSelected('row');
  if($('tsAlignDotsColumn'))$('tsAlignDotsColumn').onclick=()=>alignDotsToSelected('column');
+ if($('tsDistributeDotsH'))$('tsDistributeDotsH').onclick=()=>distributeDots('horizontal');
+ if($('tsDistributeDotsV'))$('tsDistributeDotsV').onclick=()=>distributeDots('vertical');
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
   // duplicating a new set on top ("copy -> horizontal" already does that) - this turns an
