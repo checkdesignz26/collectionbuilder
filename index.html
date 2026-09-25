@@ -5304,6 +5304,15 @@ refreshHeroThumbs();
           <p class="tsHint" style="margin-top:8px">Use these when the whole stripe recipe needs to get chunkier, airier, or evenly spaced.</p>
         </div></div>
       </div></div>
+      <div class="tsBox" id="tsGlobalDotBox" style="margin:10px 0 0"><h3>Global Dot Controls</h3><div class="tsPad">
+        <p class="tsHint" style="margin-top:0">Pick the selected dot's colour from the palette above, then spread it to every dot in one tap.</p>
+        <button id="tsApplyAllDotColour" class="full">apply selected colour to all dots</button>
+        <div class="tsRow" style="margin-top:9px"><label>all sizes</label><input id="tsAllDotSize" type="range" min="2" max="120" value="30"></div>
+        <button id="tsApplyAllDotSize" class="full">apply size to all dots</button>
+        <p class="tsHint" style="margin-top:9px">Arrange every dot into a clean, evenly-spaced grid, or line them all up with whichever one is selected.</p>
+        <button id="tsArrangeDotsGrid" class="full">⊞ arrange in even grid</button>
+        <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsAlignDotsRow">align to row</button><button id="tsAlignDotsColumn">align to column</button></div>
+      </div></div>
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
     </div>
@@ -5563,6 +5572,51 @@ function distributeClassic(dir){
  }
  renderAll();
 }
+// Dots got none of the stripe engine's bulk tools (Global Stripe Controls above) even though each
+// dot is its own independent layer exactly like a stripe - recolouring/resizing/arranging a whole
+// scatter of them meant selecting and adjusting every single one by hand. These mirror that same
+// "set one, apply to the group" pattern for dot layers specifically.
+function allDotLayers(){return (state.layers||[]).filter(l=>l&&l.kind==='dot');}
+function applyAllDotColour(){
+ const l=currentLayer();if(!l||l.kind!=='dot')return;
+ const dots=allDotLayers();if(dots.length<2)return;
+ tsPushHistory();
+ dots.forEach(x=>{x.color=l.color;x.manual=l.manual;});
+ refreshAllLayerNames();renderAll();
+}
+function applyAllDotSize(val){
+ const dots=allDotLayers();if(!dots.length)return;
+ tsPushHistory();
+ dots.forEach(l=>{l.width=+val;});
+ renderAll(false);
+}
+// Re-spaces every dot into a clean, evenly-centred grid - the closest dot-layer equivalent of
+// distributeClassic above, just across two axes instead of one. Cell count is whatever fits the
+// current dot total as a square (5 dots gets a 3x3 grid with 4 empty cells skipped, not stretched
+// into an uneven 5-wide strip), so it still reads as a tidy grid at any dot count.
+function arrangeDotsGrid(){
+ const dots=allDotLayers();if(dots.length<2)return;
+ tsPushHistory();
+ const n=Math.max(1,Math.ceil(Math.sqrt(dots.length)));
+ const step=100/n;
+ dots.forEach((l,i)=>{
+  const col=i%n,row=Math.floor(i/n);
+  l.x=Math.round((col+0.5)*step*10)/10;
+  l.y=Math.round((row+0.5)*step*10)/10;
+  l.pos=l.x;
+ });
+ renderAll();
+}
+// Snaps every dot onto the selected one's y (a row) or x (a column) - the 2D-placement equivalent
+// of "align top/left" elsewhere in this app, sized for a handful of dot layers rather than a full
+// alignment-scope system.
+function alignDotsToSelected(axis){
+ const l=currentLayer();if(!l||l.kind!=='dot')return;
+ const dots=allDotLayers();if(dots.length<2)return;
+ tsPushHistory();
+ dots.forEach(x=>{if(axis==='row')x.y=l.y;else{x.x=l.x;x.pos=l.x;}});
+ renderAll();
+}
 function markActiveSwatches(root){
  const l=currentLayer();
  if(!root||!l)return;
@@ -5745,6 +5799,11 @@ function wire(){
  $('tsBack').onclick=()=>{if(selected<state.layers.length-1){const [l]=state.layers.splice(selected,1);state.layers.splice(selected+1,0,l);selected++;renderAll();}};
  $('tsClear').onclick=()=>{tsPushHistory();state.layers=[];selected=0;renderAll();};
  if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal');
+ if($('tsApplyAllDotColour'))$('tsApplyAllDotColour').onclick=applyAllDotColour;
+ if($('tsApplyAllDotSize'))$('tsApplyAllDotSize').onclick=()=>applyAllDotSize($('tsAllDotSize').value);
+ if($('tsArrangeDotsGrid'))$('tsArrangeDotsGrid').onclick=arrangeDotsGrid;
+ if($('tsAlignDotsRow'))$('tsAlignDotsRow').onclick=()=>alignDotsToSelected('row');
+ if($('tsAlignDotsColumn'))$('tsAlignDotsColumn').onclick=()=>alignDotsToSelected('column');
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
   // duplicating a new set on top ("copy -> horizontal" already does that) - this turns an
@@ -5793,6 +5852,8 @@ function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();sync
  if($('tsGlobalStripeBox'))$('tsGlobalStripeBox').style.display=bandBased?'':'none';
  if($('tsSequenceActionsRow'))$('tsSequenceActionsRow').style.display=bandBased?'':'none';
  if($('tsSequenceActionsHint'))$('tsSequenceActionsHint').style.display=bandBased?'':'none';
+ const dotBased=allDotLayers().length>1;
+ if($('tsGlobalDotBox'))$('tsGlobalDotBox').style.display=dotBased?'':'none';
  if($('tsScatterDots'))$('tsScatterDots').style.display=(state.type==='dots')?'':'none';
 }
 function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if($('tsUnlockAll'))$('tsUnlockAll').style.display=state.layers.some(l=>l.manual)?'':'none';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':l.chevron?'︿':(dirIcon[l.direction]||'│'));card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}</small></div><div class="tsLayerActions">${l.manual?'<button class="tsLockBtn" title="Tap to unlock - lets colour-mode preview cycling recolour this layer again">🔒</button>':''}<button class="tsEye">${l.visible?'shown':'hidden'}</button></div>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else if(e.target.classList.contains('tsLockBtn')){l.manual=false;}else selected=i;renderAll();};list.appendChild(card);});}
