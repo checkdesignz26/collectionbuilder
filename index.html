@@ -5334,6 +5334,10 @@ refreshHeroThumbs();
         <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsAlignDotsRow">align to row</button><button id="tsAlignDotsColumn">align to column</button></div>
         <p class="tsHint" style="margin-top:9px">Copy the selected dot's whole row or column, offset to sit right after it - a quick way to grow a grid.</p>
         <div class="tsGlobalGrid"><button id="tsDuplicateDotsRow">duplicate row</button><button id="tsDuplicateDotsColumn">duplicate column</button></div>
+        <p class="tsHint" style="margin-top:9px">Nudge the selected dot's whole row or column together, by the amount below.</p>
+        <div class="tsRow"><label>move amount</label><input id="tsMoveDotAmount" type="number" min="1" max="100" value="5" style="width:70px"></div>
+        <div class="tsGlobalGrid"><button id="tsMoveDotsRowUp">row ▲</button><button id="tsMoveDotsRowDown">row ▼</button></div>
+        <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsMoveDotsColumnLeft">column ◀</button><button id="tsMoveDotsColumnRight">column ▶</button></div>
         <p class="tsHint" style="margin-top:9px">Even out the gaps between dots along a line - the two outermost dots stay put, everything between them spreads out equally. Set an exact gap instead, or leave it blank to fit edge to edge.</p>
         <div class="tsRow"><label>exact spacing</label><input id="tsDistributeSpacing" type="number" min="1" max="100" placeholder="auto" style="width:70px"></div>
         <div class="tsGlobalGrid"><button id="tsDistributeDotsH">distribute horizontally</button><button id="tsDistributeDotsV">distribute vertically</button></div>
@@ -5700,6 +5704,28 @@ function duplicateDotLine(axis){
  selected=state.layers.length-1;
  renderAll();
 }
+// Shifts every dot sharing the selected one's row or column together, by the "move amount" field -
+// the companion to duplicate row/column that repositions the existing line instead of copying it.
+// Wraps at the tile edges, same as a drag would, so nudging past 0/100 loops round seamlessly.
+function moveDotLine(axis,dir){
+ const l=currentLayer();if(!l||l.kind!=='dot')return;
+ const dots=allDotLayers();if(!dots.length)return;
+ const key=axis==='row'?'y':'x';
+ const tol=3;
+ const anchor=l[key]??50;
+ const line=dots.filter(d=>Math.abs((d[key]??50)-anchor)<tol);
+ if(!line.length)return;
+ tsPushHistory();
+ const amtField=$('tsMoveDotAmount');
+ const amt=amtField?(parseFloat(amtField.value)||5):5;
+ const delta=dir*amt;
+ line.forEach(d=>{
+  const v=(((d[key]??50)+delta)%100+100)%100;
+  d[key]=Math.round(v*10)/10;
+  if(key==='x')d.pos=d[key];
+ });
+ renderAll();
+}
 function markActiveSwatches(root){
  const l=currentLayer();
  if(!root||!l)return;
@@ -5915,6 +5941,10 @@ function wire(){
  if($('tsDistributeDotsV'))$('tsDistributeDotsV').onclick=()=>distributeDots('vertical');
  if($('tsDuplicateDotsRow'))$('tsDuplicateDotsRow').onclick=()=>duplicateDotLine('row');
  if($('tsDuplicateDotsColumn'))$('tsDuplicateDotsColumn').onclick=()=>duplicateDotLine('column');
+ if($('tsMoveDotsRowUp'))$('tsMoveDotsRowUp').onclick=()=>moveDotLine('row',-1);
+ if($('tsMoveDotsRowDown'))$('tsMoveDotsRowDown').onclick=()=>moveDotLine('row',1);
+ if($('tsMoveDotsColumnLeft'))$('tsMoveDotsColumnLeft').onclick=()=>moveDotLine('column',-1);
+ if($('tsMoveDotsColumnRight'))$('tsMoveDotsColumnRight').onclick=()=>moveDotLine('column',1);
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
   // duplicating a new set on top ("copy -> horizontal" already does that) - this turns an
