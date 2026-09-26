@@ -1184,6 +1184,8 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
         <div class="tsColourReadout"><span id="cmTexChip" class="tsColourChip"></span><span id="cmTexHex">#555555</span></div>
       </div>
       <p class="tsHint" style="margin:6px 0 0">The selected colour is applied live to the preview. No colour roles to remember.</p>
+      <div class="tsRow compact" style="margin-top:7px"><label>custom colour</label><input id="cmCustomColour" type="color" value="#6b442d"></div>
+      <p class="tsHint" style="margin:4px 0 0">Pick any colour directly for whichever target is selected above — skips the hero/vibe palette entirely, so (for example) a chocolate background and pastel dots can coexist without fighting one shared mood.</p>
       <div id="tsBgExtras" class="hidden" style="margin-top:8px">
         <div class="tsToggleLine"><span class="tsHint" style="margin:0">enable background</span><button id="tsBgToggle" class="tsToggle on"><i></i></button></div>
         <div class="tsRow"><label>opacity</label><input id="tsBgOpacity" type="range" min="0" max="100" value="100"></div>
@@ -4543,6 +4545,8 @@ function cmSyncBgColourUI(){
  const bh=document.getElementById('cmBaseHex'),th=document.getElementById('cmTexHex');
  if(bc)bc.style.background=base;if(tc)tc.style.background=tex;if(bh)bh.textContent=base.toUpperCase();if(th)th.textContent=tex.toUpperCase();
  cmMarkSelectedSwatch(cmBgTarget()==='base'?base:tex);
+ const custom=document.getElementById('cmCustomColour');
+ if(custom){const cur=cmBgTarget()==='base'?base:tex; if(/^#[0-9a-f]{6}$/i.test(cur))custom.value=cur;}
 }
 function cmSwatchClick(hex){
  const tsOpen=document.getElementById('textureStudioOverlay')?.classList.contains('open');
@@ -4814,6 +4818,8 @@ function renderColourwayFilmstrip(){
 ['cmHero','cmMood','cmRichness','cmVariationCount'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',cmApplyLive);});
 const cmTargetBase=document.getElementById('cmTargetBase'),cmTargetTex=document.getElementById('cmTargetTex');
 if(cmTargetBase&&cmTargetTex){cmTargetBase.onclick=()=>cmSetBgTarget('base');cmTargetTex.onclick=()=>cmSetBgTarget('tex');}
+const cmCustomColour=document.getElementById('cmCustomColour');
+if(cmCustomColour)cmCustomColour.addEventListener('input',()=>cmSwatchClick(cmCustomColour.value));
 document.getElementById('cmApplyLive').onclick=cmPreviewAll;
 document.getElementById('cmResetGrey').onclick=cmResetGrey;
 document.getElementById('cmSaveColourway').onclick=cmSaveColourway;
