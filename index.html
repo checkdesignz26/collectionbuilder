@@ -5352,7 +5352,9 @@ refreshHeroThumbs();
         <div class="tsGlobalGrid"><button id="tsBlendRow">blend row</button><button id="tsBlendColumn">blend column</button></div>
       </div></div>
       <div class="tsBox" id="tsBlendPathBox" style="margin:10px 0 0"><h3>Blend Along Path</h3><div class="tsPad">
-        <p class="tsHint" style="margin-top:0">Lays a fresh progressive blend of dots along a path - small → large, colour A → colour B - spaced automatically along the curve. Adds new dots; your existing ones aren't touched.</p>
+        <p class="tsHint" id="tsBlendPathModeHint" style="margin-top:0">Lays a progressive blend of dots along a path - small → large, colour A → colour B - as its own editable group, not loose dots. Select a blend below to move it, restyle it, or adjust its path.</p>
+        <div id="tsBlendGroupList" class="tsLayerList" style="margin-bottom:9px"></div>
+        <button id="tsNewBlendPath" class="full" style="display:none">+ start a new blend</button>
         <div class="tsRow"><label>path</label><select id="tsBlendPathType">
          <option value="wave">wave</option>
          <option value="arc">arc</option>
@@ -5363,6 +5365,9 @@ refreshHeroThumbs();
         <button id="tsDrawCustomPath" class="full" style="display:none">✏️ draw custom path on canvas</button>
         <p class="tsHint" id="tsCustomPathHint" style="display:none">Tap points on the canvas to trace a path, then tap "finish path".</p>
         <div class="tsRow"><label>steps</label><input id="tsBlendPathSteps" type="number" min="2" max="40" value="8" style="width:70px"></div>
+        <div class="tsRow"><label>spacing</label><input id="tsBlendPathSpacing" type="range" min="20" max="250" value="100"><span id="tsBlendPathSpacingValue" class="tsHint" style="min-width:38px">100%</span></div>
+        <p class="tsHint" style="margin-top:-4px">How much of the path's length the dots spread across - lower squeezes them tighter, higher spreads them further (handy for a spiral that's piling up).</p>
+        <div class="tsRow"><label>path size</label><input id="tsBlendPathScale" type="range" min="40" max="200" value="100"></div>
         <div class="tsRow"><label>start size</label><input id="tsBlendPathSizeA" type="range" min="2" max="120" value="12"></div>
         <div class="tsRow"><label>end size</label><input id="tsBlendPathSizeB" type="range" min="2" max="120" value="70"></div>
         <div class="tsRow"><label>start colour</label><input id="tsBlendPathColourA" type="color" value="#111111"></div>
@@ -5372,6 +5377,7 @@ refreshHeroThumbs();
          <label style="display:flex;align-items:center;gap:5px;font-weight:850"><input type="checkbox" id="tsBlendPathRotate">rotate to path</label>
         </div>
         <p class="tsHint" style="margin-top:2px">Round dots don't show orientation, so "rotate to path" has no visible effect here yet - it's on the same engine that will orient real motifs in Repeat Studio.</p>
+        <p class="tsHint" id="tsBlendMoveHint" style="display:none">This blend is selected for editing - drag any of its dots on the canvas to move the whole group together.</p>
         <button id="tsApplyBlendPath" class="full">place blend along path</button>
       </div></div>
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
@@ -5440,8 +5446,14 @@ const pkmPathShapes={
   const a=(startAngle+t*360)*Math.PI/180;
   return {x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r};
  },
+ // Fewer default turns and a larger inner radius than a first pass had - a spiral genuinely IS a
+ // curve that revisits the same angular neighbourhood at ever-closer radii the more it winds, so
+ // no amount of even arc-length spacing along it stops adjacent coils overlapping once they're
+ // packed too tightly; keeping the coil-to-coil gap comfortably wide by default is what actually
+ // fixes that, with "path size" and "spacing" (which sweeps more/less of the total turns) as the
+ // user's own levers if they want it tighter or looser.
  spiral:(t,o)=>{
-  const {cx=50,cy=50,r0=4,r1=44,turns=2.5,startAngle=-90}=o||{};
+  const {cx=50,cy=50,r0=10,r1=44,turns=1.6,startAngle=-90}=o||{};
   const a=(startAngle+t*360*turns)*Math.PI/180, r=r0+(r1-r0)*t;
   return {x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r};
  },
@@ -5506,7 +5518,7 @@ let state, selected=0, previewMode='single', showGuides=true, saved=[];
 let tsUndoStack=[], tsRedoStack=[], tsRestoring=false;
 function copy(o){return JSON.parse(JSON.stringify(o));}
 function tsSnapshot(){return copy({state,selected,previewMode,showGuides});}
-function tsRestore(snap){if(!snap)return;tsRestoring=true;state=copy(snap.state);selected=snap.selected||0;previewMode=snap.previewMode||'single';showGuides=snap.showGuides!==false;setSeg();renderAll();tsRestoring=false;}
+function tsRestore(snap){if(!snap)return;tsRestoring=true;state=copy(snap.state);selected=snap.selected||0;previewMode=snap.previewMode||'single';showGuides=snap.showGuides!==false;selectedBlendGroupId=null;customPathDrawing=false;customPathPoints=[];setSeg();renderAll();tsRestoring=false;}
 // Work-in-progress autosave: closing the studio (or reloading) without hitting "save classic" /
 // "apply to template" used to silently discard whatever you were mid-way through designing -
 // only explicitly-saved/applied patterns persisted. Debounced the same way as the main canvas's
@@ -5894,54 +5906,181 @@ function blendDotLine(axis){
  });
  renderAll();
 }
-// Blend Along Path: a custom path is built by tapping points on the canvas (wireCanvasDrag's
-// pointerdown short-circuits into pushCustomPathPoint while this is active, instead of its normal
-// select/drag behaviour) rather than freehand-dragged, since a sequence of taps is far more
-// reliable on a touch screen than tracing a smooth curve with a fingertip.
+// Blend Along Path, v2: each placement is a persistent, editable GROUP object
+// (state.blendGroups[]) rather than a one-shot stamp of loose dots. A group remembers exactly how
+// it was built (path type/opts, step count, spacing/coverage, path scale, size/colour range,
+// reverse, rotate-to-path, and an offsetX/offsetY for "move the whole blend"), so it can be
+// regenerated whenever a setting changes, selected/moved as one object, and duplicated or deleted
+// as a whole. The dots it produces still exist as ordinary dot layers underneath (tagged with
+// blendGroupId) - the group record is just the recipe that (re)builds them; regenerating always
+// removes and rebuilds every dot carrying that id, so a manual tweak to one of its dots is only
+// safe until the group's own settings change again.
+//
+// A custom path is built by tapping points on the canvas (wireCanvasDrag's pointerdown
+// short-circuits into pushCustomPathPoint while this is active) rather than freehand-dragged,
+// since a sequence of taps is far more reliable on a touch screen than tracing a smooth curve.
 let customPathDrawing=false, customPathPoints=[];
+let selectedBlendGroupId=null, blendGroupSeq=0;
+function currentBlendGroup(){return (state.blendGroups||[]).find(g=>g.id===selectedBlendGroupId)||null;}
 function pushCustomPathPoint(pt){customPathPoints.push({x:pt.x,y:pt.y}); renderAll();}
 function toggleCustomPathDrawing(){
  customPathDrawing=!customPathDrawing;
- if(customPathDrawing)customPathPoints=[];
+ if(customPathDrawing){const g=currentBlendGroup(); customPathPoints=(g&&g.type==='custom')?copy(g.opts.points||[]):[];}
  syncBlendPathUI();
  renderAll();
+}
+function readBlendPathForm(){
+ return {
+  type:$('tsBlendPathType')?.value||'wave',
+  count:Math.max(2,Math.min(40,parseInt($('tsBlendPathSteps')?.value,10)||8)),
+  coveragePct:Math.max(20,Math.min(250,+($('tsBlendPathSpacing')?.value||100))),
+  sizeScalePct:Math.max(40,Math.min(200,+($('tsBlendPathScale')?.value||100))),
+  sizeA:+($('tsBlendPathSizeA')?.value||12), sizeB:+($('tsBlendPathSizeB')?.value||70),
+  colourA:$('tsBlendPathColourA')?.value||'#111111', colourB:$('tsBlendPathColourB')?.value||'#ffffff',
+  reverse:!!$('tsBlendPathReverse')?.checked, rotateToPath:!!$('tsBlendPathRotate')?.checked
+ };
+}
+function writeBlendPathForm(g){
+ if($('tsBlendPathType'))$('tsBlendPathType').value=g.type;
+ if($('tsBlendPathSteps'))$('tsBlendPathSteps').value=g.count;
+ if($('tsBlendPathSpacing'))$('tsBlendPathSpacing').value=g.coveragePct;
+ if($('tsBlendPathSpacingValue'))$('tsBlendPathSpacingValue').textContent=g.coveragePct+'%';
+ if($('tsBlendPathScale'))$('tsBlendPathScale').value=g.sizeScalePct;
+ if($('tsBlendPathSizeA'))$('tsBlendPathSizeA').value=g.sizeA;
+ if($('tsBlendPathSizeB'))$('tsBlendPathSizeB').value=g.sizeB;
+ if($('tsBlendPathColourA'))$('tsBlendPathColourA').value=g.colourA;
+ if($('tsBlendPathColourB'))$('tsBlendPathColourB').value=g.colourB;
+ if($('tsBlendPathReverse'))$('tsBlendPathReverse').checked=g.reverse;
+ if($('tsBlendPathRotate'))$('tsBlendPathRotate').checked=g.rotateToPath;
+}
+// The one geometry knob exposed for parametric paths ("path size") - custom paths are already
+// fully user-drawn, so it doesn't apply to them.
+const PKM_PATH_SIZE_FIELD={wave:'amp',arc:'r',circle:'r',spiral:'r1'};
+const PKM_PATH_SIZE_DEFAULT={wave:22,arc:42,circle:38,spiral:44};
+function scaledPathOpts(group){
+ if(group.type==='custom')return {points:group.opts.points||[]};
+ const field=PKM_PATH_SIZE_FIELD[group.type]; if(!field)return group.opts||{};
+ const base=(group.opts&&group.opts[field]!=null)?group.opts[field]:PKM_PATH_SIZE_DEFAULT[group.type];
+ return {...(group.opts||{}),[field]:base*((group.sizeScalePct||100)/100)};
+}
+// Rebuilds every dot for this group from its current recipe - always a full remove-and-recreate so
+// step count, spacing and every other setting stay perfectly consistent with each other, at
+// whatever position offsetX/offsetY currently puts the group.
+function regenerateBlendGroup(id){
+ const group=(state.blendGroups||[]).find(g=>g.id===id); if(!group)return;
+ const insertAt=Math.min(state.layers.length,(state.layers||[]).findIndex(l=>l.blendGroupId===id));
+ const at=insertAt<0?state.layers.length:insertAt;
+ state.layers=(state.layers||[]).filter(l=>l.blendGroupId!==id);
+ const pathFn=pkmPathShapes[group.type]||pkmPathShapes.wave;
+ const pathOpts=scaledPathOpts(group);
+ // "spacing" scales how much of the path's parameter range gets swept - below 100% squeezes the
+ // same step count into a shorter stretch (tighter), above spreads it further (for a periodic path
+ // like circle/spiral this sweeps further around instead of retracing the same loop), which is
+ // exactly the lever a piled-up spiral needs.
+ const coverage=Math.max(0.2,Math.min(2.5,(group.coveragePct||100)/100));
+ const scaledPathFn=(t,o)=>pathFn(t*coverage,o);
+ const specs=[
+  {key:'width',a:group.sizeA,b:group.sizeB,interpolate:pkmLerpNumber},
+  {key:'color',a:group.colourA,b:group.colourB,interpolate:pkmLerpColour}
+ ];
+ const newLayers=pkmBlendAlongPath(scaledPathFn,pathOpts,group.count,specs,({x,y,angle,index,props})=>{
+  const fx=clamp(x+(group.offsetX||0),0,100), fy=clamp(y+(group.offsetY||0),0,100);
+  return {
+   kind:'dot',name:group.name+' '+(index+1),color:props.color,x:fx,y:fy,pos:fx,
+   width:Math.round(props.width*10)/10,gap:0,opacity:100,blend:'normal',direction:'single',rotate:fy,
+   pathAngle:group.rotateToPath?Math.round(angle*10)/10:undefined,blendGroupId:id,visible:true
+  };
+ },{reverse:group.reverse,rotateToPath:group.rotateToPath});
+ state.layers.splice(at,0,...newLayers);
+}
+function createBlendGroup(){
+ const form=readBlendPathForm();
+ if(form.type==='custom'&&customPathPoints.length<2)return;
+ tsPushHistory();
+ blendGroupSeq++;
+ const group=Object.assign({id:'bg'+Date.now()+'_'+blendGroupSeq,name:'blend '+blendGroupSeq,offsetX:0,offsetY:0,opts:form.type==='custom'?{points:copy(customPathPoints)}:{}},form);
+ state.blendGroups=state.blendGroups||[];
+ state.blendGroups.push(group);
+ regenerateBlendGroup(group.id);
+ selectedBlendGroupId=group.id;
+ customPathDrawing=false;
+ renderAll();
+}
+function updateSelectedBlendGroup(){
+ const group=currentBlendGroup(); if(!group)return;
+ const form=readBlendPathForm();
+ if(form.type==='custom'&&customPathPoints.length<2)return;
+ tsPushHistory();
+ Object.assign(group,form);
+ if(form.type==='custom')group.opts={points:copy(customPathPoints)};
+ regenerateBlendGroup(group.id);
+ customPathDrawing=false;
+ renderAll();
+}
+function applyBlendAlongPath(){
+ if(customPathDrawing)customPathDrawing=false;
+ if(selectedBlendGroupId)updateSelectedBlendGroup(); else createBlendGroup();
+}
+function selectBlendGroup(id){
+ selectedBlendGroupId=id;
+ customPathDrawing=false;
+ const group=currentBlendGroup();
+ if(group){writeBlendPathForm(group); customPathPoints=group.type==='custom'?copy(group.opts.points||[]):[];}
+ syncBlendPathUI();
+ renderAll();
+}
+function newBlendPath(){
+ selectedBlendGroupId=null; customPathDrawing=false; customPathPoints=[];
+ syncBlendPathUI();
+ renderAll();
+}
+function duplicateBlendGroup(id){
+ const group=(state.blendGroups||[]).find(g=>g.id===id); if(!group)return;
+ tsPushHistory();
+ blendGroupSeq++;
+ const clone=Object.assign(copy(group),{id:'bg'+Date.now()+'_'+blendGroupSeq,name:'blend '+blendGroupSeq,offsetX:(group.offsetX||0)+6,offsetY:(group.offsetY||0)+6});
+ state.blendGroups.push(clone);
+ regenerateBlendGroup(clone.id);
+ selectBlendGroup(clone.id);
+}
+function deleteBlendGroup(id){
+ tsPushHistory();
+ state.blendGroups=(state.blendGroups||[]).filter(g=>g.id!==id);
+ state.layers=(state.layers||[]).filter(l=>l.blendGroupId!==id);
+ if(selectedBlendGroupId===id)newBlendPath(); else renderAll();
+}
+function renderBlendGroupList(){
+ const list=$('tsBlendGroupList'); if(!list)return;
+ const groups=state.blendGroups||[];
+ if(!groups.length){list.innerHTML='<div class="tsEmpty">No path blends yet - build one below.</div>';}
+ else list.innerHTML='';
+ groups.forEach(g=>{
+  const dotCount=(state.layers||[]).filter(l=>l.blendGroupId===g.id).length;
+  const card=document.createElement('div');
+  card.className='tsLayerCard '+(g.id===selectedBlendGroupId?'active':'');
+  card.innerHTML=`<div class="tsLayerInfo"><b>${escapeHtml(g.name)}</b><small>${escapeHtml(g.type)} · ${dotCount} dots</small></div><div class="tsLayerActions"><button class="tsBlendDup" title="duplicate">⧉</button><button class="tsBlendDel" title="delete">×</button></div>`;
+  card.onclick=e=>{
+   if(e.target.closest('.tsBlendDup')){e.stopPropagation();duplicateBlendGroup(g.id);return;}
+   if(e.target.closest('.tsBlendDel')){e.stopPropagation();deleteBlendGroup(g.id);return;}
+   selectBlendGroup(g.id);
+  };
+  list.appendChild(card);
+ });
+ if($('tsNewBlendPath'))$('tsNewBlendPath').style.display=selectedBlendGroupId?'':'none';
 }
 function syncBlendPathUI(){
  const type=$('tsBlendPathType')?.value;
  const isCustom=type==='custom';
  if($('tsDrawCustomPath')){
   $('tsDrawCustomPath').style.display=isCustom?'':'none';
-  $('tsDrawCustomPath').textContent=customPathDrawing?'✓ finish path':'✏️ draw custom path on canvas';
+  $('tsDrawCustomPath').textContent=customPathDrawing?'✓ finish path':(selectedBlendGroupId?'✏️ redraw path on canvas':'✏️ draw custom path on canvas');
   $('tsDrawCustomPath').classList.toggle('active',customPathDrawing);
  }
  if($('tsCustomPathHint'))$('tsCustomPathHint').style.display=(isCustom&&customPathDrawing)?'':'none';
-}
-function applyBlendAlongPath(){
- const type=$('tsBlendPathType')?.value||'wave';
- const count=Math.max(2,Math.min(40,parseInt($('tsBlendPathSteps')?.value,10)||8));
- const sizeA=+($('tsBlendPathSizeA')?.value||12), sizeB=+($('tsBlendPathSizeB')?.value||70);
- const colourA=$('tsBlendPathColourA')?.value||'#111111', colourB=$('tsBlendPathColourB')?.value||'#ffffff';
- const reverse=!!$('tsBlendPathReverse')?.checked, rotateToPath=!!$('tsBlendPathRotate')?.checked;
- const pathFn=pkmPathShapes[type]||pkmPathShapes.wave;
- const pathOpts=type==='custom'?{points:customPathPoints}:undefined;
- if(type==='custom'&&customPathPoints.length<2)return;
- tsPushHistory();
- const specs=[
-  {key:'width',a:sizeA,b:sizeB,interpolate:pkmLerpNumber},
-  {key:'color',a:colourA,b:colourB,interpolate:pkmLerpColour}
- ];
- const baseCount=state.layers.length;
- // A plain round dot has no visible orientation, so "rotate to path" is stored (pathAngle) rather
- // than applied to anything a round dot renders with - the same blend call already computes the
- // real tangent angle at each step, ready for a future non-circular kind or a Repeat Studio motif
- // to actually draw rotated by it.
- const newLayers=pkmBlendAlongPath(pathFn,pathOpts,count,specs,({x,y,angle,index,props})=>({
-  kind:'dot',name:'blend '+(baseCount+index+1),color:props.color,x,y,pos:x,width:Math.round(props.width*10)/10,
-  gap:0,opacity:100,blend:'normal',direction:'single',rotate:y,pathAngle:rotateToPath?Math.round(angle*10)/10:undefined,visible:true
- }),{reverse,rotateToPath});
- state.layers.push(...newLayers);
- selected=state.layers.length-1;
- renderAll();
+ if($('tsApplyBlendPath'))$('tsApplyBlendPath').textContent=selectedBlendGroupId?'update this blend':'place blend along path';
+ if($('tsBlendMoveHint'))$('tsBlendMoveHint').style.display=selectedBlendGroupId?'':'none';
+ if($('tsBlendPathSpacingValue')&&$('tsBlendPathSpacing'))$('tsBlendPathSpacingValue').textContent=$('tsBlendPathSpacing').value+'%';
+ renderBlendGroupList();
 }
 function markActiveSwatches(root){
  const l=currentLayer();
@@ -6076,12 +6215,12 @@ function findDotSnap(pt,exclude){
 // column with it as a rigid group, instead of only the touched dot - normal dragging (mode off)
 // still moves just the one dot. dotMoveGroup/dotMoveLeadStart are captured once at drag-start (in
 // wireCanvasDrag's pointerdown) and consumed here every move.
-let dotMoveMode=null, dotMoveGroup=null, dotMoveLeadStart=null;
+let dotMoveMode=null, dotMoveGroup=null, dotMoveLeadStart=null, dotMoveIsBlendGroup=false;
 function moveSelectedToPoint(pt){
  const l=currentLayer(); if(!l)return;
  dotSnapGuideX=null; dotSnapGuideY=null;
  if(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'){
-  if(dotMoveMode&&dotMoveGroup&&dotMoveGroup.length&&dotMoveLeadStart){
+  if(dotMoveGroup&&dotMoveGroup.length&&dotMoveLeadStart){
    const snap=findDotSnap(pt,dotMoveGroup.map(g=>g.idx));
    const dx=snap.x-dotMoveLeadStart.x, dy=snap.y-dotMoveLeadStart.y;
    dotMoveGroup.forEach(g=>{
@@ -6119,7 +6258,7 @@ function wireCanvasDrag(){
   const pt=canvasPointToTile(ev);
   if(customPathDrawing){pushCustomPathPoint(pt); return;}
   selectLayerAtPoint(pt); startPt=pt; dragging=true; moved=false; historyPushed=false;
-  dotMoveGroup=null; dotMoveLeadStart=null;
+  dotMoveGroup=null; dotMoveLeadStart=null; dotMoveIsBlendGroup=false;
   if(dotMoveMode){
    const l=currentLayer();
    if(l&&(l.kind==='dot'||l.kind==='diamond'||l.kind==='square')){
@@ -6132,11 +6271,34 @@ function wireCanvasDrag(){
     dotMoveGroup=group;
     dotMoveLeadStart={x:l.x??l.pos??50,y:l.y??l.rotate??50};
    }
+  }else if(selectedBlendGroupId){
+   // A path blend selected for editing drags as one rigid object - any of its own dots (and only
+   // its own) starts a whole-group drag, exactly like Move Row/Column's group-drag, so it inherits
+   // the same live snap guides for free.
+   const l=currentLayer();
+   if(l&&l.blendGroupId===selectedBlendGroupId){
+    const group=[];
+    (state.layers||[]).forEach((d,i)=>{if(d.blendGroupId===selectedBlendGroupId)group.push({layer:d,idx:i,startX:d.x??d.pos??50,startY:d.y??d.rotate??50});});
+    dotMoveGroup=group;
+    dotMoveLeadStart={x:l.x??l.pos??50,y:l.y??l.rotate??50};
+    dotMoveIsBlendGroup=true;
+   }
   }
  });
  canvas.addEventListener('pointermove',ev=>{if(!dragging)return; ev.preventDefault(); const pt=canvasPointToTile(ev); if(!moved){if(Math.hypot(pt.x-startPt.x,pt.y-startPt.y)<TAP_TOLERANCE)return; moved=true;} if(!historyPushed){tsPushHistory();historyPushed=true;} moveSelectedToPoint(pt);});
- canvas.addEventListener('pointerup',ev=>{dragging=false; dotMoveGroup=null; dotMoveLeadStart=null; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
- canvas.addEventListener('pointercancel',ev=>{dragging=false; dotMoveGroup=null; dotMoveLeadStart=null; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ function endBlendGroupDragIfAny(){
+  if(dotMoveIsBlendGroup&&dotMoveGroup&&dotMoveGroup.length){
+   const group=currentBlendGroup();
+   if(group){
+    const m=dotMoveGroup[0];
+    group.offsetX=(group.offsetX||0)+(m.layer.x-m.startX);
+    group.offsetY=(group.offsetY||0)+(m.layer.y-m.startY);
+   }
+  }
+  dotMoveGroup=null; dotMoveLeadStart=null; dotMoveIsBlendGroup=false;
+ }
+ canvas.addEventListener('pointerup',ev=>{dragging=false; endBlendGroupDragIfAny(); if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ canvas.addEventListener('pointercancel',ev=>{dragging=false; endBlendGroupDragIfAny(); if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
 }
 function wire(){
  const tsMutate=(fn)=>{tsPushHistory();fn();renderAll();};
@@ -6144,7 +6306,7 @@ function wire(){
  $('tsAddCustomColour').onclick=()=>{const c=$('tsCustomColor').value; if(!palettes.custom.includes(c))palettes.custom.push(c); paletteSource='custom'; palette=palettes.custom; document.querySelectorAll('input[name="tsPaletteSource"]').forEach(r=>r.checked=(r.value==='custom')); setLayerColour(c);};
  $('openTextureStudio')?.addEventListener('click',open);$('tsClose').onclick=close;$('textureStudioOverlay').addEventListener('click',e=>{if(e.target.id==='textureStudioOverlay')close();});
  $('tsSwitchToBg')?.addEventListener('click',()=>{close();window.openBackgroundStudio&&window.openBackgroundStudio();});
- $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;dotMoveMode=null;syncDotMoveModeButtons();customPathDrawing=false;customPathPoints=[];syncBlendPathUI();$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
+ $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;dotMoveMode=null;syncDotMoveModeButtons();customPathDrawing=false;customPathPoints=[];selectedBlendGroupId=null;syncBlendPathUI();$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
  $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
  $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;const typeDefault=window.bgDemoRecipe?window.bgDemoRecipe(type,1).scale:60;const samePrevType=state.surfaceTexture&&state.surfaceTexture.type===type;state.surfaceTexture=type==='none'?null:{type,scale:(samePrevType&&state.surfaceTexture.scale)||typeDefault};}));
  $('tsSurfaceTextureScale').oninput=e=>{tsPushHistory();if(state.surfaceTexture)state.surfaceTexture.scale=+e.target.value;renderAll();};
@@ -6210,7 +6372,9 @@ function wire(){
  if($('tsBlendColumn'))$('tsBlendColumn').onclick=()=>blendDotLine('column');
  if($('tsBlendPathType'))$('tsBlendPathType').onchange=()=>{customPathDrawing=false;syncBlendPathUI();renderAll();};
  if($('tsDrawCustomPath'))$('tsDrawCustomPath').onclick=toggleCustomPathDrawing;
- if($('tsApplyBlendPath'))$('tsApplyBlendPath').onclick=()=>{if(customPathDrawing)toggleCustomPathDrawing();applyBlendAlongPath();};
+ if($('tsApplyBlendPath'))$('tsApplyBlendPath').onclick=applyBlendAlongPath;
+ if($('tsNewBlendPath'))$('tsNewBlendPath').onclick=newBlendPath;
+ if($('tsBlendPathSpacing'))$('tsBlendPathSpacing').oninput=()=>{if($('tsBlendPathSpacingValue'))$('tsBlendPathSpacingValue').textContent=$('tsBlendPathSpacing').value+'%';};
  syncBlendPathUI();
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
@@ -6264,6 +6428,7 @@ function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();sync
  if($('tsGlobalDotBox'))$('tsGlobalDotBox').style.display=dotBased?'':'none';
  if($('tsScatterDots'))$('tsScatterDots').style.display=(state.type==='dots')?'':'none';
  if($('tsBlendPathBox'))$('tsBlendPathBox').style.display=(state.type==='dots')?'':'none';
+ syncBlendPathUI();
 }
 function renderLayers(){const list=$('tsLayerList');list.innerHTML='';if($('tsUnlockAll'))$('tsUnlockAll').style.display=state.layers.some(l=>l.manual)?'':'none';if(!state.layers.length){list.innerHTML='<div class="tsEmpty">No layers yet.</div>';return;}const dirLabel={vertical:'Vertical',horizontal:'Horizontal',diag1:'Diagonal /',diag2:'Diagonal \\'};const dirIcon={vertical:'│',horizontal:'─',diag1:'╱',diag2:'╲'};state.layers.forEach((l,i)=>{let card=document.createElement('div');card.className='tsLayerCard '+(i===selected?'active':'');let label=dirLabel[l.direction]||'Vertical';let icon=(l.kind==='dot'?'●':l.chevron?'︿':(dirIcon[l.direction]||'│'));card.innerHTML=`<div class="tsLayerNum">${i+1}</div><div class="tsLayerSwatch" style="background:${l.color}"><span>${icon}</span></div><div class="tsLayerInfo"><b>${l.name||('layer '+(i+1))}</b><small>${label}</small></div><div class="tsLayerActions">${l.manual?'<button class="tsLockBtn" title="Tap to unlock - lets colour-mode preview cycling recolour this layer again">🔒</button>':''}<button class="tsEye">${l.visible?'shown':'hidden'}</button></div>`;card.onclick=e=>{if(e.target.classList.contains('tsEye')){l.visible=!l.visible;}else if(e.target.classList.contains('tsLockBtn')){l.manual=false;}else selected=i;renderAll();};list.appendChild(card);});}
 function renderInspector(sync=true){let l=state.layers[selected];$('tsInspectorTitle').textContent=l?'Classic Controls · '+(l.name||('Layer '+(selected+1))):'Classic Controls';if(!l)return;if(sync){$('tsMove').value=l.pos;$('tsRotate').value=(l.kind==='dot' ? (l.spin||0) : (l.kind==='diamond') ? (l.y ?? l.rotate ?? 50) : (l.rotate||0));$('tsWidth').value=l.width;$('tsGap').value=l.gap;if($('tsAllWidths'))$('tsAllWidths').value=l.width;if($('tsAllGaps'))$('tsAllGaps').value=l.gap;$('tsOpacity').value=l.opacity;$('tsBlend').value=l.blend||'normal';if($('tsGroupOpacity'))$('tsGroupOpacity').value=l.opacity??100;if($('tsGroupBlend'))$('tsGroupBlend').value=l.blend||'normal';['tsDirV','tsDirH','tsDirD1','tsDirD2'].forEach(id=>$(id).classList.remove('active'));$({vertical:'tsDirV',horizontal:'tsDirH',diag1:'tsDirD1',diag2:'tsDirD2'}[l.direction]||'tsDirV').classList.add('active');}updateHSBControls(sync);}
@@ -6555,7 +6720,7 @@ async function saveTexture(){
  setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
 }
 let tsSelectMode=false,tsSelectedIdx=new Set();
-function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;selectedBlendGroupId=null;customPathDrawing=false;customPathPoints=[];syncBlendPathUI();renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
 function renameSavedTexture(i){const s=saved[i];if(!s)return;const name=prompt('Rename this saved classic:',s.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===s.name)return;s.name=trimmed;renderFilmstrip();try{persistAllSavedItems();}catch(e){}}
 function tsUpdateSelectUI(){const btn=$('tsDownloadSelected');if(!btn)return;btn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!tsSelectedIdx.size;}
 function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);if($('tsSelectAll'))$('tsSelectAll').classList.toggle('hidden',!tsSelectMode);if($('tsSelectNone'))$('tsSelectNone').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
