@@ -5349,7 +5349,9 @@ refreshHeroThumbs();
         </div></div>
       </div></div>
       <div class="tsBox" id="tsGlobalDotBox" style="margin:10px 0 0"><h3>Global Dot Controls</h3><div class="tsPad">
-        <p class="tsHint" style="margin-top:0">Pick the selected dot's colour from the palette above, then spread it to every dot in one tap.</p>
+        <p class="tsHint" style="margin-top:0">If a corner or edge dot needs several taps of "remove" to actually clear - usually left over from duplicate row/column on an already-full grid - this clears out any dots genuinely stacked on the exact same spot.</p>
+        <button id="tsRemoveDuplicateDots" class="full">🧹 remove duplicate dots</button>
+        <p class="tsHint" style="margin-top:9px">Pick the selected dot's colour from the palette above, then spread it to every dot in one tap.</p>
         <button id="tsApplyAllDotColour" class="full">apply selected colour to all dots</button>
         <div class="tsRow" style="margin-top:9px"><label>all sizes</label><input id="tsAllDotSize" type="range" min="2" max="120" value="30"></div>
         <button id="tsApplyAllDotSize" class="full">apply size to all dots</button>
@@ -5865,6 +5867,30 @@ function distributeClassic(dir){
 // scatter of them meant selecting and adjusting every single one by hand. These mirror that same
 // "set one, apply to the group" pattern for dot layers specifically.
 function allDotLayers(){return (state.layers||[]).filter(l=>l&&l.kind==='dot');}
+// A few tools (duplicate row/column especially, before it started skipping past occupied lines;
+// also possible after scatter/arrange-in-grid/blend combos) can land two dots at the exact same
+// spot - genuinely two separate layers stacked on each other, not the seamless-tiling mirror effect
+// selectLayerAtPoint already resolves. Those need actually deleting one of, not just selecting
+// correctly. Scans every dot/diamond/square, keeps the first at each distinct position and removes
+// any later one within a tight tolerance of it.
+function removeDuplicateDots(){
+ const dots=(state.layers||[]).filter(l=>l&&(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'));
+ if(dots.length<2)return;
+ const tol=0.75;
+ const kept=[];
+ const dupes=new Set();
+ dots.forEach(d=>{
+  const x=d.x??d.pos??50, y=d.y??d.rotate??50;
+  if(kept.some(k=>Math.abs(k.x-x)<tol&&Math.abs(k.y-y)<tol))dupes.add(d);
+  else kept.push({x,y});
+ });
+ if(!dupes.size){setSaveStatus('no duplicates found','ok');return;}
+ tsPushHistory();
+ state.layers=state.layers.filter(l=>!dupes.has(l));
+ selected=Math.min(selected,state.layers.length-1);
+ renderAll();
+ setSaveStatus(dupes.size+' duplicate dot'+(dupes.size>1?'s':'')+' removed ✓','ok');
+}
 function applyAllDotColour(){
  const l=currentLayer();if(!l||l.kind!=='dot')return;
  const dots=allDotLayers();if(dots.length<2)return;
@@ -5942,7 +5968,6 @@ function distributeDots(axis){
 function duplicateDotLine(axis){
  const l=currentLayer();if(!l||l.kind!=='dot')return;
  const dots=allDotLayers();if(!dots.length)return;
- tsPushHistory();
  const key=axis==='row'?'y':'x';
  const tol=3;
  const anchor=l[key]??50;
@@ -5954,7 +5979,18 @@ function duplicateDotLine(axis){
   const diffs=[];for(let i=1;i<positions.length;i++)diffs.push(positions[i]-positions[i-1]);
   gap=diffs.reduce((a,b)=>a+b,0)/diffs.length;
  }
- const newPos=((anchor+gap)%100+100)%100;
+ // A grid that already has a row/column sitting at every regular gap (e.g. a plain 3x3 starter,
+ // fully filled) would otherwise land the "duplicate" exactly on top of an existing line - genuine
+ // stacked duplicates a designer then has to notice and clear out one at a time. Stepping forward
+ // by another gap whenever that happens finds the nearest line that's actually free instead - and
+ // if the regular gap divides the tile evenly (so stepping by it forever only cycles through
+ // already-occupied lines, never finding room), falling back to half that gap instead still lands
+ // a genuinely new row/column between two existing ones rather than silently refusing.
+ const findFreePos=(step)=>{let p=((anchor+step)%100+100)%100,tries=0; while(positions.some(q=>Math.abs(q-p)<tol)&&tries<30){p=((p+step)%100+100)%100;tries++;} return tries<30?p:null;};
+ let newPos=findFreePos(gap);
+ if(newPos==null)newPos=findFreePos(gap/2);
+ if(newPos==null){setSaveStatus('no room for another row/column here','bad');return;}
+ tsPushHistory();
  const copies=line.map(d=>{const c=copy(d);c[key]=newPos;if(key==='x')c.pos=newPos;c.name=(d.name||'dot')+' copy';return c;});
  state.layers.push(...copies);
  selected=state.layers.length-1;
@@ -6549,6 +6585,7 @@ function wire(){
  $('tsBack').onclick=()=>{if(selected<state.layers.length-1){const [l]=state.layers.splice(selected,1);state.layers.splice(selected+1,0,l);selected++;renderAll();}};
  $('tsClear').onclick=()=>{tsPushHistory();state.layers=[];selected=0;renderAll();};
  if($('tsApplyAllWidths'))$('tsApplyAllWidths').onclick=()=>applyAllStripe('width',$('tsAllWidths').value); if($('tsApplyAllGaps'))$('tsApplyAllGaps').onclick=()=>applyAllStripe('gap',$('tsAllGaps').value); if($('tsDistributeV'))$('tsDistributeV').onclick=()=>distributeClassic('vertical'); if($('tsDistributeH'))$('tsDistributeH').onclick=()=>distributeClassic('horizontal');
+ if($('tsRemoveDuplicateDots'))$('tsRemoveDuplicateDots').onclick=removeDuplicateDots;
  if($('tsApplyAllDotColour'))$('tsApplyAllDotColour').onclick=applyAllDotColour;
  if($('tsApplyAllDotSize'))$('tsApplyAllDotSize').onclick=()=>applyAllDotSize($('tsAllDotSize').value);
  if($('tsArrangeDotsGrid'))$('tsArrangeDotsGrid').onclick=arrangeDotsGrid;
@@ -6733,7 +6770,14 @@ function tsChevronBandPath(ctx,center,halfWidth,yFrom,yTo,periodPx,amp,round,wob
  for(let i=right.length-1;i>=0;i--)ctx.lineTo(right[i][0],right[i][1]);
  ctx.closePath();
 }
-function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);let ww=pxFromSlider(l.width,cell);
+function drawOneCell(ctx,cell,st,ox=0,oy=0,mirrorY=true){
+ // Brick/half-drop rows are horizontally shifted relative to their neighbours, so a shape sitting
+ // right on a cell's top/bottom edge no longer lines up with whatever mirror copy the row above or
+ // below would draw at that same seam - drawing both anyway just superimposes two mismatched phases
+ // and hides the stagger entirely. mirrorY=false (passed only by the brick preview loop) keeps each
+ // row's own edge-straddling half-shape at its own correct (shifted) position instead.
+ const dyMirror=mirrorY?[-cell,0,cell]:[0];
+ ctx.save();ctx.translate(ox,oy);ctx.beginPath();ctx.rect(0,0,cell,cell);ctx.clip();if(st.bg){ctx.globalAlpha=(st.bgOpacity??100)/100;ctx.fillStyle=st.bgColor||'#fff';ctx.fillRect(0,0,cell,cell);ctx.globalAlpha=1;}let layers=st.layers||[];layers.forEach((l,idx)=>{if(!l.visible)return;ctx.save();ctx.globalAlpha=(l.opacity??100)/100;ctx.globalCompositeOperation=compositeFor(l.blend);let ww=pxFromSlider(l.width,cell);
  // The texture pattern tile used to always be rendered at the FULL tile size (cell), regardless
  // of how small the shape being filled actually is. A watercolour blob is drawn many tile-pixels
  // wide, so a thin stripe (much narrower than cell) only ever showed a crop of a single blob's
@@ -6757,7 +6801,7 @@ function drawOneCell(ctx,cell,st,ox=0,oy=0){ctx.save();ctx.translate(ox,oy);ctx.
  let y=((l.y ?? l.rotate ?? 50)/100)*cell;
  const wobAmp=Math.min(tsHandDrawnAmp(st,cell),r*0.4);
  const spin=l.spin||0;
- [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r,idx*13+7,wobAmp,spin);ctx.fill();}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill();} if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{
+ [-cell,0,cell].forEach(dx=>dyMirror.forEach(dy=>{if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r,idx*13+7,wobAmp,spin);ctx.fill();}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill();} if(idx===st.__selectedIndex)tsStrokeSelected(ctx,cell,()=>{
   // Trace the SAME wobbly outline as the fill (just a hair bigger) rather than a plain circle -
   // otherwise the highlight visibly cuts across the wobble's peaks/valleys instead of hugging them.
   if(wobAmp){tsWobblyCirclePath(ctx,x+dx,y+dy,r+tsHighlightMargin(cell),idx*13+7,wobAmp,spin);}else{ctx.beginPath();ctx.arc(x+dx,y+dy,r+tsHighlightMargin(cell),0,Math.PI*2);}
@@ -6771,9 +6815,9 @@ else if(l.kind==='square'){
  const side=(l.width/100)*cell;
  const x=((l.x ?? l.pos ?? 50)/100)*cell;
  const y=((l.y ?? l.rotate ?? 50)/100)*cell;
- [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.fillRect(x+dx-side/2,y+dy-side/2,side,side); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(x+dx-side/2-m,y+dy-side/2-m,side+m*2,side+m*2));}}));
+ [-cell,0,cell].forEach(dx=>dyMirror.forEach(dy=>{ctx.fillRect(x+dx-side/2,y+dy-side/2,side,side); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(x+dx-side/2-m,y+dy-side/2-m,side+m*2,side+m*2));}}));
 }
-else if(l.kind==='check'){if(l.direction==='horizontal'){[-cell,0,cell].forEach(dy=>{ctx.fillRect(0,pos+dy-ww/2,cell,ww); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(0,pos+dy-ww/2-m,cell,ww+m*2));}});}else{[-cell,0,cell].forEach(dx=>{ctx.fillRect(pos+dx-ww/2,0,ww,cell); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(pos+dx-ww/2-m,0,ww+m*2,cell));}});}}
+else if(l.kind==='check'){if(l.direction==='horizontal'){dyMirror.forEach(dy=>{ctx.fillRect(0,pos+dy-ww/2,cell,ww); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(0,pos+dy-ww/2-m,cell,ww+m*2));}});}else{[-cell,0,cell].forEach(dx=>{ctx.fillRect(pos+dx-ww/2,0,ww,cell); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(pos+dx-ww/2-m,0,ww+m*2,cell));}});}}
 else if(l.kind==='diamond'){
  let size=ww*2.2;
  // v59: if a diamond has x/y it is a single editable blueprint diamond,
@@ -6781,7 +6825,7 @@ else if(l.kind==='diamond'){
  if(l.x!=null || l.y!=null){
   let x=((l.x ?? l.pos ?? 50)/100)*cell;
   let y=((l.y ?? l.rotate ?? 50)/100)*cell;
-  [-cell,0,cell].forEach(dx=>[-cell,0,cell].forEach(dy=>{ctx.save();ctx.translate(x+dx,y+dy);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(-size/2-m,-size/2-m,size+m*2,size+m*2));}ctx.restore();}));
+  [-cell,0,cell].forEach(dx=>dyMirror.forEach(dy=>{ctx.save();ctx.translate(x+dx,y+dy);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(-size/2-m,-size/2-m,size+m*2,size+m*2));}ctx.restore();}));
  }else{
   let step=Math.max(size,pxFromSlider((l.width||40)+(l.gap||30),cell));
   for(let y=pos-step;y<cell+step;y+=step){for(let x=pos-step;x<cell+step;x+=step){ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.fillRect(-size/2,-size/2,size,size); if(idx===st.__selectedIndex){const m=tsHighlightMargin(cell);tsStrokeSelected(ctx,cell,()=>ctx.strokeRect(-size/2-m,-size/2-m,size+m*2,size+m*2));}ctx.restore();}}
@@ -6909,7 +6953,7 @@ function renderPreview(canvas,size,st,mode,guides){
  let row=0;
  for(let ty=0; ty<size; ty+=cell, row++){
   const ox=(mode==='brick'&&row%2)?cell/2:0;
-  for(let tx=ox-cell; tx<size; tx+=cell){drawOneCell(ctx,cell,st,tx,ty);}
+  for(let tx=ox-cell; tx<size; tx+=cell){drawOneCell(ctx,cell,st,tx,ty,mode!=='brick');}
  }
  if(guides){
   ctx.strokeStyle='rgba(20,20,35,.22)';ctx.lineWidth=1;
@@ -6927,7 +6971,7 @@ async function saveTexture(){
  const btn=$('tsSave'); if(btn)btn.disabled=true;
  setSaveStatus('saving…','busy');
  let name=(state.type||'texture')+' '+(saved.length+1);
- saved.push({name,state:copy(state)});
+ saved.push({name,state:copy(state),previewMode});
  renderFilmstrip();
  const fs=$('tsFilmstrip'); if(fs)fs.scrollLeft=fs.scrollWidth;
  try{
@@ -6937,17 +6981,17 @@ async function saveTexture(){
  setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
 }
 let tsSelectMode=false,tsSelectedIdx=new Set();
-function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;selectedBlendGroupId=null;customPathPoints=[];resetBlendPickers();syncBlendPathUI();renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;selectedBlendGroupId=null;customPathPoints=[];resetBlendPickers();syncBlendPathUI();renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,s.previewMode||'single',false);});}
 function renameSavedTexture(i){const s=saved[i];if(!s)return;const name=prompt('Rename this saved classic:',s.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===s.name)return;s.name=trimmed;renderFilmstrip();try{persistAllSavedItems();}catch(e){}}
 function tsUpdateSelectUI(){const btn=$('tsDownloadSelected');if(!btn)return;btn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!tsSelectedIdx.size;}
 function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);if($('tsSelectAll'))$('tsSelectAll').classList.toggle('hidden',!tsSelectMode);if($('tsSelectNone'))$('tsSelectNone').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
 async function tsDownloadSelectedZip(){
- await downloadSelectedAsZip(saved,tsSelectedIdx,async(item,w)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,item.state,'single',false);return canvas;},'classic pattern');
+ await downloadSelectedAsZip(saved,tsSelectedIdx,async(item,w)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,item.state,item.previewMode||'single',false);return canvas;},'classic pattern');
 }
 // renderPreview is private to this IIFE - the collection portfolio (main script, outside this
 // closure) needs a way to render an arbitrary saved classic to a square canvas the same way this
 // filmstrip's own zip export does above.
-window.tsRenderSavedItemToCanvas=function(item,size){const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;renderPreview(canvas,size,item.state,'single',false);return canvas;};
+window.tsRenderSavedItemToCanvas=function(item,size){const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;renderPreview(canvas,size,item.state,item.previewMode||'single',false);return canvas;};
 /* v66 template-mode bridge: Classics Studio is a self-contained canvas editor with no
    link to the live template. "apply to template" snapshots the edited pattern into
    tsAppliedState, which is what actually shows on the main stage / travels with a
