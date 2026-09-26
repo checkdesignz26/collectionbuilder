@@ -2488,12 +2488,11 @@ function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'
 // export-width × export-width × 4 bytes, decoded/re-encoded back to back) rendered in one
 // run. A "little dot pattern" is exactly as many raw pixels as a busy plaid at the same
 // export size, so the safe batch size scales with the WIDTH the user actually picks in the
-// download panel, not the pattern count alone: a low-res batch of simple previews can go
-// much bigger than 20, while a full print-resolution batch needs to stay smaller. Budget is
-// calibrated so it reproduces the old flat 20-item cap at the panel's own suggested default
-// width (1200px for >10 items) - that combination was the one already proven safe.
-const ZIP_PIXEL_BUDGET=20*1200*1200;
-function zipSafeBatchSize(w){return Math.max(5,Math.min(200,Math.floor(ZIP_PIXEL_BUDGET/(w*w))));}
+// download panel, not the pattern count alone. Real-world print exports here run at a fixed
+// 3600x3600px, and 17 at that size held up fine on an iPad - budget is calibrated to allow
+// 10 at 3600px (a safety margin under that tested-working number, not the ceiling of it).
+const ZIP_PIXEL_BUDGET=10*3600*3600;
+function zipSafeBatchSize(w){return Math.max(5,Math.min(100,Math.floor(ZIP_PIXEL_BUDGET/(w*w))));}
 async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
  const count=selectedIdx.size;
  if(!count)return;
