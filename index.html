@@ -2483,22 +2483,25 @@ function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'
 // (name-dedup, the download panel, bundling into one ZIP) only exist once -
 // each caller just supplies its own list, which indices are selected, how to
 // render one item to a canvas at a given size, and a label for the toast/names.
-// Full-res zip batches are what actually blow the memory budget (dozens of large
-// canvases rendered back to back), not the per-tile export size - and the export size
-// is the one thing designers need left alone for real print use. So instead of shrinking
-// dimensions further, cap how many patterns a single zip run can take at once; past that,
-// ask the user to zip in smaller batches rather than silently dropping most of a big
-// selection (which is what used to happen - a "52 selected" export that quietly produced
-// a 4-file zip with no error, because most of them failed under memory pressure).
-const MAX_ZIP_BATCH=20;
+// What actually blows the memory budget on a device like an iPad isn't how many patterns
+// are selected, or how visually complex they are - it's dozens of large canvases (each
+// export-width × export-width × 4 bytes, decoded/re-encoded back to back) rendered in one
+// run. A "little dot pattern" is exactly as many raw pixels as a busy plaid at the same
+// export size, so the safe batch size scales with the WIDTH the user actually picks in the
+// download panel, not the pattern count alone: a low-res batch of simple previews can go
+// much bigger than 20, while a full print-resolution batch needs to stay smaller. Budget is
+// calibrated so it reproduces the old flat 20-item cap at the panel's own suggested default
+// width (1200px for >10 items) - that combination was the one already proven safe.
+const ZIP_PIXEL_BUDGET=20*1200*1200;
+function zipSafeBatchSize(w){return Math.max(5,Math.min(200,Math.floor(ZIP_PIXEL_BUDGET/(w*w))));}
 async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
  const count=selectedIdx.size;
  if(!count)return;
- if(count>MAX_ZIP_BATCH){
-  alert(`You've selected ${count} ${label}s. To keep large ZIP exports from failing on memory-constrained devices (like an iPad), please select ${MAX_ZIP_BATCH} or fewer at a time - download in a few smaller batches instead.`);
-  return;
- }
  window.openDownloadPanel(`download ${count} selected as ZIP`,async(w,dpi)=>{
+  const maxSafe=zipSafeBatchSize(w);
+  if(count>maxSafe){
+   return `failed — ${count} selected at ${w}×${w}px is too many for one batch (roughly ${maxSafe} fit safely at this size on a memory-constrained device). Lower the width, or select ${maxSafe} or fewer at a time.`;
+  }
   const files=[],used=new Set(),failed=[];
   // Bulk exports can mean dozens of large canvases rendered back to back - on a
   // memory-constrained device (iPad Safari especially) one item's render/encode can
@@ -2523,7 +2526,11 @@ async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
   triggerBlobDownload(makeZip(files),`${label}-${files.length}.zip`);
   if(failed.length)return `downloaded ${files.length}/${count} — ${failed.length} failed (see console): ${failed.slice(0,5).join(', ')}${failed.length>5?'…':''}`;
   return `downloaded ${files.length} ✓`;
- },w=>`Exports ${count} selected ${label}${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`,count>10?1200:2200);
+ },w=>{
+  const maxSafe=zipSafeBatchSize(w);
+  if(count>maxSafe)return `⚠ ${count} selected won't fit safely at ${w}×${w}px (roughly ${maxSafe} max at this size on a memory-constrained device) - lower the width, or select fewer, before downloading.`;
+  return `Exports ${count} selected ${label}${count===1?'':'s'} as ${w}×${w}px PNGs bundled in one ZIP.`;
+ },count>10?1200:2200);
 }
 // Minimal ZIP writer (STORED/uncompressed entries) - PNGs are already internally
 // compressed so DEFLATE would barely help, and skipping it avoids needing a whole
