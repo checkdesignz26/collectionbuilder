@@ -6307,6 +6307,14 @@ function layerDistance(l,pt){
  }
  return 1e9;
 }
+// Distance to a dot/diamond/square's own real position, with NO wraparound mirroring - used to
+// break ties among several dots that all register a hit via layerDistance's mirror check (see
+// selectLayerAtPoint), so a corner tap prefers whichever dot is actually sitting there.
+function directDotDistance(l,pt){
+ if(!l)return 1e9;
+ const x=l.x ?? l.pos ?? 50, y=l.y ?? l.rotate ?? 50;
+ return Math.hypot(pt.x-x,pt.y-y);
+}
 // Approximate on-canvas hit radius for dot/diamond/square, expressed as a percentage of the
 // tile (matches how drawOneCell actually sizes each: dot radius = pxFromSlider(width,cell), i.e.
 // width/9 as a % of cell; diamond/square scale off the same width in their own way).
@@ -6329,7 +6337,21 @@ function selectLayerAtPoint(pt){
   if(l.visible===false || !(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'))return;
   if(layerDistance(l,pt)<=dotHitRadiusPct(l))hits.push(i);
  });
- if(hits.length){selected=hits[hits.length-1]; renderAll(); return;}
+ if(hits.length){
+  // Several dots can all register a hit at once near a tile edge/corner: each one's own
+  // seamless-tiling mirror (see the "variants" 3x3 check above) can land exactly on top of a
+  // DIFFERENT dot's real position - dotsDefault's four corner dots all mirror onto every corner,
+  // so tapping any one corner used to always hit all four at once. Picking whichever hit's OWN
+  // true position is actually nearest the tap (rather than always the highest z-order index)
+  // means a corner tap reliably grabs the dot that's really there, so "remove" takes it out in one
+  // go instead of needing several tries as it cycled through the others by index alone.
+  let best=hits[0], bestDist=directDotDistance(state.layers[hits[0]],pt);
+  for(let k=1;k<hits.length;k++){
+   const idx=hits[k], d=directDotDistance(state.layers[idx],pt);
+   if(d<bestDist-1e-6||(Math.abs(d-bestDist)<=1e-6&&idx>best)){best=idx;bestDist=d;}
+  }
+  selected=best; renderAll(); return;
+ }
  let best=selected, bd=1e9;
  (state.layers||[]).forEach((l,i)=>{if(l.visible===false)return; const d=layerDistance(l,pt); if(d<bd){bd=d;best=i;}});
  if(bd<18 || state.type==='dots'){selected=best; renderAll();}
