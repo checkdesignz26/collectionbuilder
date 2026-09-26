@@ -1755,6 +1755,12 @@ function expandSessionStateFromStorage(data){
  }
  return {...data,bricks,blueprintStore};
 }
+// Safari (and other browsers) can silently evict IndexedDB/localStorage for a site it decides is
+// "not engaged with" - a real, if rare, way saved patterns can vanish with no in-app cause at all.
+// Requesting persistent storage doesn't guarantee protection (Safari has no permission prompt for
+// this - it's granted or refused by its own engagement heuristics, invisibly), but it costs nothing
+// to ask, so this is a defensive no-op almost everywhere else and a small extra safety margin here.
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 window.__savedItemsBlob=loadAllSavedItemsBlob();
 window.__savedItemsBlob.templates=expandTemplatesFromBlob(window.__savedItemsBlob);
 // The collection portfolio is a curated SUBSET of what's saved, not a mirror of it - membership is
@@ -2008,8 +2014,15 @@ function downloadProjectBackup(){
  // "helpfully" append the extension matching a recognised MIME type onto whatever filename was
  // requested, turning "….pplayground" into "….pplayground.json" on disk. An opaque/generic MIME
  // type gives the browser nothing to recognise, so the requested .pplayground name is left alone.
- triggerBlobDownload(new Blob([JSON.stringify(data)],{type:'application/octet-stream'}),`magic-collection-builder-backup-${stamp}.pplayground`);
- flashSaveStatus('project file downloaded ✓');
+ const json=JSON.stringify(data);
+ triggerBlobDownload(new Blob([json],{type:'application/octet-stream'}),`magic-collection-builder-backup-${stamp}.pplayground`);
+ // A backup that silently captured nothing (empty arrays because saved lists hadn't hydrated
+ // yet, say) used to look exactly like a real one until you opened it later and found out the
+ // hard way - the status line now states exactly what's inside, at the moment of download, so a
+ // suspiciously-empty file is obvious immediately instead of only discovered after data is gone.
+ const si=data.savedItems;
+ const counts=`${si.templates.length} pattern${si.templates.length===1?'':'s'}, ${si.classics.length} classic${si.classics.length===1?'':'s'}, ${si.backgrounds.length} background${si.backgrounds.length===1?'':'s'}`;
+ flashSaveStatus(`project file downloaded ✓ (${counts}, ${Math.round(json.length/1024)}KB)`,true,6000);
 }
 function restoreProjectBackup(raw){
  let data;try{data=JSON.parse(raw);}catch(e){flashSaveStatus('that file is not readable JSON',false);return;}
@@ -2029,7 +2042,9 @@ function restoreProjectBackup(raw){
   renderMotifTray();renderColourwayFilmstrip();
   persistAllSavedItems();
  }
- applySnapshotToLiveState(data.session,'project file loaded ✓');
+ const si=data.savedItems||{templates:[],classics:[],backgrounds:[]};
+ const counts=`${si.templates.length} pattern${si.templates.length===1?'':'s'}, ${si.classics.length} classic${si.classics.length===1?'':'s'}, ${si.backgrounds.length} background${si.backgrounds.length===1?'':'s'}`;
+ applySnapshotToLiveState(data.session,`project file loaded ✓ (${counts})`);
 }
 document.getElementById('downloadProjectBtn').onclick=downloadProjectBackup;
 document.getElementById('loadProjectBtn').onclick=()=>document.getElementById('loadProjectFile').click();
