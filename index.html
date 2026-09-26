@@ -5338,6 +5338,8 @@ refreshHeroThumbs();
         <div class="tsRow"><label>move amount</label><input id="tsMoveDotAmount" type="number" min="1" max="100" value="5" style="width:70px"></div>
         <div class="tsGlobalGrid"><button id="tsMoveDotsRowUp">row ▲</button><button id="tsMoveDotsRowDown">row ▼</button></div>
         <div class="tsGlobalGrid" style="margin-top:7px"><button id="tsMoveDotsColumnLeft">column ◀</button><button id="tsMoveDotsColumnRight">column ▶</button></div>
+        <p class="tsHint" style="margin-top:9px">Or turn on Move Row / Move Column and drag any dot in that line freely - the whole row or column drags with it, with the alignment guides still active.</p>
+        <div class="tsGlobalGrid"><button id="tsMoveRowMode">move row: off</button><button id="tsMoveColumnMode">move column: off</button></div>
         <p class="tsHint" style="margin-top:9px">Even out the gaps between dots along a line - the two outermost dots stay put, everything between them spreads out equally. Set an exact gap instead, or leave it blank to fit edge to edge.</p>
         <div class="tsRow"><label>exact spacing</label><input id="tsDistributeSpacing" type="number" min="1" max="100" placeholder="auto" style="width:70px"></div>
         <div class="tsGlobalGrid"><button id="tsDistributeDotsH">distribute horizontally</button><button id="tsDistributeDotsV">distribute vertically</button></div>
@@ -5837,7 +5839,10 @@ function snapStripeEdge(v){if(v<=EDGE_SNAP)return 0; if(v>=100-EDGE_SNAP)return 
 // a pink guide line is drawn at that position so the alignment is visible, not just felt.
 const DOT_SNAP_PX=3;
 let dotSnapGuideX=null, dotSnapGuideY=null;
-function findDotSnap(pt,excludeIdx){
+// "exclude" is either a single layer index or an array of them (a whole row/column being moved
+// together shouldn't snap against its own members, only against tile edges and other dots).
+function findDotSnap(pt,exclude){
+ const excludeSet=Array.isArray(exclude)?new Set(exclude):new Set([exclude]);
  let gx=null,bestDX=DOT_SNAP_PX,snapX=pt.x;
  let gy=null,bestDY=DOT_SNAP_PX,snapY=pt.y;
  [0,50,100].forEach(v=>{
@@ -5845,20 +5850,35 @@ function findDotSnap(pt,excludeIdx){
   const dy=Math.abs(pt.y-v); if(dy<bestDY){bestDY=dy;snapY=v;gy=v;}
  });
  (state.layers||[]).forEach((l,i)=>{
-  if(i===excludeIdx||l.visible===false||!(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'))return;
+  if(excludeSet.has(i)||l.visible===false||!(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'))return;
   const lx=l.x??l.pos??50, ly=l.y??l.rotate??50;
   const dx=Math.abs(pt.x-lx); if(dx<bestDX){bestDX=dx;snapX=lx;gx=lx;}
   const dy=Math.abs(pt.y-ly); if(dy<bestDY){bestDY=dy;snapY=ly;gy=ly;}
  });
  return {x:snapX,y:snapY,guideX:gx,guideY:gy};
 }
+// Move Row / Move Column mode: while active, dragging any dot in that line drags the whole row or
+// column with it as a rigid group, instead of only the touched dot - normal dragging (mode off)
+// still moves just the one dot. dotMoveGroup/dotMoveLeadStart are captured once at drag-start (in
+// wireCanvasDrag's pointerdown) and consumed here every move.
+let dotMoveMode=null, dotMoveGroup=null, dotMoveLeadStart=null;
 function moveSelectedToPoint(pt){
  const l=currentLayer(); if(!l)return;
  dotSnapGuideX=null; dotSnapGuideY=null;
  if(l.kind==='dot'||l.kind==='diamond'||l.kind==='square'){
-  const snap=findDotSnap(pt,selected);
-  l.x=snap.x; l.y=snap.y; l.pos=snap.x; l.rotate=snap.y;
-  dotSnapGuideX=snap.guideX; dotSnapGuideY=snap.guideY;
+  if(dotMoveMode&&dotMoveGroup&&dotMoveGroup.length&&dotMoveLeadStart){
+   const snap=findDotSnap(pt,dotMoveGroup.map(g=>g.idx));
+   const dx=snap.x-dotMoveLeadStart.x, dy=snap.y-dotMoveLeadStart.y;
+   dotMoveGroup.forEach(g=>{
+    const nx=((g.startX+dx)%100+100)%100, ny=((g.startY+dy)%100+100)%100;
+    g.layer.x=nx; g.layer.y=ny; g.layer.pos=nx; g.layer.rotate=ny;
+   });
+   dotSnapGuideX=snap.guideX; dotSnapGuideY=snap.guideY;
+  }else{
+   const snap=findDotSnap(pt,selected);
+   l.x=snap.x; l.y=snap.y; l.pos=snap.x; l.rotate=snap.y;
+   dotSnapGuideX=snap.guideX; dotSnapGuideY=snap.guideY;
+  }
  }else if(l.direction==='horizontal'){
   l.pos=snapStripeEdge(pt.y);
  }else if(l.direction==='diag1'){
@@ -5879,10 +5899,27 @@ function wireCanvasDrag(){
  let dragging=false, moved=false, startPt=null, historyPushed=false;
  const TAP_TOLERANCE=2;
  canvas.style.touchAction='none';
- canvas.addEventListener('pointerdown',ev=>{if(!state)return; ev.preventDefault(); canvas.setPointerCapture(ev.pointerId); const pt=canvasPointToTile(ev); selectLayerAtPoint(pt); startPt=pt; dragging=true; moved=false; historyPushed=false;});
+ canvas.addEventListener('pointerdown',ev=>{
+  if(!state)return; ev.preventDefault(); canvas.setPointerCapture(ev.pointerId);
+  const pt=canvasPointToTile(ev); selectLayerAtPoint(pt); startPt=pt; dragging=true; moved=false; historyPushed=false;
+  dotMoveGroup=null; dotMoveLeadStart=null;
+  if(dotMoveMode){
+   const l=currentLayer();
+   if(l&&(l.kind==='dot'||l.kind==='diamond'||l.kind==='square')){
+    const key=dotMoveMode==='row'?'y':'x';
+    const anchor=l[key]??50, tol=3, group=[];
+    (state.layers||[]).forEach((d,i)=>{
+     if(d.visible===false||!(d.kind==='dot'||d.kind==='diamond'||d.kind==='square'))return;
+     if(Math.abs((d[key]??50)-anchor)<tol)group.push({layer:d,idx:i,startX:d.x??d.pos??50,startY:d.y??d.rotate??50});
+    });
+    dotMoveGroup=group;
+    dotMoveLeadStart={x:l.x??l.pos??50,y:l.y??l.rotate??50};
+   }
+  }
+ });
  canvas.addEventListener('pointermove',ev=>{if(!dragging)return; ev.preventDefault(); const pt=canvasPointToTile(ev); if(!moved){if(Math.hypot(pt.x-startPt.x,pt.y-startPt.y)<TAP_TOLERANCE)return; moved=true;} if(!historyPushed){tsPushHistory();historyPushed=true;} moveSelectedToPoint(pt);});
- canvas.addEventListener('pointerup',ev=>{dragging=false; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
- canvas.addEventListener('pointercancel',ev=>{dragging=false; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ canvas.addEventListener('pointerup',ev=>{dragging=false; dotMoveGroup=null; dotMoveLeadStart=null; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ canvas.addEventListener('pointercancel',ev=>{dragging=false; dotMoveGroup=null; dotMoveLeadStart=null; if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
 }
 function wire(){
  const tsMutate=(fn)=>{tsPushHistory();fn();renderAll();};
@@ -5890,7 +5927,7 @@ function wire(){
  $('tsAddCustomColour').onclick=()=>{const c=$('tsCustomColor').value; if(!palettes.custom.includes(c))palettes.custom.push(c); paletteSource='custom'; palette=palettes.custom; document.querySelectorAll('input[name="tsPaletteSource"]').forEach(r=>r.checked=(r.value==='custom')); setLayerColour(c);};
  $('openTextureStudio')?.addEventListener('click',open);$('tsClose').onclick=close;$('textureStudioOverlay').addEventListener('click',e=>{if(e.target.id==='textureStudioOverlay')close();});
  $('tsSwitchToBg')?.addEventListener('click',()=>{close();window.openBackgroundStudio&&window.openBackgroundStudio();});
- $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
+ $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;dotMoveMode=null;syncDotMoveModeButtons();$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
  $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
  $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;const typeDefault=window.bgDemoRecipe?window.bgDemoRecipe(type,1).scale:60;const samePrevType=state.surfaceTexture&&state.surfaceTexture.type===type;state.surfaceTexture=type==='none'?null:{type,scale:(samePrevType&&state.surfaceTexture.scale)||typeDefault};}));
  $('tsSurfaceTextureScale').oninput=e=>{tsPushHistory();if(state.surfaceTexture)state.surfaceTexture.scale=+e.target.value;renderAll();};
@@ -5945,6 +5982,13 @@ function wire(){
  if($('tsMoveDotsRowDown'))$('tsMoveDotsRowDown').onclick=()=>moveDotLine('row',1);
  if($('tsMoveDotsColumnLeft'))$('tsMoveDotsColumnLeft').onclick=()=>moveDotLine('column',-1);
  if($('tsMoveDotsColumnRight'))$('tsMoveDotsColumnRight').onclick=()=>moveDotLine('column',1);
+ function syncDotMoveModeButtons(){
+  const rowBtn=$('tsMoveRowMode'),colBtn=$('tsMoveColumnMode');
+  if(rowBtn){rowBtn.textContent='move row: '+(dotMoveMode==='row'?'on':'off');rowBtn.classList.toggle('active',dotMoveMode==='row');}
+  if(colBtn){colBtn.textContent='move column: '+(dotMoveMode==='column'?'on':'off');colBtn.classList.toggle('active',dotMoveMode==='column');}
+ }
+ if($('tsMoveRowMode'))$('tsMoveRowMode').onclick=()=>{dotMoveMode=dotMoveMode==='row'?null:'row';syncDotMoveModeButtons();};
+ if($('tsMoveColumnMode'))$('tsMoveColumnMode').onclick=()=>{dotMoveMode=dotMoveMode==='column'?null:'column';syncDotMoveModeButtons();};
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
   // duplicating a new set on top ("copy -> horizontal" already does that) - this turns an
