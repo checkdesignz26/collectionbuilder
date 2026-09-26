@@ -2489,9 +2489,9 @@ function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'
 // run. A "little dot pattern" is exactly as many raw pixels as a busy plaid at the same
 // export size, so the safe batch size scales with the WIDTH the user actually picks in the
 // download panel, not the pattern count alone. Real-world print exports here run at a fixed
-// 3600x3600px, and 17 at that size held up fine on an iPad - budget is calibrated to allow
-// 10 at 3600px (a safety margin under that tested-working number, not the ceiling of it).
-const ZIP_PIXEL_BUDGET=10*3600*3600;
+// 3600x3600px, and 17 at that size held up fine on an iPad - budget is calibrated to cap
+// at 20 there, the requested round number just above that tested-working count.
+const ZIP_PIXEL_BUDGET=20*3600*3600;
 function zipSafeBatchSize(w){return Math.max(5,Math.min(100,Math.floor(ZIP_PIXEL_BUDGET/(w*w))));}
 async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
  const count=selectedIdx.size;
@@ -5454,7 +5454,7 @@ refreshHeroThumbs();
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
     </div>
-    <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint" id="tsFilmHint">tap to load · all classic pattern types live together</span><button id="tsSelectMode" class="small">select</button><button id="tsSelectAll" class="small hidden">select all</button><button id="tsSelectNone" class="small hidden">deselect all</button><button id="tsRenameSelected" class="small hidden">rename selected</button><button id="tsDownloadSelected" class="small primary hidden">download selected (zip)</button></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
+    <div class="tsFooterFilm"><div class="tsFilmHead"><b>saved classics filmstrip</b><span class="tsHint" id="tsFilmHint">tap to load · all classic pattern types live together</span><button id="tsSelectMode" class="small">select</button><button id="tsSelectAll" class="small hidden">select all</button><button id="tsSelectNone" class="small hidden">deselect all</button><button id="tsRenameSelected" class="small hidden">rename selected</button><button id="tsDownloadSelected" class="small primary hidden">download selected (zip)</button><button id="tsDeleteSelected" class="small danger hidden">delete selected</button></div><div id="tsFilmstrip" class="tsFilmstrip"></div></div>
   </div>
 </div>
 
@@ -6690,6 +6690,7 @@ function wire(){
  if($('tsSelectNone'))$('tsSelectNone').onclick=()=>{tsSelectedIdx.clear();renderFilmstrip();tsUpdateSelectUI();};
  if($('tsDownloadSelected'))$('tsDownloadSelected').onclick=tsDownloadSelectedZip;
  if($('tsRenameSelected'))$('tsRenameSelected').onclick=tsRenameSelectedBatch;
+ if($('tsDeleteSelected'))$('tsDeleteSelected').onclick=tsDeleteSelectedBatch;
  if($('tsGreyModeBtn'))$('tsGreyModeBtn').onclick=()=>tsShowMode('grey');
  if($('tsColourModeBtn'))$('tsColourModeBtn').onclick=()=>tsShowMode('colour');
 }
@@ -7025,8 +7026,8 @@ async function saveTexture(){
 let tsSelectMode=false,tsSelectedIdx=new Set();
 function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;selectedBlendGroupId=null;customPathPoints=[];resetBlendPickers();syncBlendPathUI();renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,s.previewMode||'single',false);});}
 function renameSavedTexture(i){const s=saved[i];if(!s)return;const name=prompt('Rename this saved classic:',s.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===s.name)return;s.name=trimmed;renderFilmstrip();try{persistAllSavedItems();}catch(e){}}
-function tsUpdateSelectUI(){const dlBtn=$('tsDownloadSelected');if(dlBtn){dlBtn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';dlBtn.disabled=!tsSelectedIdx.size;}const rnBtn=$('tsRenameSelected');if(rnBtn){rnBtn.textContent=tsSelectedIdx.size?`rename ${tsSelectedIdx.size} selected`:'rename selected';rnBtn.disabled=!tsSelectedIdx.size;}}
-function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);if($('tsSelectAll'))$('tsSelectAll').classList.toggle('hidden',!tsSelectMode);if($('tsSelectNone'))$('tsSelectNone').classList.toggle('hidden',!tsSelectMode);if($('tsRenameSelected'))$('tsRenameSelected').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
+function tsUpdateSelectUI(){const dlBtn=$('tsDownloadSelected');if(dlBtn){dlBtn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';dlBtn.disabled=!tsSelectedIdx.size;}const rnBtn=$('tsRenameSelected');if(rnBtn){rnBtn.textContent=tsSelectedIdx.size?`rename ${tsSelectedIdx.size} selected`:'rename selected';rnBtn.disabled=!tsSelectedIdx.size;}const delBtn=$('tsDeleteSelected');if(delBtn){delBtn.textContent=tsSelectedIdx.size?`delete ${tsSelectedIdx.size} selected`:'delete selected';delBtn.disabled=!tsSelectedIdx.size;}}
+function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);if($('tsSelectAll'))$('tsSelectAll').classList.toggle('hidden',!tsSelectMode);if($('tsSelectNone'))$('tsSelectNone').classList.toggle('hidden',!tsSelectMode);if($('tsRenameSelected'))$('tsRenameSelected').classList.toggle('hidden',!tsSelectMode);if($('tsDeleteSelected'))$('tsDeleteSelected').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
 async function tsDownloadSelectedZip(){
  await downloadSelectedAsZip(saved,tsSelectedIdx,async(item,w)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,item.state,item.previewMode||'single',false);return canvas;},'classic pattern');
 }
@@ -7042,6 +7043,21 @@ function tsRenameSelectedBatch(){
  tsUpdateSelectUI();
  try{persistAllSavedItems();}catch(e){}
  setSaveStatus(idxs.length+' renamed ✓','ok');
+}
+// Batch delete ("clear filmstrip" via select all + delete selected). A confirm naming the exact
+// count, plus a combined undo, so clearing out test junk can't accidentally take out patterns
+// someone's been saving for a while - one wrong tap doesn't silently erase 50 saved classics.
+function tsDeleteSelectedBatch(){
+ if(!tsSelectedIdx.size)return;
+ if(!confirm(`Delete ${tsSelectedIdx.size} selected classic${tsSelectedIdx.size===1?'':'s'}? This can be undone right after, but not once you navigate away.`))return;
+ const idxs=[...tsSelectedIdx].sort((a,b)=>b-a);
+ const removed=[];
+ idxs.forEach(i=>{const s=saved[i];if(!s)return;saved.splice(i,1);removed.unshift(s);});
+ tsSelectedIdx.clear();
+ renderFilmstrip();
+ tsUpdateSelectUI();
+ try{persistAllSavedItems();}catch(e){}
+ showUndoToast(`Deleted ${removed.length} classic${removed.length===1?'':'s'}`,()=>{saved.push(...removed);try{persistAllSavedItems();}catch(e){}renderFilmstrip();});
 }
 // renderPreview is private to this IIFE - the collection portfolio (main script, outside this
 // closure) needs a way to render an arbitrary saved classic to a square canvas the same way this
