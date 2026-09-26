@@ -5225,14 +5225,14 @@ refreshHeroThumbs();
 <div id="textureStudioOverlay" class="tsOverlay" aria-hidden="true">
   <div class="tsModal">
     <div class="tsHeader">
-      <div><h2>classics studio</h2><p>shared studio for stripes, dots, checks, plaid, argyle · still inside PKM</p></div>
+      <div><h2>classics studio</h2><p>shared studio for stripes, polka dots, checks, plaid, argyle · still inside PKM</p></div>
       <div class="topActions"><button id="tsApplyToPKM" class="small primary">apply to pattern</button><button id="tsSave" class="small">save classic</button><button id="tsDownload" class="small">download PNG</button><button id="tsUndo" class="small">↶ undo</button><button id="tsRedo" class="small">↷ redo</button><span id="tsStatus" class="saveStatus"></span><button id="tsReset" class="small">reset classic</button><button id="tsSwitchToBg" class="small" title="Switch to Background Studio"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="tsClose" class="tsClose" title="Close Classics Studio and return to the repeat layout canvas">← back to pattern</button></div>
     </div>
     <div class="tsBody">
       <aside class="tsPanel">
         <div class="tsBox"><h3>Classic Patterns</h3><div class="tsPad tsTabs" id="tsTabs">
           <button class="active" data-type="stripes"><span>▥</span>Stripes</button>
-          <button data-type="dots"><span>⠿</span>Dots</button>
+          <button data-type="dots"><span>⠿</span>Polka Dots</button>
           <button data-type="checks"><span>▦</span>Checks</button>
           <button data-type="plaid"><span>▤</span>Plaid</button>
           <button data-type="madras"><span>▤</span>Madras</button>
@@ -5517,6 +5517,9 @@ function chevronDefault(){return {type:'chevron',bg:true,bgColor:'#ffffff',bgOpa
  {kind:'stripe',chevron:true,name:'black chevron 3',color:'#111111',pos:78,width:10,gap:45,opacity:100,blend:'normal',direction:'vertical',rotate:0,visible:true}
 ]};}
 function defaultFor(type){return type==='dots'?dotsDefault():type==='checks'?checksDefault():type==='plaid'?plaidDefault():type==='madras'?madrasDefault():type==='diagplaid'?diagonalPlaidDefault():type==='argyle'?argyleDefault():type==='gingham'?ginghamDefault():type==='chevron'?chevronDefault():stripeDefaults();}
+// "dots" is the internal type/kind key used everywhere (dotsDefault, allDotLayers, l.kind==='dot',
+// saved-item type, etc.) - only its user-facing display name changes to "Polka Dots".
+function tsStudioLabel(type){return type==='dots'?'Polka Dots':(type||'stripes').replace(/^./,c=>c.toUpperCase());}
 function open(){document.body.style.overflow='hidden';$('textureStudioOverlay').classList.add('open');renderAll();renderFilmstrip();tsUpdateUndoRedo();mountColourMode('tsColourModeSlot');window.cmSetBgTarget?.('tex');}
 function openType(type){
  // Opening a specific pattern type from OUTSIDE the studio (a main-app shortcut button, or the
@@ -5902,7 +5905,7 @@ function wire(){
 function setSeg(){['tsSingle','tsRepeat','tsBrick'].forEach(id=>$(id).classList.remove('active'));$(previewMode==='single'?'tsSingle':previewMode==='repeat'?'tsRepeat':'tsBrick').classList.add('active');}
 function syncSurfaceTextureUI(){const tex=state.surfaceTexture;const activeType=tex&&tex.type?tex.type:'none';$('tsSurfaceTextureGrid')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tstex===activeType));const row=$('tsSurfaceTextureIntensityRow');if(row)row.style.display=activeType==='none'?'none':'grid';if($('tsSurfaceTextureScale'))$('tsSurfaceTextureScale').value=(tex&&tex.scale)||60;}
 function syncHandDrawnUI(){const hd=state.handDrawn;const on=!!(hd&&hd.enabled);$('tsWobbleToggle')?.classList.toggle('on',on);const row=$('tsWobbleIntensityRow');if(row)row.style.display=on?'grid':'none';if($('tsWobbleAmount'))$('tsWobbleAmount').value=(hd&&hd.amount)||35;}
-function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();tsScheduleWipAutosave();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=(state.type||'stripes').replace(/^./,c=>c.toUpperCase())+' Studio';renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;
+function renderAll(sync=true){refreshAllLayerNames();syncSurfaceTextureUI();syncHandDrawnUI();tsScheduleWipAutosave();$('tsBgToggle').classList.toggle('on',!!state.bg);$('tsBgOpacity').value=state.bgOpacity??100;if(document.getElementById('textureStudioOverlay')?.classList.contains('open'))cmSyncBgColourUI();$('tsPatternScale').value=state.scale||100;$('tsScaleValue').textContent=(state.scale||100)+'%'; if($('tsScaleName'))$('tsScaleName').textContent=scaleName(state.scale||100);$('tsStudioTitle').textContent=tsStudioLabel(state.type)+' Studio';document.querySelectorAll('#tsTabs button').forEach(b=>b.classList.toggle('active',b.dataset.type===state.type));renderLayers();renderInspector(sync);renderPalette();renderColourGrid();state.__selectedIndex=selected; renderPreview($('tsPreview'),900,state,previewMode,showGuides); delete state.__selectedIndex;
  // renderFilmstrip() used to run here too, on every single edit - fine with a couple of saved
  // patterns, but with a real library of them it means fully re-rendering every saved thumbnail
  // (each running the same wobble/surface-texture drawing as the live canvas) on every slider
