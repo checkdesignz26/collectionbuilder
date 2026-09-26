@@ -2483,15 +2483,16 @@ function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'
 // (name-dedup, the download panel, bundling into one ZIP) only exist once -
 // each caller just supplies its own list, which indices are selected, how to
 // render one item to a canvas at a given size, and a label for the toast/names.
-// What actually blows the memory budget on a device like an iPad isn't how many patterns
-// are selected, or how visually complex they are - it's dozens of large canvases (each
-// export-width × export-width × 4 bytes, decoded/re-encoded back to back) rendered in one
-// run. A "little dot pattern" is exactly as many raw pixels as a busy plaid at the same
-// export size, so the safe batch size scales with the WIDTH the user actually picks in the
-// download panel, not the pattern count alone. Real-world print exports here run at a fixed
-// 3600x3600px, and 17 at that size held up fine on an iPad - budget is calibrated to cap
-// at 20 there, the requested round number just above that tested-working count.
-const ZIP_PIXEL_BUDGET=20*3600*3600;
+// What actually blows the memory budget on a device like an iPad is the RAW, uncompressed
+// canvas each item briefly occupies while it's being rendered/encoded (export-width ×
+// export-width × 4 bytes) - not the size of the final compressed PNG, which is a poor proxy
+// for that: a flat-colour dot pattern compresses to a couple hundred KB same as a busy one
+// would be several times bigger, but both cost the SAME raw pixels while being rendered.
+// 20 at 3600px (the real export size in use) has now been confirmed working on the actual
+// device twice (17, then 20) - budget bumped to allow 30 there as the next step to try;
+// raise it further only after that's confirmed too, small-output-file-size isn't evidence
+// on its own that a much bigger jump is safe.
+const ZIP_PIXEL_BUDGET=30*3600*3600;
 function zipSafeBatchSize(w){return Math.max(5,Math.min(100,Math.floor(ZIP_PIXEL_BUDGET/(w*w))));}
 async function downloadSelectedAsZip(list,selectedIdx,renderItemToCanvas,label){
  const count=selectedIdx.size;
