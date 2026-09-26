@@ -5352,33 +5352,37 @@ refreshHeroThumbs();
         <div class="tsGlobalGrid"><button id="tsBlendRow">blend row</button><button id="tsBlendColumn">blend column</button></div>
       </div></div>
       <div class="tsBox" id="tsBlendPathBox" style="margin:10px 0 0"><h3>Blend Along Path</h3><div class="tsPad">
-        <p class="tsHint" id="tsBlendPathModeHint" style="margin-top:0">Lays a progressive blend of dots along a path - small → large, colour A → colour B - as its own editable group, not loose dots. Select a blend below to move it, restyle it, or adjust its path.</p>
+        <p class="tsHint" id="tsBlendPathModeHint" style="margin-top:0">Pick two dots - they become the start and end of the blend, with their own size and colour setting the range automatically. Select a blend below to move it, restyle it, or adjust its path.</p>
         <div id="tsBlendGroupList" class="tsLayerList" style="margin-bottom:9px"></div>
         <button id="tsNewBlendPath" class="full" style="display:none">+ start a new blend</button>
+        <div class="tsRow"><label>Dot A</label><div id="tsBlendDotAPreview" class="tsHint">not set</div><button id="tsSetBlendDotA" class="small">use selected dot</button></div>
+        <div class="tsRow"><label>Dot B</label><div id="tsBlendDotBPreview" class="tsHint">not set</div><button id="tsSetBlendDotB" class="small">use selected dot</button></div>
+        <p class="tsHint" id="tsBlendEndpointHint" style="margin-top:2px">Tap a dot on the canvas (or a layer card), then tap "use selected dot" for A, then again for B.</p>
         <div class="tsRow"><label>path</label><select id="tsBlendPathType">
+         <option value="straight">straight line</option>
          <option value="wave">wave</option>
          <option value="arc">arc</option>
          <option value="circle">circle</option>
          <option value="spiral">spiral</option>
-         <option value="custom">custom (drawn)</option>
+         <option value="custom">draw live</option>
         </select></div>
-        <button id="tsDrawCustomPath" class="full" style="display:none">✏️ draw custom path on canvas</button>
-        <p class="tsHint" id="tsCustomPathHint" style="display:none">Tap points on the canvas to trace a path, then tap "finish path".</p>
-        <div class="tsRow"><label>steps</label><input id="tsBlendPathSteps" type="number" min="2" max="40" value="8" style="width:70px"></div>
+        <p class="tsHint" id="tsCenterEdgeHint" style="display:none">For circle/spiral, Dot A marks the centre (and stays put, untouched) and Dot B marks the starting edge.</p>
+        <button id="tsDrawCustomPath" class="full" style="display:none">✏️ draw path with finger/pencil</button>
+        <p class="tsHint" id="tsCustomPathHint" style="display:none">Draw anywhere between roughly Dot A and Dot B - the shape is automatically stretched to connect them exactly. Lift your finger to finish.</p>
+        <div class="tsRow"><label>steps</label><input id="tsBlendPathSteps" type="number" min="1" max="40" value="6" style="width:70px"></div>
+        <p class="tsHint" id="tsBlendPathStepsHint" style="margin-top:-4px">How many dots go in between Dot A and Dot B - Playground works out each one's size, colour and position automatically.</p>
         <div class="tsRow"><label>spacing</label><input id="tsBlendPathSpacing" type="range" min="20" max="250" value="100"><span id="tsBlendPathSpacingValue" class="tsHint" style="min-width:38px">100%</span></div>
-        <p class="tsHint" style="margin-top:-4px">How much of the path's length the dots spread across - lower squeezes them tighter, higher spreads them further (handy for a spiral that's piling up).</p>
-        <div class="tsRow"><label>path size</label><input id="tsBlendPathScale" type="range" min="40" max="200" value="100"></div>
-        <div class="tsRow"><label>start size</label><input id="tsBlendPathSizeA" type="range" min="2" max="120" value="12"></div>
-        <div class="tsRow"><label>end size</label><input id="tsBlendPathSizeB" type="range" min="2" max="120" value="70"></div>
-        <div class="tsRow"><label>start colour</label><input id="tsBlendPathColourA" type="color" value="#111111"></div>
-        <div class="tsRow"><label>end colour</label><input id="tsBlendPathColourB" type="color" value="#ffffff"></div>
+        <div id="tsCurveAmountRow">
+         <div class="tsRow"><label>curve amount</label><input id="tsBlendPathScale" type="range" min="0" max="200" value="60"></div>
+         <p class="tsHint" id="tsCurveAmountHint" style="margin-top:-4px">How far the curve bows away from a straight line.</p>
+        </div>
         <div class="tsRow" style="gap:14px;flex-wrap:wrap">
          <label style="display:flex;align-items:center;gap:5px;font-weight:850"><input type="checkbox" id="tsBlendPathReverse">reverse</label>
          <label style="display:flex;align-items:center;gap:5px;font-weight:850"><input type="checkbox" id="tsBlendPathRotate">rotate to path</label>
         </div>
         <p class="tsHint" style="margin-top:2px">Round dots don't show orientation, so "rotate to path" has no visible effect here yet - it's on the same engine that will orient real motifs in Repeat Studio.</p>
         <p class="tsHint" id="tsBlendMoveHint" style="display:none">This blend is selected for editing - drag any of its dots on the canvas to move the whole group together.</p>
-        <button id="tsApplyBlendPath" class="full">place blend along path</button>
+        <button id="tsApplyBlendPath" class="full">place blend</button>
       </div></div>
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
@@ -5509,6 +5513,53 @@ function pkmBlendAlongPath(pathFn,pathOpts,count,specs,makeItem,opts){
   return makeItem({x:p.x,y:p.y,angle,index:i,t,props});
  });
 }
+// Two-point path factories - the newer, visual way into the same Blend Along Path engine above:
+// instead of typing in an abstract centre/radius/amplitude, the designer picks two actual dots and
+// these build a pathFn(t) that runs exactly through them (or, for circle/spiral, is centred and
+// sized by them). Every factory returns a plain t=>({x,y}) function, so it drops straight into
+// pkmSamplePathEven/pkmBlendAlongPath unchanged - opts-agnostic, just like the preset shapes.
+function pkmStraightPath(A,B){return t=>({x:A.x+(B.x-A.x)*t,y:A.y+(B.y-A.y)*t});}
+function pkmWavePath(A,B,amp,cycles){
+ const dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+ return t=>{const off=Math.sin(t*Math.PI*2*cycles)*amp; return {x:A.x+dx*t+nx*off,y:A.y+dy*t+ny*off};};
+}
+function pkmArcPath(A,B,bulge){
+ const mx=(A.x+B.x)/2,my=(A.y+B.y)/2,dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+ const cx=mx+nx*bulge,cy=my+ny*bulge;
+ return t=>{const u=1-t; return {x:u*u*A.x+2*u*t*cx+t*t*B.x,y:u*u*A.y+2*u*t*cy+t*t*B.y};};
+}
+function pkmCirclePath(center,edge,turnsFrac){
+ const r=Math.hypot(edge.x-center.x,edge.y-center.y)||1, startAngle=Math.atan2(edge.y-center.y,edge.x-center.x);
+ return t=>{const a=startAngle+t*Math.PI*2*turnsFrac; return {x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};};
+}
+function pkmSpiralPath(center,edge,turns,growth){
+ const r0=Math.hypot(edge.x-center.x,edge.y-center.y)||1, startAngle=Math.atan2(edge.y-center.y,edge.x-center.x), r1=r0*growth;
+ return t=>{const a=startAngle+t*Math.PI*2*turns,r=r0+(r1-r0)*t; return {x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};};
+}
+function pkmCustomPolylinePath(points){
+ return t=>{
+  if(!points||points.length<2)return (points&&points[0])||{x:50,y:50};
+  const segCount=points.length-1,segT=t*segCount,idx=Math.min(segCount-1,Math.max(0,Math.floor(segT))),local=segT-idx;
+  const a=points[idx],b=points[idx+1];
+  return {x:a.x+(b.x-a.x)*local,y:a.y+(b.y-a.y)*local};
+ };
+}
+// A path drawn freehand almost never starts/ends exactly on the two chosen dots - this rescales,
+// rotates and translates the whole drawn stroke as one rigid shape so its first and last points
+// land EXACTLY on A and B (preserving whatever squiggle was drawn in between), so "draw roughly
+// between them" is always enough; precision aim was never required.
+function pkmFitPolylineToEndpoints(points,A,B){
+ if(!points||points.length<2)return points||[];
+ const p0=points[0],p1=points[points.length-1];
+ const rawDx=p1.x-p0.x,rawDy=p1.y-p0.y,rawLen=Math.hypot(rawDx,rawDy)||1,rawAngle=Math.atan2(rawDy,rawDx);
+ const targetDx=B.x-A.x,targetDy=B.y-A.y,targetLen=Math.hypot(targetDx,targetDy)||1,targetAngle=Math.atan2(targetDy,targetDx);
+ const scale=targetLen/rawLen,rot=targetAngle-rawAngle,cosR=Math.cos(rot),sinR=Math.sin(rot);
+ return points.map(p=>{
+  const dx=(p.x-p0.x)*scale,dy=(p.y-p0.y)*scale;
+  const rx=dx*cosR-dy*sinR,ry=dx*sinR+dy*cosR;
+  return {x:A.x+rx,y:A.y+ry};
+ });
+}
 (function(){
 const $=id=>document.getElementById(id);
 const palettes={collection:['#111111','#555555','#999999','#ffffff','#f4f4f4','#d9d9d9','#222222','#777777'],hero:['#111111','#555555','#999999','#ffffff','#f4f4f4','#d9d9d9','#222222','#777777'],custom:['#111111','#ffffff','#777777','#d9d9d9']};
@@ -5518,7 +5569,7 @@ let state, selected=0, previewMode='single', showGuides=true, saved=[];
 let tsUndoStack=[], tsRedoStack=[], tsRestoring=false;
 function copy(o){return JSON.parse(JSON.stringify(o));}
 function tsSnapshot(){return copy({state,selected,previewMode,showGuides});}
-function tsRestore(snap){if(!snap)return;tsRestoring=true;state=copy(snap.state);selected=snap.selected||0;previewMode=snap.previewMode||'single';showGuides=snap.showGuides!==false;selectedBlendGroupId=null;customPathDrawing=false;customPathPoints=[];setSeg();renderAll();tsRestoring=false;}
+function tsRestore(snap){if(!snap)return;tsRestoring=true;state=copy(snap.state);selected=snap.selected||0;previewMode=snap.previewMode||'single';showGuides=snap.showGuides!==false;selectedBlendGroupId=null;customPathPoints=[];resetBlendPickers();setSeg();renderAll();tsRestoring=false;}
 // Work-in-progress autosave: closing the studio (or reloading) without hitting "save classic" /
 // "apply to template" used to silently discard whatever you were mid-way through designing -
 // only explicitly-saved/applied patterns persisted. Debounced the same way as the main canvas's
@@ -5906,84 +5957,110 @@ function blendDotLine(axis){
  });
  renderAll();
 }
-// Blend Along Path, v2: each placement is a persistent, editable GROUP object
-// (state.blendGroups[]) rather than a one-shot stamp of loose dots. A group remembers exactly how
-// it was built (path type/opts, step count, spacing/coverage, path scale, size/colour range,
-// reverse, rotate-to-path, and an offsetX/offsetY for "move the whole blend"), so it can be
-// regenerated whenever a setting changes, selected/moved as one object, and duplicated or deleted
-// as a whole. The dots it produces still exist as ordinary dot layers underneath (tagged with
-// blendGroupId) - the group record is just the recipe that (re)builds them; regenerating always
-// removes and rebuilds every dot carrying that id, so a manual tweak to one of its dots is only
-// safe until the group's own settings change again.
+// Blend Along Path, v3: the primary interaction is visual now - pick two existing dots (Dot A and
+// Dot B) and their own position/size/colour become the blend's two endpoints automatically, rather
+// than typing numeric start/end values. Each placement is still a persistent, editable GROUP
+// object (state.blendGroups[]), not a stamp of loose dots: it remembers its two endpoint snapshots,
+// path type/params, step count, spacing, reverse, rotate-to-path, and an offsetX/offsetY for moving
+// it, so it can be regenerated, selected/moved, duplicated or deleted as a whole. Its dots are
+// tagged with blendGroupId and always fully rebuilt from the group's recipe.
 //
-// A custom path is built by tapping points on the canvas (wireCanvasDrag's pointerdown
-// short-circuits into pushCustomPathPoint while this is active) rather than freehand-dragged,
-// since a sequence of taps is far more reliable on a touch screen than tracing a smooth curve.
-let customPathDrawing=false, customPathPoints=[];
+// For straight/wave/arc/custom, Dot A and Dot B themselves become the first and last dots of the
+// sequence - their original standalone layer is absorbed into the group. For circle/spiral, Dot A
+// instead marks the centre and is left exactly as it was (a circle/spiral's centre was never
+// itself a point ON the path) - only Dot B (the starting edge) and the generated dots join.
+let pendingBlendA=null, pendingBlendB=null; // {ref, x, y, width, color} snapshots
+let customPathDrawing=false, customPathLiveDrag=false, customPathPoints=[];
 let selectedBlendGroupId=null, blendGroupSeq=0;
 function currentBlendGroup(){return (state.blendGroups||[]).find(g=>g.id===selectedBlendGroupId)||null;}
-function pushCustomPathPoint(pt){customPathPoints.push({x:pt.x,y:pt.y}); renderAll();}
-function toggleCustomPathDrawing(){
- customPathDrawing=!customPathDrawing;
- if(customPathDrawing){const g=currentBlendGroup(); customPathPoints=(g&&g.type==='custom')?copy(g.opts.points||[]):[];}
+function isCenterEdgeType(type){return type==='circle'||type==='spiral';}
+function captureBlendEndpoint(which){
+ const l=currentLayer(); if(!l||l.kind!=='dot')return;
+ const snap={ref:l,x:l.x??l.pos??50,y:l.y??l.rotate??50,width:l.width||10,color:l.color||'#111111'};
+ if(which==='A')pendingBlendA=snap; else pendingBlendB=snap;
  syncBlendPathUI();
- renderAll();
+}
+function endpointStyle(which){
+ const group=currentBlendGroup();
+ if(which==='A')return pendingBlendA?{width:pendingBlendA.width,color:pendingBlendA.color}:(group?group.styleA:null);
+ return pendingBlendB?{width:pendingBlendB.width,color:pendingBlendB.color}:(group?group.styleB:null);
+}
+function endpointPreviewHTML(style){
+ if(!style)return 'not set';
+ return `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:50%;background:${style.color};display:inline-block;border:1px solid #0003"></span>${Math.round(style.width)}px</span>`;
+}
+// Where the path's two ends actually are right now - a freshly picked dot if there is one, else
+// whatever the selected group was already built with. Used for both the live preview (before
+// creating/updating) and the actual regenerate.
+function currentEndpointPositions(){
+ const group=currentBlendGroup();
+ const A=pendingBlendA?{x:pendingBlendA.x,y:pendingBlendA.y}:(group?group.posA:null);
+ const B=pendingBlendB?{x:pendingBlendB.x,y:pendingBlendB.y}:(group?group.posB:null);
+ return {A,B};
 }
 function readBlendPathForm(){
  return {
-  type:$('tsBlendPathType')?.value||'wave',
-  count:Math.max(2,Math.min(40,parseInt($('tsBlendPathSteps')?.value,10)||8)),
+  pathType:$('tsBlendPathType')?.value||'straight',
+  count:Math.max(1,Math.min(40,parseInt($('tsBlendPathSteps')?.value,10)||6)),
   coveragePct:Math.max(20,Math.min(250,+($('tsBlendPathSpacing')?.value||100))),
-  sizeScalePct:Math.max(40,Math.min(200,+($('tsBlendPathScale')?.value||100))),
-  sizeA:+($('tsBlendPathSizeA')?.value||12), sizeB:+($('tsBlendPathSizeB')?.value||70),
-  colourA:$('tsBlendPathColourA')?.value||'#111111', colourB:$('tsBlendPathColourB')?.value||'#ffffff',
+  curveAmountPct:Math.max(0,Math.min(200,+($('tsBlendPathScale')?.value||60))),
   reverse:!!$('tsBlendPathReverse')?.checked, rotateToPath:!!$('tsBlendPathRotate')?.checked
  };
 }
 function writeBlendPathForm(g){
- if($('tsBlendPathType'))$('tsBlendPathType').value=g.type;
+ if($('tsBlendPathType'))$('tsBlendPathType').value=g.pathType;
  if($('tsBlendPathSteps'))$('tsBlendPathSteps').value=g.count;
  if($('tsBlendPathSpacing'))$('tsBlendPathSpacing').value=g.coveragePct;
  if($('tsBlendPathSpacingValue'))$('tsBlendPathSpacingValue').textContent=g.coveragePct+'%';
- if($('tsBlendPathScale'))$('tsBlendPathScale').value=g.sizeScalePct;
- if($('tsBlendPathSizeA'))$('tsBlendPathSizeA').value=g.sizeA;
- if($('tsBlendPathSizeB'))$('tsBlendPathSizeB').value=g.sizeB;
- if($('tsBlendPathColourA'))$('tsBlendPathColourA').value=g.colourA;
- if($('tsBlendPathColourB'))$('tsBlendPathColourB').value=g.colourB;
+ if($('tsBlendPathScale'))$('tsBlendPathScale').value=g.curveAmountPct;
  if($('tsBlendPathReverse'))$('tsBlendPathReverse').checked=g.reverse;
  if($('tsBlendPathRotate'))$('tsBlendPathRotate').checked=g.rotateToPath;
 }
-// The one geometry knob exposed for parametric paths ("path size") - custom paths are already
-// fully user-drawn, so it doesn't apply to them.
-const PKM_PATH_SIZE_FIELD={wave:'amp',arc:'r',circle:'r',spiral:'r1'};
-const PKM_PATH_SIZE_DEFAULT={wave:22,arc:42,circle:38,spiral:44};
-function scaledPathOpts(group){
- if(group.type==='custom')return {points:group.opts.points||[]};
- const field=PKM_PATH_SIZE_FIELD[group.type]; if(!field)return group.opts||{};
- const base=(group.opts&&group.opts[field]!=null)?group.opts[field]:PKM_PATH_SIZE_DEFAULT[group.type];
- return {...(group.opts||{}),[field]:base*((group.sizeScalePct||100)/100)};
+// Builds the actual t=>({x,y}) path function for a group's current recipe - the one place that
+// turns posA/posB/curveAmountPct into a real curve, shared by both the live preview (fed a
+// throwaway pseudo-group straight from the form) and the real regenerate.
+function buildGroupPathFn(group){
+ const A=group.posA||{x:30,y:50}, B=group.posB||{x:70,y:50};
+ const curvePct=group.curveAmountPct??60;
+ switch(group.pathType){
+  case 'wave': return pkmWavePath(A,B,curvePct/200*40,2);
+  case 'arc': return pkmArcPath(A,B,curvePct/200*40);
+  case 'circle': return pkmCirclePath(A,B,1);
+  case 'spiral': return pkmSpiralPath(A,B,1.6,1+curvePct/100);
+  case 'custom': return pkmCustomPolylinePath(group.customPoints&&group.customPoints.length>=2?group.customPoints:[A,B]);
+  default: return pkmStraightPath(A,B);
+ }
 }
 // Rebuilds every dot for this group from its current recipe - always a full remove-and-recreate so
-// step count, spacing and every other setting stay perfectly consistent with each other, at
-// whatever position offsetX/offsetY currently puts the group.
+// step count, spacing and every other setting stay perfectly consistent, at whatever
+// offsetX/offsetY currently puts the group.
 function regenerateBlendGroup(id){
  const group=(state.blendGroups||[]).find(g=>g.id===id); if(!group)return;
- const insertAt=Math.min(state.layers.length,(state.layers||[]).findIndex(l=>l.blendGroupId===id));
+ const insertAt=(state.layers||[]).findIndex(l=>l.blendGroupId===id);
  const at=insertAt<0?state.layers.length:insertAt;
  state.layers=(state.layers||[]).filter(l=>l.blendGroupId!==id);
- const pathFn=pkmPathShapes[group.type]||pkmPathShapes.wave;
- const pathOpts=scaledPathOpts(group);
+ const pathFn=buildGroupPathFn(group);
  // "spacing" scales how much of the path's parameter range gets swept - below 100% squeezes the
- // same step count into a shorter stretch (tighter), above spreads it further (for a periodic path
- // like circle/spiral this sweeps further around instead of retracing the same loop), which is
- // exactly the lever a piled-up spiral needs.
+ // same step count into a shorter stretch, above spreads it further (for circle/spiral this sweeps
+ // further around instead of retracing the same loop) - the fix for a spiral piling up.
  const coverage=Math.max(0.2,Math.min(2.5,(group.coveragePct||100)/100));
- const scaledPathFn=(t,o)=>pathFn(t*coverage,o);
- const specs=[
-  {key:'width',a:group.sizeA,b:group.sizeB,interpolate:pkmLerpNumber},
-  {key:'color',a:group.colourA,b:group.colourB,interpolate:pkmLerpColour}
+ const scaledPathFn=t=>pathFn(t*coverage);
+ const centerEdge=isCenterEdgeType(group.pathType);
+ // Straight/wave/arc/custom: A and B are both real sequence members (t=0 and t=1), so the total
+ // is the intermediate step count plus both of them. Circle/spiral: only B seeds the sequence
+ // (t=0) - "steps" there just means how many dots trace the shape starting at B.
+ const total=centerEdge?Math.max(1,group.count):Math.max(2,group.count+2);
+ // For the two-endpoint types, t=0 is literally Dot A's spot, so style at t=0 must be A's style.
+ // For centre/edge types, t=0 is Dot B's spot, so B's style has to be the t=0 end instead - A's
+ // style is only ever approached at the far end, never actually sitting anywhere on the path.
+ const specs=centerEdge?[
+  {key:'width',a:group.styleB.width,b:group.styleA.width,interpolate:pkmLerpNumber},
+  {key:'color',a:group.styleB.color,b:group.styleA.color,interpolate:pkmLerpColour}
+ ]:[
+  {key:'width',a:group.styleA.width,b:group.styleB.width,interpolate:pkmLerpNumber},
+  {key:'color',a:group.styleA.color,b:group.styleB.color,interpolate:pkmLerpColour}
  ];
- const newLayers=pkmBlendAlongPath(scaledPathFn,pathOpts,group.count,specs,({x,y,angle,index,props})=>{
+ const newLayers=pkmBlendAlongPath(scaledPathFn,undefined,total,specs,({x,y,angle,index,props})=>{
   const fx=clamp(x+(group.offsetX||0),0,100), fy=clamp(y+(group.offsetY||0),0,100);
   return {
    kind:'dot',name:group.name+' '+(index+1),color:props.color,x:fx,y:fy,pos:fx,
@@ -5993,44 +6070,64 @@ function regenerateBlendGroup(id){
  },{reverse:group.reverse,rotateToPath:group.rotateToPath});
  state.layers.splice(at,0,...newLayers);
 }
+function resetBlendPickers(){pendingBlendA=null; pendingBlendB=null; customPathDrawing=false; customPathLiveDrag=false;}
 function createBlendGroup(){
+ if(!pendingBlendA||!pendingBlendB)return;
  const form=readBlendPathForm();
- if(form.type==='custom'&&customPathPoints.length<2)return;
  tsPushHistory();
  blendGroupSeq++;
- const group=Object.assign({id:'bg'+Date.now()+'_'+blendGroupSeq,name:'blend '+blendGroupSeq,offsetX:0,offsetY:0,opts:form.type==='custom'?{points:copy(customPathPoints)}:{}},form);
+ const centerEdge=isCenterEdgeType(form.pathType);
+ const group=Object.assign({
+  id:'bg'+Date.now()+'_'+blendGroupSeq, name:'blend '+blendGroupSeq,
+  posA:{x:pendingBlendA.x,y:pendingBlendA.y}, posB:{x:pendingBlendB.x,y:pendingBlendB.y},
+  styleA:{width:pendingBlendA.width,color:pendingBlendA.color}, styleB:{width:pendingBlendB.width,color:pendingBlendB.color},
+  customPoints:form.pathType==='custom'?copy(customPathPoints):[],
+  offsetX:0,offsetY:0
+ },form);
+ // Absorb A and B's own standalone dots into the new group - except a circle/spiral's centre,
+ // which stays exactly where it was (see the comment above this section).
+ state.layers=(state.layers||[]).filter(l=>l!==pendingBlendB.ref&&(centerEdge||l!==pendingBlendA.ref));
  state.blendGroups=state.blendGroups||[];
  state.blendGroups.push(group);
  regenerateBlendGroup(group.id);
+ selected=Math.max(0,(state.layers||[]).length-1);
  selectedBlendGroupId=group.id;
- customPathDrawing=false;
+ resetBlendPickers();
  renderAll();
 }
 function updateSelectedBlendGroup(){
  const group=currentBlendGroup(); if(!group)return;
  const form=readBlendPathForm();
- if(form.type==='custom'&&customPathPoints.length<2)return;
  tsPushHistory();
+ const centerEdge=isCenterEdgeType(form.pathType);
+ if(pendingBlendA){group.posA={x:pendingBlendA.x,y:pendingBlendA.y}; group.styleA={width:pendingBlendA.width,color:pendingBlendA.color};}
+ if(pendingBlendB){group.posB={x:pendingBlendB.x,y:pendingBlendB.y}; group.styleB={width:pendingBlendB.width,color:pendingBlendB.color};}
  Object.assign(group,form);
- if(form.type==='custom')group.opts={points:copy(customPathPoints)};
+ if(form.pathType==='custom'&&customPathPoints.length>=2)group.customPoints=copy(customPathPoints);
+ state.layers=(state.layers||[]).filter(l=>{
+  if(pendingBlendA&&l===pendingBlendA.ref&&!centerEdge)return false;
+  if(pendingBlendB&&l===pendingBlendB.ref)return false;
+  return true;
+ });
  regenerateBlendGroup(group.id);
- customPathDrawing=false;
+ resetBlendPickers();
  renderAll();
 }
 function applyBlendAlongPath(){
- if(customPathDrawing)customPathDrawing=false;
+ customPathDrawing=false; customPathLiveDrag=false;
  if(selectedBlendGroupId)updateSelectedBlendGroup(); else createBlendGroup();
 }
 function selectBlendGroup(id){
  selectedBlendGroupId=id;
- customPathDrawing=false;
+ resetBlendPickers();
  const group=currentBlendGroup();
- if(group){writeBlendPathForm(group); customPathPoints=group.type==='custom'?copy(group.opts.points||[]):[];}
+ if(group){writeBlendPathForm(group); customPathPoints=group.pathType==='custom'?copy(group.customPoints||[]):[];}
  syncBlendPathUI();
  renderAll();
 }
 function newBlendPath(){
- selectedBlendGroupId=null; customPathDrawing=false; customPathPoints=[];
+ selectedBlendGroupId=null; customPathPoints=[];
+ resetBlendPickers();
  syncBlendPathUI();
  renderAll();
 }
@@ -6052,13 +6149,13 @@ function deleteBlendGroup(id){
 function renderBlendGroupList(){
  const list=$('tsBlendGroupList'); if(!list)return;
  const groups=state.blendGroups||[];
- if(!groups.length){list.innerHTML='<div class="tsEmpty">No path blends yet - build one below.</div>';}
+ if(!groups.length){list.innerHTML='<div class="tsEmpty">No path blends yet - pick two dots below.</div>';}
  else list.innerHTML='';
  groups.forEach(g=>{
   const dotCount=(state.layers||[]).filter(l=>l.blendGroupId===g.id).length;
   const card=document.createElement('div');
   card.className='tsLayerCard '+(g.id===selectedBlendGroupId?'active':'');
-  card.innerHTML=`<div class="tsLayerInfo"><b>${escapeHtml(g.name)}</b><small>${escapeHtml(g.type)} · ${dotCount} dots</small></div><div class="tsLayerActions"><button class="tsBlendDup" title="duplicate">⧉</button><button class="tsBlendDel" title="delete">×</button></div>`;
+  card.innerHTML=`<div class="tsLayerInfo"><b>${escapeHtml(g.name)}</b><small>${escapeHtml(g.pathType)} · ${dotCount} dots</small></div><div class="tsLayerActions"><button class="tsBlendDup" title="duplicate">⧉</button><button class="tsBlendDel" title="delete">×</button></div>`;
   card.onclick=e=>{
    if(e.target.closest('.tsBlendDup')){e.stopPropagation();duplicateBlendGroup(g.id);return;}
    if(e.target.closest('.tsBlendDel')){e.stopPropagation();deleteBlendGroup(g.id);return;}
@@ -6071,13 +6168,24 @@ function renderBlendGroupList(){
 function syncBlendPathUI(){
  const type=$('tsBlendPathType')?.value;
  const isCustom=type==='custom';
+ const centerEdge=isCenterEdgeType(type);
+ if($('tsBlendDotAPreview'))$('tsBlendDotAPreview').innerHTML=endpointPreviewHTML(endpointStyle('A'));
+ if($('tsBlendDotBPreview'))$('tsBlendDotBPreview').innerHTML=endpointPreviewHTML(endpointStyle('B'));
+ if($('tsCenterEdgeHint'))$('tsCenterEdgeHint').style.display=centerEdge?'':'none';
+ if($('tsCurveAmountRow'))$('tsCurveAmountRow').style.display=(type==='wave'||type==='arc'||type==='spiral')?'':'none';
+ if($('tsCurveAmountHint'))$('tsCurveAmountHint').textContent=type==='spiral'?'How much wider the spiral grows by the end.':'How far the curve bows away from a straight line.';
+ const stepsHint=$('tsBlendPathStepsHint');
+ if(stepsHint)stepsHint.textContent=centerEdge?'How many dots trace the shape, starting at Dot B (Dot A is just the centre).':'How many dots go in between Dot A and Dot B - Playground works out each one\'s size, colour and position automatically.';
  if($('tsDrawCustomPath')){
   $('tsDrawCustomPath').style.display=isCustom?'':'none';
-  $('tsDrawCustomPath').textContent=customPathDrawing?'✓ finish path':(selectedBlendGroupId?'✏️ redraw path on canvas':'✏️ draw custom path on canvas');
-  $('tsDrawCustomPath').classList.toggle('active',customPathDrawing);
+  $('tsDrawCustomPath').textContent=customPathLiveDrag?'drawing… lift to finish':(customPathDrawing?'tap/drag on the canvas now':(customPathPoints.length>=2?'✏️ redraw path':'✏️ draw path with finger/pencil'));
+  $('tsDrawCustomPath').classList.toggle('active',customPathDrawing||customPathLiveDrag);
  }
- if($('tsCustomPathHint'))$('tsCustomPathHint').style.display=(isCustom&&customPathDrawing)?'':'none';
- if($('tsApplyBlendPath'))$('tsApplyBlendPath').textContent=selectedBlendGroupId?'update this blend':'place blend along path';
+ if($('tsCustomPathHint'))$('tsCustomPathHint').style.display=isCustom?'':'none';
+ if($('tsApplyBlendPath')){
+  $('tsApplyBlendPath').textContent=selectedBlendGroupId?'update this blend':'place blend';
+  $('tsApplyBlendPath').disabled=!selectedBlendGroupId&&(!pendingBlendA||!pendingBlendB);
+ }
  if($('tsBlendMoveHint'))$('tsBlendMoveHint').style.display=selectedBlendGroupId?'':'none';
  if($('tsBlendPathSpacingValue')&&$('tsBlendPathSpacing'))$('tsBlendPathSpacingValue').textContent=$('tsBlendPathSpacing').value+'%';
  renderBlendGroupList();
@@ -6256,7 +6364,10 @@ function wireCanvasDrag(){
  canvas.addEventListener('pointerdown',ev=>{
   if(!state)return; ev.preventDefault(); canvas.setPointerCapture(ev.pointerId);
   const pt=canvasPointToTile(ev);
-  if(customPathDrawing){pushCustomPathPoint(pt); return;}
+  // Draw mode is armed but not yet touched (see the "draw path" button) - a touch anywhere on the
+  // canvas starts the live freehand stroke instead of the usual select/drag behaviour, so drawing
+  // a path never accidentally grabs or moves a dot underneath the stroke.
+  if(customPathDrawing){customPathLiveDrag=true; customPathPoints=[pt]; syncBlendPathUI(); renderAll(); return;}
   selectLayerAtPoint(pt); startPt=pt; dragging=true; moved=false; historyPushed=false;
   dotMoveGroup=null; dotMoveLeadStart=null; dotMoveIsBlendGroup=false;
   if(dotMoveMode){
@@ -6285,7 +6396,18 @@ function wireCanvasDrag(){
    }
   }
  });
- canvas.addEventListener('pointermove',ev=>{if(!dragging)return; ev.preventDefault(); const pt=canvasPointToTile(ev); if(!moved){if(Math.hypot(pt.x-startPt.x,pt.y-startPt.y)<TAP_TOLERANCE)return; moved=true;} if(!historyPushed){tsPushHistory();historyPushed=true;} moveSelectedToPoint(pt);});
+ canvas.addEventListener('pointermove',ev=>{
+  if(customPathLiveDrag){
+   ev.preventDefault();
+   const pt=canvasPointToTile(ev);
+   const last=customPathPoints[customPathPoints.length-1];
+   // Throttle by distance, not every raw event, so a slow careful stroke doesn't balloon into
+   // thousands of near-duplicate points while a fast one still reads as smooth.
+   if(!last||Math.hypot(pt.x-last.x,pt.y-last.y)>=0.8){customPathPoints.push(pt); renderAll();}
+   return;
+  }
+  if(!dragging)return; ev.preventDefault(); const pt=canvasPointToTile(ev); if(!moved){if(Math.hypot(pt.x-startPt.x,pt.y-startPt.y)<TAP_TOLERANCE)return; moved=true;} if(!historyPushed){tsPushHistory();historyPushed=true;} moveSelectedToPoint(pt);
+ });
  function endBlendGroupDragIfAny(){
   if(dotMoveIsBlendGroup&&dotMoveGroup&&dotMoveGroup.length){
    const group=currentBlendGroup();
@@ -6297,8 +6419,18 @@ function wireCanvasDrag(){
   }
   dotMoveGroup=null; dotMoveLeadStart=null; dotMoveIsBlendGroup=false;
  }
- canvas.addEventListener('pointerup',ev=>{dragging=false; endBlendGroupDragIfAny(); if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
- canvas.addEventListener('pointercancel',ev=>{dragging=false; endBlendGroupDragIfAny(); if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ // Lifting the finger/pencil finishes the drawn path (if one was in progress): the raw stroke gets
+ // rescaled/rotated/translated as one rigid shape so it connects Dot A to Dot B exactly, then the
+ // blend is created or updated immediately - "release and see the result", no extra tap needed.
+ function finishCustomPathDragIfAny(){
+  if(!customPathLiveDrag)return;
+  customPathLiveDrag=false; customPathDrawing=false;
+  const {A,B}=currentEndpointPositions();
+  if(customPathPoints.length>=2&&A&&B)customPathPoints=pkmFitPolylineToEndpoints(customPathPoints,A,B);
+  applyBlendAlongPath();
+ }
+ canvas.addEventListener('pointerup',ev=>{dragging=false; if(customPathLiveDrag){finishCustomPathDragIfAny();return;} endBlendGroupDragIfAny(); if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
+ canvas.addEventListener('pointercancel',ev=>{dragging=false; if(customPathLiveDrag){customPathLiveDrag=false;customPathDrawing=false;customPathPoints=[];syncBlendPathUI();renderAll();return;} endBlendGroupDragIfAny(); if(dotSnapGuideX!=null||dotSnapGuideY!=null){dotSnapGuideX=null;dotSnapGuideY=null;renderAll(false);}});
 }
 function wire(){
  const tsMutate=(fn)=>{tsPushHistory();fn();renderAll();};
@@ -6306,7 +6438,7 @@ function wire(){
  $('tsAddCustomColour').onclick=()=>{const c=$('tsCustomColor').value; if(!palettes.custom.includes(c))palettes.custom.push(c); paletteSource='custom'; palette=palettes.custom; document.querySelectorAll('input[name="tsPaletteSource"]').forEach(r=>r.checked=(r.value==='custom')); setLayerColour(c);};
  $('openTextureStudio')?.addEventListener('click',open);$('tsClose').onclick=close;$('textureStudioOverlay').addEventListener('click',e=>{if(e.target.id==='textureStudioOverlay')close();});
  $('tsSwitchToBg')?.addEventListener('click',()=>{close();window.openBackgroundStudio&&window.openBackgroundStudio();});
- $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;dotMoveMode=null;syncDotMoveModeButtons();customPathDrawing=false;customPathPoints=[];selectedBlendGroupId=null;syncBlendPathUI();$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
+ $('tsTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{tsPushHistory();state=defaultFor(b.dataset.type);selected=0;dotMoveMode=null;syncDotMoveModeButtons();customPathPoints=[];selectedBlendGroupId=null;resetBlendPickers();syncBlendPathUI();$('tsTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderAll();});
  $('tsBgToggle').onclick=()=>tsMutate(()=>{state.bg=!state.bg;});$('tsBgOpacity').oninput=e=>{tsPushHistory();state.bgOpacity=+e.target.value;renderAll();};$('tsPatternScale').oninput=e=>{tsPushHistory();state.scale=+e.target.value;renderAll();};
  $('tsSurfaceTextureGrid').querySelectorAll('button').forEach(b=>b.onclick=()=>tsMutate(()=>{const type=b.dataset.tstex;const typeDefault=window.bgDemoRecipe?window.bgDemoRecipe(type,1).scale:60;const samePrevType=state.surfaceTexture&&state.surfaceTexture.type===type;state.surfaceTexture=type==='none'?null:{type,scale:(samePrevType&&state.surfaceTexture.scale)||typeDefault};}));
  $('tsSurfaceTextureScale').oninput=e=>{tsPushHistory();if(state.surfaceTexture)state.surfaceTexture.scale=+e.target.value;renderAll();};
@@ -6370,11 +6502,19 @@ function wire(){
  if($('tsMoveColumnMode'))$('tsMoveColumnMode').onclick=()=>{dotMoveMode=dotMoveMode==='column'?null:'column';syncDotMoveModeButtons();};
  if($('tsBlendRow'))$('tsBlendRow').onclick=()=>blendDotLine('row');
  if($('tsBlendColumn'))$('tsBlendColumn').onclick=()=>blendDotLine('column');
- if($('tsBlendPathType'))$('tsBlendPathType').onchange=()=>{customPathDrawing=false;syncBlendPathUI();renderAll();};
- if($('tsDrawCustomPath'))$('tsDrawCustomPath').onclick=toggleCustomPathDrawing;
+ if($('tsBlendPathType'))$('tsBlendPathType').onchange=()=>{customPathDrawing=false;customPathLiveDrag=false;syncBlendPathUI();renderAll();};
+ if($('tsSetBlendDotA'))$('tsSetBlendDotA').onclick=()=>captureBlendEndpoint('A');
+ if($('tsSetBlendDotB'))$('tsSetBlendDotB').onclick=()=>captureBlendEndpoint('B');
+ if($('tsDrawCustomPath'))$('tsDrawCustomPath').onclick=()=>{
+  const {A,B}=currentEndpointPositions(); if(!A||!B)return;
+  customPathDrawing=!customPathDrawing;
+  if(!customPathDrawing)customPathLiveDrag=false;
+  syncBlendPathUI(); renderAll();
+ };
  if($('tsApplyBlendPath'))$('tsApplyBlendPath').onclick=applyBlendAlongPath;
  if($('tsNewBlendPath'))$('tsNewBlendPath').onclick=newBlendPath;
- if($('tsBlendPathSpacing'))$('tsBlendPathSpacing').oninput=()=>{if($('tsBlendPathSpacingValue'))$('tsBlendPathSpacingValue').textContent=$('tsBlendPathSpacing').value+'%';};
+ if($('tsBlendPathSpacing'))$('tsBlendPathSpacing').oninput=()=>{if($('tsBlendPathSpacingValue'))$('tsBlendPathSpacingValue').textContent=$('tsBlendPathSpacing').value+'%'; renderAll();};
+ if($('tsBlendPathScale'))$('tsBlendPathScale').oninput=()=>renderAll();
  syncBlendPathUI();
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
@@ -6643,39 +6783,47 @@ function drawDotSnapGuides(ctx,size){
  if(dotSnapGuideY!=null){const gy=dotSnapGuideY/100*size; ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(size,gy);ctx.stroke();}
  ctx.restore();
 }
-// Preview of a hand-drawn custom path (or, once finished, whichever path type is picked) while
-// building a Blend Along Path - lets a designer see the tapped points and the curve they'll get
-// before actually placing any dots on it.
+function drawEndpointMarker(ctx,size,pt,label,fill){
+ const x=pt.x/100*size, y=pt.y/100*size;
+ ctx.save();
+ ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+ ctx.fillStyle='#fff';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ ctx.fillText(label,x,y);
+ ctx.restore();
+}
+// Live view of the Blend Along Path in progress - Dot A/B markers whenever they're known, a
+// dashed preview of whichever preset curve is picked (updating as the sliders move, even before
+// creating anything), and the freehand stroke itself while it's being drawn or once it's finished.
 function drawBlendPathPreview(ctx,size){
  const typeSel=$('tsBlendPathType'); if(!typeSel)return;
  const type=typeSel.value;
+ const {A,B}=currentEndpointPositions();
+ if(A)drawEndpointMarker(ctx,size,A,'A','rgba(155,107,255,.95)');
+ if(B)drawEndpointMarker(ctx,size,B,'B','rgba(255,142,92,.95)');
  if(type==='custom'){
-  if(!customPathDrawing&&!customPathPoints.length)return;
-  ctx.save();
-  ctx.strokeStyle='rgba(90,170,255,.85)';ctx.lineWidth=2;ctx.setLineDash([6,5]);
+  if(!customPathDrawing&&!customPathLiveDrag&&!customPathPoints.length)return;
   if(customPathPoints.length>1){
+   ctx.save();
+   ctx.strokeStyle='rgba(90,170,255,.9)';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.lineCap='round';
    ctx.beginPath();
    customPathPoints.forEach((p,i)=>{const x=p.x/100*size,y=p.y/100*size; if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
    ctx.stroke();
+   ctx.restore();
   }
-  ctx.setLineDash([]);
-  customPathPoints.forEach((p,i)=>{
-   const x=p.x/100*size,y=p.y/100*size;
-   ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='#5aaaff';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
-  });
-  ctx.restore();
   return;
  }
- if(!customPathDrawing){
-  const pathFn=pkmPathShapes[type]; if(!pathFn)return;
-  const pts=[]; for(let i=0;i<=60;i++)pts.push(pathFn(i/60));
-  ctx.save();
-  ctx.strokeStyle='rgba(90,170,255,.6)';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
-  ctx.beginPath();
-  pts.forEach((p,i)=>{const x=p.x/100*size,y=p.y/100*size; if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
-  ctx.stroke();
-  ctx.restore();
- }
+ if(!A||!B)return;
+ const curvePct=+($('tsBlendPathScale')?.value||60);
+ const coveragePct=+($('tsBlendPathSpacing')?.value||100);
+ const previewFn=buildGroupPathFn({pathType:type,posA:A,posB:B,curveAmountPct:curvePct});
+ const coverage=Math.max(0.2,Math.min(2.5,coveragePct/100));
+ const pts=[]; for(let i=0;i<=60;i++)pts.push(previewFn(i/60*coverage));
+ ctx.save();
+ ctx.strokeStyle='rgba(90,170,255,.7)';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+ ctx.beginPath();
+ pts.forEach((p,i)=>{const x=p.x/100*size,y=p.y/100*size; if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
+ ctx.stroke();
+ ctx.restore();
 }
 function renderPreview(canvas,size,st,mode,guides){
  let ctx=canvas.getContext('2d');ctx.clearRect(0,0,size,size);ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);
@@ -6720,7 +6868,7 @@ async function saveTexture(){
  setTimeout(()=>{tsSaving=false; if(btn)btn.disabled=false;},250);
 }
 let tsSelectMode=false,tsSelectedIdx=new Set();
-function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;selectedBlendGroupId=null;customPathDrawing=false;customPathPoints=[];syncBlendPathUI();renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
+function renderFilmstrip(){let fs=$('tsFilmstrip');fs.innerHTML='';if(!saved.length){fs.innerHTML='<div class="tsEmpty">No saved classics yet — make stripe heaven first 😄</div>';return;}saved.forEach((s,i)=>{let card=document.createElement('div');card.className='tsFilmCard';const checkHTML=tsSelectMode?`<div class="filmCheck ${tsSelectedIdx.has(i)?'checked':''}">${tsSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=tsSelectMode?'':'<button class="tsFilmDelete" title="delete">×</button>';const renameHTML=tsSelectMode?'':'<button class="tsFilmRename" title="rename">✎</button>';const pfHTML=tsSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('classic',s)?'active':''}" title="${isInPortfolio('classic',s)?'remove from portfolio':'add to portfolio'}">★</button>`;const useHTML=tsSelectMode?'':'<button class="filmUseAsBg" title="use as background for the current layout">use as bg</button>';card.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}<canvas width="180" height="180"></canvas><span>${escapeHtml(s.name)}</span>${useHTML}`;card.onclick=e=>{if(e.target.classList.contains('tsFilmDelete')){e.stopPropagation();deleteSavedTexture(i);return;} if(e.target.classList.contains('tsFilmRename')){e.stopPropagation();renameSavedTexture(i);return;} if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('classic',s);renderFilmstrip();return;} if(e.target.classList.contains('filmUseAsBg')){e.stopPropagation();window.tsApplySavedItem(s);setSaveStatus('applied to layout ✓','ok');return;} if(tsSelectMode){if(tsSelectedIdx.has(i))tsSelectedIdx.delete(i);else tsSelectedIdx.add(i);renderFilmstrip();tsUpdateSelectUI();return;} state=copy(s.state);selected=0;selectedBlendGroupId=null;customPathPoints=[];resetBlendPickers();syncBlendPathUI();renderAll();};if(!tsSelectMode)card.oncontextmenu=e=>{e.preventDefault();deleteSavedTexture(i);};fs.appendChild(card);renderPreview(card.querySelector('canvas'),180,s.state,'single',false);});}
 function renameSavedTexture(i){const s=saved[i];if(!s)return;const name=prompt('Rename this saved classic:',s.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===s.name)return;s.name=trimmed;renderFilmstrip();try{persistAllSavedItems();}catch(e){}}
 function tsUpdateSelectUI(){const btn=$('tsDownloadSelected');if(!btn)return;btn.textContent=tsSelectedIdx.size?`download ${tsSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!tsSelectedIdx.size;}
 function tsToggleSelectMode(){tsSelectMode=!tsSelectMode;tsSelectedIdx.clear();const btn=$('tsSelectMode');btn.textContent=tsSelectMode?'done':'select';btn.classList.toggle('active',tsSelectMode);$('tsDownloadSelected').classList.toggle('hidden',!tsSelectMode);if($('tsSelectAll'))$('tsSelectAll').classList.toggle('hidden',!tsSelectMode);if($('tsSelectNone'))$('tsSelectNone').classList.toggle('hidden',!tsSelectMode);tsUpdateSelectUI();renderFilmstrip();}
