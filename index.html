@@ -1195,7 +1195,7 @@ body.theme-light .bgEditBadge{color:var(--roseInk)!important;border:1px solid rg
     <div class="tsCustomAdd" style="margin-top:9px"><input id="cmColourwayName" placeholder="colourway name" class="selectTiny"><button id="cmSaveColourway" class="small primary">save colourway</button></div>
     <span id="cmStatus" class="saveStatus"></span>
     <div class="filmstripBlock" style="margin:9px 0 0;padding:0;border:0;background:transparent">
-      <div class="filmstripHead"><b>🎨 colourways</b><span class="footerNote">saved for the current pattern</span></div>
+      <div class="filmstripHead"><b>🎨 colourways</b><span class="footerNote">saved for the whole project - usable on any pattern</span></div>
       <div class="filmstrip" id="colourwayFilmstrip"></div>
     </div>
   </div>
@@ -1447,6 +1447,12 @@ let tilingEngineStore={};
 const TILING_ENGINE_TYPES=['grid','halfdrop','halfdropflip','halfbrick','diamond','hexagon','ogee'];
 let history=[], redoStack=[];
 let savedTemplates=[];
+// Colourways used to live on whichever saved pattern (template) was active when you saved one,
+// so switching to - or starting - a different pattern made them disappear even though nothing
+// about a colourway (a hero/vibe/richness recipe + role colours) is actually pattern-specific.
+// They're project-wide now: one shared library, usable from any pattern, persisted alongside
+// everything else in the saved-items blob.
+let projectColourways=[], activeColourwayId=null;
 const presets={
  grid:{name:'grid',bricks:[p('oval',25,25,20,13,'hero'),p('oval',75,25,20,13,'hero'),p('oval',25,75,20,13,'secondary'),p('oval',75,75,20,13,'secondary')]},
  halfdrop:{name:'half drop',bricks:[p('arrowOval',50,20,24,15,'hero'),p('oval',20,50,20,13,'secondary'),p('oval',80,50,20,13,'secondary'),p('circle',50,80,10,10,'filler')]},
@@ -1653,7 +1659,13 @@ function applyHydratedSavedItems(blob){
  motifTray=blob.motifTray||[];
  if(!activeMotifId)activeMotifId=motifTray[0]?.id||null;
  heroSetFromDataUrl(blob.heroImgDataUrl);
- renderFilmstrip();renderMotifTray();renderGrid();
+ // Migration for projects saved before colourways went project-wide: pull any colourways still
+ // stranded on individual templates into the shared library, once, so nothing already saved is lost.
+ projectColourways=blob.colourways||[];
+ if(!projectColourways.length){
+  savedTemplates.forEach(t=>{if(t.colourways&&t.colourways.length)projectColourways.push(...t.colourways);});
+ }
+ renderFilmstrip();renderMotifTray();renderGrid();renderColourwayFilmstrip();
 }
 // Runs once at boot, after the rest of the script (every function it calls) is defined. On a
 // fresh IndexedDB it migrates whatever was already saved under the old localStorage key exactly
@@ -1778,7 +1790,7 @@ async function persistAllSavedItems(){
  try{
   const d=newMotifDict();
   const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
-  const blob={templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null,portfolioIds:[...portfolioItemIds]};
+  const blob={templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():(window.__savedItemsBlob.classics||[]),backgrounds:window.bgGetSavedList?window.bgGetSavedList():(window.__savedItemsBlob.backgrounds||[]),motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null,portfolioIds:[...portfolioItemIds],colourways:projectColourways||[]};
   await idbSet(SAVED_ITEMS_IDB_KEY,blob);
   // A successful write here always serializes the FULL current savedTemplates array, so any
   // template that previously failed to persist (see saveTemplateToFilmstrip/unsavedTemplateKeys)
@@ -1787,7 +1799,11 @@ async function persistAllSavedItems(){
   return true;
  }catch(e){console.warn('persistAllSavedItems failed',e);return false;}
 }
-function loadSavedTemplates(){savedTemplates=window.__savedItemsBlob.templates||[];}
+function loadSavedTemplates(){
+ savedTemplates=window.__savedItemsBlob.templates||[];
+ projectColourways=window.__savedItemsBlob.colourways||[];
+ if(!projectColourways.length)savedTemplates.forEach(t=>{if(t.colourways&&t.colourways.length)projectColourways.push(...t.colourways);});
+}
 function persistSavedTemplates(){return persistAllSavedItems();}
 // Autosave: the normal workflow here is redeploy-and-reload on an iPad, which used to throw
 // away whatever wasn't explicitly "saved as a template". This snapshots the full working state
@@ -1909,7 +1925,7 @@ async function archiveAutosaveIfAny(){
    if(!bricksArr||!bricksArr.length)return;
    const base=presets[key]?key:'grid';
    if(isUntouchedDefault(base,bricksArr))return;
-   savedTemplates.push({key:'saved_'+Date.now()+'_'+Math.random().toString(36).slice(2),name:'unsaved work - '+(presets[base]?.name||base)+' ('+stamp+')',base,bricks:copyBricks(bricksArr),texture:textureVal?copyTexture(textureVal):blankTexture(),background:backgroundVal||null,classicPattern:classicVal||null,tilingEngine:tilingEngineVal||sourceTilingEngineFor(base),colourways:[],activeColourwayId:null});
+   savedTemplates.push({key:'saved_'+Date.now()+'_'+Math.random().toString(36).slice(2),name:'unsaved work - '+(presets[base]?.name||base)+' ('+stamp+')',base,bricks:copyBricks(bricksArr),texture:textureVal?copyTexture(textureVal):blankTexture(),background:backgroundVal||null,classicPattern:classicVal||null,tilingEngine:tilingEngineVal||sourceTilingEngineFor(base)});
   };
   if(hasLiveBricks)archiveOne(expanded.current||'grid',expanded.bricks,expanded.texture,expanded.background,expanded.classic,expanded.tilingEngine);
   storedKeys.forEach(key=>{
@@ -1983,7 +1999,7 @@ function buildProjectBackup(){
  const templates=(savedTemplates||[]).map(t=>({...t,bricks:compactBricksWithDict(t.bricks,d)}));
  return {app:'magic-collection-builder',kind:'project-backup',version:1,savedAt:new Date().toISOString(),
   session:compactSessionSnapshotForStorage(autosaveSnapshot()),
-  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[],motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null,portfolioIds:[...portfolioItemIds]}};
+  savedItems:{templates,motifDict:d.dict,classics:window.tsGetSavedList?window.tsGetSavedList():[],backgrounds:window.bgGetSavedList?window.bgGetSavedList():[],motifTray:motifTray||[],heroImgDataUrl:heroImgDataUrl||null,portfolioIds:[...portfolioItemIds],colourways:projectColourways||[]}};
 }
 function downloadProjectBackup(){
  const data=buildProjectBackup();
@@ -2008,7 +2024,9 @@ function restoreProjectBackup(raw){
   motifTray=data.savedItems.motifTray||[];
   activeMotifId=motifTray[0]?.id||null;
   heroSetFromDataUrl(data.savedItems.heroImgDataUrl);
-  renderMotifTray();
+  projectColourways=data.savedItems.colourways||[];
+  if(!projectColourways.length)savedTemplates.forEach(t=>{if(t.colourways&&t.colourways.length)projectColourways.push(...t.colourways);});
+  renderMotifTray();renderColourwayFilmstrip();
   persistAllSavedItems();
  }
  applySnapshotToLiveState(data.session,'project file loaded ✓');
@@ -2583,7 +2601,7 @@ let savedSelectMode=false,savedSelectedIdx=new Set();
 // which template keys are only living in this session's memory and badge them so "it's right
 // there in the filmstrip" doesn't get mistaken for "it's safely on disk".
 let unsavedTemplateKeys=new Set();
-function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';const renameHTML=savedSelectMode?'':'<button class="filmRename" title="rename">✎</button>';const pfHTML=savedSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('pattern',t)?'active':''}" title="${isInPortfolio('pattern',t)?'remove from portfolio':'add to portfolio'}">★</button>`;const unsavedHTML=unsavedTemplateKeys.has(t.key)?'<div class="unsavedBadge" title="Only in this session - storage was full when this tried to save to disk. Free up room (delete an old pattern/motif) or download .pplayground now to back it up.">⚠ not saved to disk</div>':'';c.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}${unsavedHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture,t.tilingEngine||sourceTilingEngineFor(t.base||'grid'))}</div><span>${escapeHtml(t.name)}${t.colourways&&t.colourways.length?' 🎨'+t.colourways.length:''}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(e.target.closest('.filmRename')){e.stopPropagation();renameSavedTemplate(i);return;}if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('pattern',t);renderFilmstrip();return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
+function renderFilmstrip(){const strip=document.getElementById('savedFilmstrip');if(!strip)return;strip.innerHTML='';if(!savedTemplates.length){strip.innerHTML='<div class="emptyFilm">No saved patterns yet — save a texture or layout to the filmstrip.</div>';return;}savedTemplates.forEach((t,i)=>{const c=document.createElement('div');c.className='filmCard '+(current===t.key?'active':'');const bgUrl=(t.background&&window.bgRecipeThumbUrl)?window.bgRecipeThumbUrl(t.background):'';const bgLayer=bgUrl?`<div style="position:absolute;inset:0;background:url(${bgUrl});background-size:cover"></div>`:'';const classicUrl=(t.classicPattern&&window.tsThumbUrl)?window.tsThumbUrl(t.classicPattern):'';const classicLayer=classicUrl?`<div style="position:absolute;inset:0;background:url(${classicUrl});background-size:cover"></div>`:'';const checkHTML=savedSelectMode?`<div class="filmCheck ${savedSelectedIdx.has(i)?'checked':''}">${savedSelectedIdx.has(i)?'✓':''}</div>`:'';const delHTML=savedSelectMode?'':'<button class="filmDelete tsFilmDelete" title="delete">×</button>';const renameHTML=savedSelectMode?'':'<button class="filmRename" title="rename">✎</button>';const pfHTML=savedSelectMode?'':`<button class="filmPortfolio ${isInPortfolio('pattern',t)?'active':''}" title="${isInPortfolio('pattern',t)?'remove from portfolio':'add to portfolio'}">★</button>`;const unsavedHTML=unsavedTemplateKeys.has(t.key)?'<div class="unsavedBadge" title="Only in this session - storage was full when this tried to save to disk. Free up room (delete an old pattern/motif) or download .pplayground now to back it up.">⚠ not saved to disk</div>':'';c.innerHTML=`${delHTML}${renameHTML}${pfHTML}${checkHTML}${unsavedHTML}<div class="mini">${bgLayer}${classicLayer}${miniWithTexture(t.bricks,t.texture,t.tilingEngine||sourceTilingEngineFor(t.base||'grid'))}</div><span>${escapeHtml(t.name)}</span>`;c.onclick=e=>{if(e.target.closest('.filmDelete')){e.stopPropagation();deleteSavedTemplate(i);return;}if(e.target.closest('.filmRename')){e.stopPropagation();renameSavedTemplate(i);return;}if(e.target.closest('.filmPortfolio')){e.stopPropagation();togglePortfolioMembership('pattern',t);renderFilmstrip();return;}if(savedSelectMode){if(savedSelectedIdx.has(i))savedSelectedIdx.delete(i);else savedSelectedIdx.add(i);renderFilmstrip();savedUpdateSelectUI();return;}loadSavedTemplate(i);};if(!savedSelectMode)c.oncontextmenu=e=>{e.preventDefault();deleteSavedTemplate(i);};strip.appendChild(c);});strip.scrollLeft=strip.scrollWidth;}
 function renameSavedTemplate(i){const t=savedTemplates[i];if(!t)return;const name=prompt('Rename this saved pattern:',t.name);if(name===null)return;const trimmed=name.trim();if(!trimmed||trimmed===t.name)return;t.name=trimmed;if(current===t.key)document.getElementById('currentName').textContent=trimmed;renderFilmstrip();persistSavedTemplates();}
 function savedUpdateSelectUI(){const btn=document.getElementById('savedDownloadSelected');if(!btn)return;btn.textContent=savedSelectedIdx.size?`download ${savedSelectedIdx.size} selected (zip)`:'download selected (zip)';btn.disabled=!savedSelectedIdx.size;const delBtn=document.getElementById('savedDeleteSelected');if(delBtn){delBtn.textContent=savedSelectedIdx.size?`delete ${savedSelectedIdx.size} selected`:'delete selected';delBtn.disabled=!savedSelectedIdx.size;}}
 function savedToggleSelectMode(){savedSelectMode=!savedSelectMode;savedSelectedIdx.clear();const btn=document.getElementById('savedSelectMode');btn.textContent=savedSelectMode?'done':'select';btn.classList.toggle('active',savedSelectMode);document.getElementById('savedDownloadSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedDeleteSelected').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectUnsaved').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectAll').classList.toggle('hidden',!savedSelectMode);document.getElementById('savedSelectNone').classList.toggle('hidden',!savedSelectMode);savedUpdateSelectUI();renderFilmstrip();}
@@ -2652,7 +2670,7 @@ async function saveTemplateToFilmstrip(){
  // repeat it actually uses instead, same as any named preset's save already does.
  const name=(current==='blank'?(presets[tilingEngine]?.name||tilingEngine):(presets[current]?.name||'layout'))+' '+count;
  const key='saved_'+Date.now();
- savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,tilingEngine,colourways:[],activeColourwayId:null});
+ savedTemplates.push({key,name,base:current,bricks:copyBricks(bricks||[]),texture:copyTexture(texture),background:window.bgGetSnapshot?window.bgGetSnapshot():null,classicPattern:window.tsGetSnapshot?window.tsGetSnapshot():null,tilingEngine});
  renderFilmstrip();
  refreshSaveIndicator();
  // Let the new card appear immediately, then write to IndexedDB right after.
@@ -2661,7 +2679,7 @@ async function saveTemplateToFilmstrip(){
  renderFilmstrip();
  setTimeout(()=>{saveBusy=false;saveBtn.disabled=false;},250);
 }
-function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;activeLayoutKey=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();const activeCw=(t.colourways||[]).find(c=>c.id===t.activeColourwayId);if(activeCw){cmApplyColourway(activeCw);}else{cmResetPanelControls();}selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
+function loadSavedTemplate(i){const t=savedTemplates[i];if(!t)return;pushHistory();saveCurrentBlueprint();current=t.key;activeLayoutKey=t.key;currentTemplateBase=t.base||null;bricks=copyBricks(t.bricks||[]);reseedMotifShapesFromBricks(bricks);texture=t.texture?copyTexture(t.texture):blankTexture();renderTextureUI();if(window.bgApplySnapshot)window.bgApplySnapshot(t.background||null);if(window.tsApplySnapshot)window.tsApplySnapshot(t.classicPattern||null);tilingEngine=t.tilingEngine||sourceTilingEngineFor(t.base||'grid');syncTilingEngineButtons();selected=bricks[0]?.id||null;document.getElementById('currentName').textContent=t.name;renderGrid();renderFilmstrip();renderColourwayFilmstrip();render();syncControls();renderUnassignedShapes();}
 // Diamond/hexagon/ogee tessellate on their own offset lattice rather than a plain square grid,
 // so their one "live" tile reads noticeably smaller in the default 3x3 repeat view than a
 // grid/halfdrop tile does at the same zoom - there's more surrounding tessellation to fit in the
@@ -4768,23 +4786,17 @@ function cmApplyLive(){const pal=cmGetPalette();cmRenderSwatches(pal.roles);cmAp
 function cmPreviewAll(){const pal=cmApplyLive();if(window.tsSetRoleColours)window.tsSetRoleColours(pal.roles);return pal;}
 function cmResetGrey(){if(window.bgSetRoleColours)window.bgSetRoleColours('#f2f2f2','#555555');if(window.tsResetToGrey)window.tsResetToGrey();render();cmRenderSwatches(DEFAULT_COLORS);cmSyncBgColourUI();}
 function cmResetPanelControls(){cmRenderSwatches(DEFAULT_COLORS);document.getElementById('cmHero').value='#9b6bff';document.getElementById('cmMood').value='summer';document.getElementById('cmRichness').value=40;document.getElementById('cmVariationCount').value=8;cmSyncBgColourUI();}
-function currentSavedTemplateIndex(){return savedTemplates.findIndex(t=>t.key===current);}
 let cmStatusTimer=null;
 function cmFlashStatus(msg,ok=true){const s=document.getElementById('cmStatus');if(!s)return;s.textContent=msg;s.style.color=ok?'#73d48c':'#ff8ed6';clearTimeout(cmStatusTimer);cmStatusTimer=setTimeout(()=>{s.textContent='';},1400);}
 function cmSaveColourway(){
- let idx=currentSavedTemplateIndex();
- if(idx<0){saveTemplateToFilmstrip();idx=savedTemplates.length-1;current=savedTemplates[idx].key;document.getElementById('currentName').textContent=savedTemplates[idx].name;}
- const t=savedTemplates[idx];
  const pal=cmApplyLive();
  const nameInput=document.getElementById('cmColourwayName');
- const name=(nameInput.value||'').trim()||('colourway '+((t.colourways||[]).length+1));
+ const name=(nameInput.value||'').trim()||('colourway '+(projectColourways.length+1));
  const cw={id:'cw_'+Date.now(),name,heroColour:document.getElementById('cmHero').value,mood:document.getElementById('cmMood').value,richness:+document.getElementById('cmRichness').value,roles:{...pal.roles},bg:(()=>{const snap=window.bgGetWorkingSnapshot?window.bgGetWorkingSnapshot():(window.bgGetSnapshot?window.bgGetSnapshot():null);return {base:snap?.base||pal.roles.white,tex:snap?.tex||pal.roles.hero};})()};
- t.colourways=t.colourways||[];
- t.colourways.push(cw);
- t.activeColourwayId=cw.id;
+ projectColourways.push(cw);
+ activeColourwayId=cw.id;
  nameInput.value='';
  persistSavedTemplates();
- renderFilmstrip();
  renderColourwayFilmstrip();
  cmFlashStatus('saved ✓');
 }
@@ -4798,19 +4810,36 @@ function cmApplyColourway(cw){
  cmRenderSwatches(cw.roles);
  render();
 }
+function deleteProjectColourway(i){
+ const cw=projectColourways[i];if(!cw)return;
+ projectColourways.splice(i,1);
+ if(activeColourwayId===cw.id)activeColourwayId=null;
+ persistSavedTemplates();
+ renderColourwayFilmstrip();
+}
+function renameProjectColourway(i){
+ const cw=projectColourways[i];if(!cw)return;
+ const name=prompt('Rename this colourway:',cw.name);if(name===null)return;
+ const trimmed=name.trim();if(!trimmed||trimmed===cw.name)return;
+ cw.name=trimmed;
+ persistSavedTemplates();
+ renderColourwayFilmstrip();
+}
 function renderColourwayFilmstrip(){
  const strip=document.getElementById('colourwayFilmstrip');if(!strip)return;
- const idx=currentSavedTemplateIndex();
- const t=idx>=0?savedTemplates[idx]:null;
- const list=t&&t.colourways?t.colourways:[];
+ const list=projectColourways||[];
  strip.innerHTML='';
- if(!list.length){strip.innerHTML='<div class="emptyFilm">No colourways saved for this pattern yet.</div>';return;}
- list.forEach(cw=>{
+ if(!list.length){strip.innerHTML='<div class="emptyFilm">No colourways saved yet — usable from any pattern once you save one.</div>';return;}
+ list.forEach((cw,i)=>{
   const c=document.createElement('div');
-  c.className='filmCard '+(t.activeColourwayId===cw.id?'active':'');
+  c.className='filmCard '+(activeColourwayId===cw.id?'active':'');
   const dots=Object.values(cw.roles).map(col=>`<span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${col};margin:1px"></span>`).join('');
-  c.innerHTML=`<div class="mini" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;padding:6px">${dots}</div><span>${cw.name}</span>`;
-  c.onclick=()=>{t.activeColourwayId=cw.id;persistSavedTemplates();cmApplyColourway(cw);renderColourwayFilmstrip();};
+  c.innerHTML=`<button class="filmDelete" title="delete">×</button><button class="filmRename" title="rename">✎</button><div class="mini" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;padding:6px">${dots}</div><span>${escapeHtml(cw.name)}</span>`;
+  c.onclick=e=>{
+   if(e.target.closest('.filmDelete')){e.stopPropagation();deleteProjectColourway(i);return;}
+   if(e.target.closest('.filmRename')){e.stopPropagation();renameProjectColourway(i);return;}
+   activeColourwayId=cw.id;persistSavedTemplates();cmApplyColourway(cw);renderColourwayFilmstrip();
+  };
   strip.appendChild(c);
  });
  strip.scrollLeft=strip.scrollWidth;
@@ -4841,7 +4870,7 @@ document.getElementById('cmAdjustApplyHero').onclick=()=>{
 };
 cmRenderSwatches(DEFAULT_COLORS);
 
-window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();
+window.addEventListener('resize',render);loadSavedTemplates();renderTextureUI();renderFilmstrip();renderColourwayFilmstrip();
 // Native "leave site?" warning as a last line of defence for real unsaved edits - autosave already
 // covers a crash/close (see archiveAutosaveIfAny above), but that only surfaces again on the NEXT
 // launch, which is cold comfort to someone who just quit mid-edit not realising anything was at risk.
