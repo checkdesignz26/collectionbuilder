@@ -5343,6 +5343,13 @@ refreshHeroThumbs();
         <p class="tsHint" style="margin-top:9px">Even out the gaps between dots along a line - the two outermost dots stay put, everything between them spreads out equally. Set an exact gap instead, or leave it blank to fit edge to edge.</p>
         <div class="tsRow"><label>exact spacing</label><input id="tsDistributeSpacing" type="number" min="1" max="100" placeholder="auto" style="width:70px"></div>
         <div class="tsGlobalGrid"><button id="tsDistributeDotsH">distribute horizontally</button><button id="tsDistributeDotsV">distribute vertically</button></div>
+        <p class="tsHint" style="margin-top:9px">Blend across a row or column, from the first dot to the last - the ones in between are worked out automatically (small → slightly larger → medium → larger → large). Pick what to blend below.</p>
+        <div class="tsRow" style="gap:14px;flex-wrap:wrap">
+         <label style="display:flex;align-items:center;gap:5px;font-weight:850"><input type="checkbox" id="tsBlendSize" checked>size</label>
+         <label style="display:flex;align-items:center;gap:5px;font-weight:850"><input type="checkbox" id="tsBlendColour" checked>colour</label>
+         <label style="display:flex;align-items:center;gap:5px;font-weight:850"><input type="checkbox" id="tsBlendSpacing">spacing</label>
+        </div>
+        <div class="tsGlobalGrid"><button id="tsBlendRow">blend row</button><button id="tsBlendColumn">blend column</button></div>
       </div></div>
       <div class="tsBox"><h3>Actions</h3><div class="tsPad"><div class="grid2"><button id="tsDuplicate" class="full">duplicate selected</button><button id="tsClear" class="full">clear all</button></div><div class="grid2" style="margin-top:7px"><button id="tsForward" class="full">bring forward</button><button id="tsBack" class="full">send back</button></div><div class="grid2" id="tsSequenceActionsRow" style="margin-top:7px"><button id="tsDuplicateSequence" class="full">duplicate sequence</button><button id="tsPlaidAction" class="full">make plaid 90°</button></div><p class="tsHint" id="tsSequenceActionsHint">Sequence actions copy the whole stripe recipe, perfect for plaid and madras experiments.</p></div></div>
       </aside>
@@ -5353,6 +5360,45 @@ refreshHeroThumbs();
 
 
 <script>
+// Reusable Blend core - given an ordered line of items, calculates smooth intermediate values for
+// one or more properties between the first and last item, distributing the "in-between" values
+// automatically (small -> slightly larger -> medium -> larger -> large, say). Built first for
+// Polka Dots Studio's row/column blend, but deliberately kept generic (plain getter/setter/
+// interpolate specs, no dot-specific assumptions) so Repeat Studio can later reuse this exact same
+// math to blend scale/rotation/position/colour across a run of selected motifs.
+function pkmHexToRgb(hex){
+ hex=(hex||'#000000').replace('#','');
+ if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');
+ const n=parseInt(hex,16)||0;
+ return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+function pkmRgbToHex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
+function pkmLerpColour(hexA,hexB,t){
+ const a=pkmHexToRgb(hexA),b=pkmHexToRgb(hexB);
+ return pkmRgbToHex(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t);
+}
+function pkmLerpNumber(a,b,t){return a+(b-a)*t;}
+// specs: [{get(item), set(item,val), interpolate(a,b,t)}, ...]. The first and last item in `items`
+// define the A/B endpoints for every spec and are left untouched; everything between them gets a
+// value interpolated by its position in the line (t = index/(count-1)).
+function pkmBlendAcrossLine(items,specs){
+ const n=items.length; if(n<3)return;
+ specs.forEach(spec=>{
+  const a=spec.get(items[0]), b=spec.get(items[n-1]);
+  for(let i=1;i<n-1;i++)spec.set(items[i],spec.interpolate(a,b,i/(n-1)));
+ });
+}
+// Spacing blend: keeps items[0] and items[n-1] exactly where they are (same as distribute) but
+// re-spaces everything between them so the GAPS ramp smoothly from tight to wide, rather than
+// staying equal - "ratio" is how many times wider the last gap is than the first.
+function pkmBlendSpacing(items,posGet,posSet,ratio=4){
+ const n=items.length; if(n<3)return;
+ const lo=posGet(items[0]), hi=posGet(items[n-1]), span=hi-lo, gapCount=n-1;
+ const weights=[]; for(let i=0;i<gapCount;i++)weights.push(1+(ratio-1)*(i/(gapCount-1)));
+ const totalW=weights.reduce((a,b)=>a+b,0);
+ let acc=lo;
+ for(let i=1;i<n-1;i++){acc+=span*(weights[i-1]/totalW); posSet(items[i],acc);}
+}
 (function(){
 const $=id=>document.getElementById(id);
 const palettes={collection:['#111111','#555555','#999999','#ffffff','#f4f4f4','#d9d9d9','#222222','#777777'],hero:['#111111','#555555','#999999','#ffffff','#f4f4f4','#d9d9d9','#222222','#777777'],custom:['#111111','#ffffff','#777777','#d9d9d9']};
@@ -5728,6 +5774,28 @@ function moveDotLine(axis,dir){
  });
  renderAll();
 }
+// Blends size/colour/spacing across a row or column of dots, from the first to the last (sorted
+// along the line), using the shared pkmBlendAcrossLine/pkmBlendSpacing core - everything strictly
+// between the two ends is calculated automatically, never typed in by hand. Which properties blend
+// is read from the three checkboxes in the panel.
+function blendDotLine(axis){
+ const l=currentLayer();if(!l||l.kind!=='dot')return;
+ const dots=allDotLayers();if(dots.length<3)return;
+ const matchKey=axis==='row'?'y':'x', varyKey=axis==='row'?'x':'y';
+ const tol=3;
+ const anchor=l[matchKey]??50;
+ const line=dots.filter(d=>Math.abs((d[matchKey]??50)-anchor)<tol).sort((a,b)=>(a[varyKey]??50)-(b[varyKey]??50));
+ if(line.length<3)return;
+ tsPushHistory();
+ const specs=[];
+ if($('tsBlendSize')?.checked)specs.push({get:d=>d.width??10,set:(d,v)=>{d.width=Math.round(v*10)/10;},interpolate:pkmLerpNumber});
+ if($('tsBlendColour')?.checked)specs.push({get:d=>d.color||'#111111',set:(d,v)=>{d.color=v;d.manual=true;},interpolate:pkmLerpColour});
+ if(specs.length)pkmBlendAcrossLine(line,specs);
+ if($('tsBlendSpacing')?.checked)pkmBlendSpacing(line,d=>d[varyKey]??50,(d,v)=>{
+  const rv=Math.round(v*10)/10; d[varyKey]=rv; if(varyKey==='x')d.pos=rv; else d.rotate=rv;
+ });
+ renderAll();
+}
 function markActiveSwatches(root){
  const l=currentLayer();
  if(!root||!l)return;
@@ -5989,6 +6057,8 @@ function wire(){
  }
  if($('tsMoveRowMode'))$('tsMoveRowMode').onclick=()=>{dotMoveMode=dotMoveMode==='row'?null:'row';syncDotMoveModeButtons();};
  if($('tsMoveColumnMode'))$('tsMoveColumnMode').onclick=()=>{dotMoveMode=dotMoveMode==='column'?null:'column';syncDotMoveModeButtons();};
+ if($('tsBlendRow'))$('tsBlendRow').onclick=()=>blendDotLine('row');
+ if($('tsBlendColumn'))$('tsBlendColumn').onclick=()=>blendDotLine('column');
  if($('tsRotateGroup90'))$('tsRotateGroup90').onclick=()=>{
   // Swaps every band layer's own direction (vertical<->horizontal, diag1<->diag2) rather than
   // duplicating a new set on top ("copy -> horizontal" already does that) - this turns an
