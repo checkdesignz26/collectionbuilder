@@ -1926,24 +1926,48 @@ async function archiveAutosaveIfAny(){
 // template" (adds a new filmstrip card every time). One tap captures exactly where things are
 // right now; one tap jumps straight back to it, no filmstrip management needed.
 const QUICKSAVE_KEY='pkmQuickSaveV1';
+// One shared single-slot checkpoint, now reachable from Classics Studio and Background Studio too
+// (their own overlays are full-screen, so this main-canvas button was never actually clickable
+// while either was open) - a {context,data} wrapper says which one it was taken in, so "quick
+// load" from anywhere can jump back into the right place instead of only ever restoring the main
+// canvas. Reading it tolerates the older shape (a bare main-canvas snapshot, no wrapper) written
+// before this existed, so nobody's existing quick save is invalidated by this change.
 async function quickSave(){
  try{
-  await idbSet(QUICKSAVE_KEY,compactSessionSnapshotForStorage(autosaveSnapshot()));
+  await idbSet(QUICKSAVE_KEY,{context:'main',data:compactSessionSnapshotForStorage(autosaveSnapshot())});
   flashSaveStatus('quick saved ✓');
  }catch(e){
   console.warn('quick save failed',e);
   flashSaveStatus('quick save failed - could not reach storage',false,6000);
  }
 }
-async function quickLoad(){
- let data;try{data=await idbGet(QUICKSAVE_KEY);}catch(e){data=null;}
- if(!data){
+async function readQuickSaveSlot(){
+ let raw;try{raw=await idbGet(QUICKSAVE_KEY);}catch(e){raw=null;}
+ if(!raw){
   // One-time migration path, same reasoning as restoreAutosave above.
-  try{const raw=localStorage.getItem(QUICKSAVE_KEY);if(raw)data=JSON.parse(raw);}catch(e){data=null;}
-  if(data)idbSet(QUICKSAVE_KEY,data).then(()=>{try{localStorage.removeItem(QUICKSAVE_KEY);}catch(e){}}).catch(()=>{});
+  try{const ls=localStorage.getItem(QUICKSAVE_KEY);if(ls)raw=JSON.parse(ls);}catch(e){raw=null;}
+  if(raw)idbSet(QUICKSAVE_KEY,raw).then(()=>{try{localStorage.removeItem(QUICKSAVE_KEY);}catch(e){}}).catch(()=>{});
  }
- if(!data){flashSaveStatus('no quick save found yet',false);return;}
- if(!Array.isArray(data.bricks)||!data.bricks.length){flashSaveStatus('quick save is empty',false);return;}
+ if(!raw)return null;
+ return (raw.context&&('data' in raw))?raw:{context:'main',data:raw};
+}
+async function quickLoad(){
+ const payload=await readQuickSaveSlot();
+ if(!payload){flashSaveStatus('no quick save found yet',false);return;}
+ if(payload.context==='classics'){
+  window.openTextureStudio&&window.openTextureStudio();
+  if(window.tsQuickLoadFromPayload)window.tsQuickLoadFromPayload(payload.data);
+  else flashSaveStatus('quick save is empty',false);
+  return;
+ }
+ if(payload.context==='background'){
+  window.openBackgroundStudio&&window.openBackgroundStudio();
+  if(window.bgQuickLoadFromPayload)window.bgQuickLoadFromPayload(payload.data);
+  else flashSaveStatus('quick save is empty',false);
+  return;
+ }
+ const data=payload.data;
+ if(!data||!Array.isArray(data.bricks)||!data.bricks.length){flashSaveStatus('quick save is empty',false);return;}
  pushHistory();
  applySnapshotToLiveState(data,'quick loaded ✓');
 }
@@ -5226,7 +5250,7 @@ refreshHeroThumbs();
   <div class="tsModal">
     <div class="tsHeader">
       <div><h2>classics studio</h2><p>shared studio for stripes, polka dots, checks, plaid, argyle · still inside PKM</p></div>
-      <div class="topActions"><button id="tsApplyToPKM" class="small primary">apply to pattern</button><button id="tsSave" class="small">save classic</button><button id="tsDownload" class="small">download PNG</button><button id="tsUndo" class="small">↶ undo</button><button id="tsRedo" class="small">↷ redo</button><span id="tsStatus" class="saveStatus"></span><button id="tsReset" class="small">reset classic</button><button id="tsSwitchToBg" class="small" title="Switch to Background Studio"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="tsClose" class="tsClose" title="Close Classics Studio and return to the repeat layout canvas">← back to pattern</button></div>
+      <div class="topActions"><button id="tsApplyToPKM" class="small primary">apply to pattern</button><button id="tsSave" class="small">save classic</button><button id="tsDownload" class="small">download PNG</button><button id="tsUndo" class="small">↶ undo</button><button id="tsRedo" class="small">↷ redo</button><button id="tsQuickSave" class="small" title="Instantly save a checkpoint of this classic you can jump back to">quick save</button><button id="tsQuickLoad" class="small" title="Jump back to your last quick save, in whichever studio it was taken">quick load</button><span id="tsStatus" class="saveStatus"></span><button id="tsReset" class="small">reset classic</button><button id="tsSwitchToBg" class="small" title="Switch to Background Studio"><svg class="btnIcon"><use href="#i-image"/></svg>background studio</button><button id="tsClose" class="tsClose" title="Close Classics Studio and return to the repeat layout canvas">← back to pattern</button></div>
     </div>
     <div class="tsBody">
       <aside class="tsPanel">
@@ -5570,6 +5594,29 @@ let tsUndoStack=[], tsRedoStack=[], tsRestoring=false;
 function copy(o){return JSON.parse(JSON.stringify(o));}
 function tsSnapshot(){return copy({state,selected,previewMode,showGuides});}
 function tsRestore(snap){if(!snap)return;tsRestoring=true;state=copy(snap.state);selected=snap.selected||0;previewMode=snap.previewMode||'single';showGuides=snap.showGuides!==false;selectedBlendGroupId=null;customPathPoints=[];resetBlendPickers();setSeg();renderAll();tsRestoring=false;}
+// Quick save/load, reachable from inside Classics Studio itself - its overlay is full-screen, so
+// the main canvas's own quick save/load buttons were never actually clickable while this was open.
+// Shares the same single QUICKSAVE_KEY slot as the main canvas and Background Studio (tagged with
+// context so "quick load" from anywhere knows which studio, if any, to jump back into).
+async function tsQuickSaveNow(){
+ try{
+  await idbSet(QUICKSAVE_KEY,{context:'classics',data:tsSnapshot()});
+  setSaveStatus('quick saved ✓','ok');
+ }catch(e){console.warn('classics quick save failed',e); setSaveStatus('quick save failed','bad');}
+}
+async function tsQuickLoadNow(){
+ const payload=await readQuickSaveSlot();
+ if(!payload||payload.context!=='classics'||!payload.data){setSaveStatus('no quick save found for classics yet','bad');return;}
+ tsPushHistory();
+ tsRestore(payload.data);
+ setSaveStatus('quick loaded ✓','ok');
+}
+window.tsQuickLoadFromPayload=function(data){
+ if(!data){setSaveStatus('quick save is empty','bad');return;}
+ tsPushHistory();
+ tsRestore(data);
+ setSaveStatus('quick loaded ✓','ok');
+};
 // Work-in-progress autosave: closing the studio (or reloading) without hitting "save classic" /
 // "apply to template" used to silently discard whatever you were mid-way through designing -
 // only explicitly-saved/applied patterns persisted. Debounced the same way as the main canvas's
@@ -6535,7 +6582,7 @@ function wire(){
  if($('tsGroupBlend'))$('tsGroupBlend').onchange=applyGroupStyle;
  if($('tsAllWidths'))$('tsAllWidths').oninput=()=>applyAllStripe('width',$('tsAllWidths').value);
  if($('tsAllGaps'))$('tsAllGaps').oninput=()=>applyAllStripe('gap',$('tsAllGaps').value);
- $('tsReset').onclick=()=>{tsPushHistory();state=defaultFor(state.type);selected=0;renderAll();};$('tsSave').onclick=saveTexture; if($('tsUndo'))$('tsUndo').onclick=tsUndo; if($('tsRedo'))$('tsRedo').onclick=tsRedo; const ov=$('textureStudioOverlay'); let tsTap=null; ov.addEventListener('touchend',e=>{if(!ov.classList.contains('open'))return; if(e.changedTouches.length===2||e.touches.length===2){e.preventDefault();tsUndo();} if(e.changedTouches.length===3||e.touches.length===3){e.preventDefault();tsRedo();}}, {passive:false});
+ $('tsReset').onclick=()=>{tsPushHistory();state=defaultFor(state.type);selected=0;renderAll();};$('tsSave').onclick=saveTexture; if($('tsUndo'))$('tsUndo').onclick=tsUndo; if($('tsRedo'))$('tsRedo').onclick=tsRedo; if($('tsQuickSave'))$('tsQuickSave').onclick=tsQuickSaveNow; if($('tsQuickLoad'))$('tsQuickLoad').onclick=tsQuickLoadNow; const ov=$('textureStudioOverlay'); let tsTap=null; ov.addEventListener('touchend',e=>{if(!ov.classList.contains('open'))return; if(e.changedTouches.length===2||e.touches.length===2){e.preventDefault();tsUndo();} if(e.changedTouches.length===3||e.touches.length===3){e.preventDefault();tsRedo();}}, {passive:false});
  if($('tsApplyToPKM'))$('tsApplyToPKM').onclick=applyToPKM;
  if($('tsDownload'))$('tsDownload').onclick=()=>window.openDownloadPanel('download classic pattern',async(w,dpi)=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;renderPreview(canvas,w,state,'single',false);const bytes=await canvasToDpiPngBytes(canvas,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(state.type||'classic')}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current single tile as a seamless ${w}×${w}px PNG.`);
  if($('tsSelectMode'))$('tsSelectMode').onclick=tsToggleSelectMode;
@@ -7003,7 +7050,7 @@ try{document.getElementById('textureStudioOverlay')?.classList.remove('open');do
   <div class="bgStudioModal" role="dialog" aria-modal="true">
     <div class="bgStudioHeader">
       <div><h2>background studio <span class="bgEditBadge">editable texture</span></h2><p>beginner backgrounds + picky designer edit mode for blobs, marks and doodles</p></div>
-      <div class="topActions"><button id="bgApply" class="small primary">apply to pattern</button><button id="bgSave" class="small">save background</button><button id="bgDownload" class="small">download PNG</button><button id="bgSeed" class="small">new seed</button><button id="bgSwitchToTs" class="small" title="Switch to Classics Studio"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="bgClose" class="bgClose" style="font-size:12px;font-weight:850" title="Close Background Studio and return to the repeat layout canvas">← back to pattern</button></div>
+      <div class="topActions"><button id="bgApply" class="small primary">apply to pattern</button><button id="bgSave" class="small">save background</button><button id="bgDownload" class="small">download PNG</button><button id="bgSeed" class="small">new seed</button><button id="bgQuickSave" class="small" title="Instantly save a checkpoint of this background you can jump back to">quick save</button><button id="bgQuickLoad" class="small" title="Jump back to your last quick save, in whichever studio it was taken">quick load</button><button id="bgSwitchToTs" class="small" title="Switch to Classics Studio"><svg class="btnIcon"><use href="#i-palette"/></svg>classics studio</button><button id="bgClose" class="bgClose" style="font-size:12px;font-weight:850" title="Close Background Studio and return to the repeat layout canvas">← back to pattern</button></div>
     </div>
     <div class="bgStudioBody">
       <section class="bgStudioPanel">
@@ -7792,6 +7839,30 @@ function bgDrawPreviewFast(can,rec){
 function renderBgPreview(){bgScheduleWipAutosave();let can=q('bgPreviewCanvas'); if(!can)return; if(bgIsLiveDragging&&!bgShowGuides&&bgView==='single')bgDrawPreviewFast(can,bgRecipe);else drawBackgroundToCanvas(can,bgRecipe); updateBgEditUI(); if(bgShowGuides){let ctx=can.getContext('2d');ctx.strokeStyle='rgba(255,0,180,.65)';ctx.lineWidth=3;ctx.setLineDash([12,8]);ctx.strokeRect(1.5,1.5,W-3,H-3);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([])}
  q('bgPreviewName').textContent=bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1]; q('bgRecipeText').textContent=JSON.stringify(bgRecipe,null,2); bgDataUrl=recipeToUrl(bgRecipe); updateRepeatBox();}
 function updateRepeatBox(){let box=q('bgRepeatBox'),can=q('bgPreviewCanvas'); if(!box||!can)return; if(bgView==='single'){box.classList.add('hidden');can.classList.remove('hidden');return;} can.classList.add('hidden');box.classList.remove('hidden');box.style.display='grid';box.style.gridTemplateColumns='repeat(3,1fr)';box.style.gap='0';box.innerHTML='';for(let i=0;i<9;i++){let cn=document.createElement('canvas');cn.width=180;cn.height=180;cn.style.width='150px';cn.style.height='150px';cn.style.borderRadius='0';cn.getContext('2d').drawImage(can,0,0,180,180);box.appendChild(cn)}}
+function bgFlashStatus(msg){if(!q('bgStatus'))return; q('bgStatus').textContent=msg; setTimeout(()=>{if(q('bgStatus'))q('bgStatus').textContent='';},1600);}
+// Quick save/load, reachable from inside Background Studio itself - same reasoning and same
+// shared QUICKSAVE_KEY slot as Classics Studio's equivalent (see tsQuickSaveNow).
+async function bgQuickSaveNow(){
+ try{
+  await idbSet(QUICKSAVE_KEY,{context:'background',data:JSON.parse(JSON.stringify(bgRecipe))});
+  bgFlashStatus('quick saved ✓');
+ }catch(e){console.warn('background quick save failed',e); bgFlashStatus('quick save failed');}
+}
+async function bgQuickLoadNow(){
+ const payload=await readQuickSaveSlot();
+ if(!payload||payload.context!=='background'||!payload.data){bgFlashStatus('no quick save found for background yet');return;}
+ bgRecipe={...payload.data,enabled:true,objects:payload.data.objects||[]};
+ bgSelectedIds=[];
+ syncBgUI();
+ bgFlashStatus('quick loaded ✓');
+}
+window.bgQuickLoadFromPayload=function(data){
+ if(!data){bgFlashStatus('quick save is empty');return;}
+ bgRecipe={...data,enabled:true,objects:data.objects||[]};
+ bgSelectedIds=[];
+ syncBgUI();
+ bgFlashStatus('quick loaded ✓');
+};
 function syncBgUI(){
  const lockBtn=q('bgLockToggle');
  if(lockBtn){lockBtn.textContent=bgRecipe.locked?'🔒 unlock background':'🔓 lock background';lockBtn.classList.toggle('active',!!bgRecipe.locked);}
@@ -7951,7 +8022,7 @@ function wireBg(){q('openBackgroundStudio')?.addEventListener('click',openBg);q(
   bgInputRafPending=true;
   requestAnimationFrame(()=>{bgInputRafPending=false;syncBgUI();});
  };
-});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;q('bgClear').onclick=clearBg;q('bgLockToggle').onclick=toggleBgLock;q('bgSave').onclick=()=>{let name=(bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1])+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(bgRecipe.type==='pattern'?(bgRecipe.sourceName||'pattern'):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
+});q('bgBaseColor').oninput=e=>{bgRecipe.base=e.target.value;syncBgUI();};q('bgTexColor').oninput=e=>{bgRecipe.tex=e.target.value;syncBgUI();};q('bgSeed').onclick=()=>{bgRecipe.seed=Math.floor(Math.random()*9999999); if(bgRecipe.editable)makeEditableObjects(bgRecipe); syncBgUI();};q('bgApply').onclick=applyBgToPKM;if(q('bgQuickSave'))q('bgQuickSave').onclick=bgQuickSaveNow;if(q('bgQuickLoad'))q('bgQuickLoad').onclick=bgQuickLoadNow;q('bgClear').onclick=clearBg;q('bgLockToggle').onclick=toggleBgLock;q('bgSave').onclick=()=>{let name=(bgRecipe.type==='pattern'?('pattern: '+(bgRecipe.sourceName||'saved pattern')):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','Background'])[1])+' '+(bgSaved.length+1);bgSaved.unshift({...bgRecipe,enabled:true,name});persistAllSavedItems();q('bgStatus').textContent='saved ✓';setTimeout(()=>q('bgStatus').textContent='',1200);renderBgFilm();};q('bgDownload').onclick=()=>window.openDownloadPanel('download background texture',async(w,dpi)=>{const bytes=await renderBackgroundPNGBytes(bgRecipe,w,dpi);triggerBlobDownload(new Blob([bytes],{type:'image/png'}),`${slugName(bgRecipe.type==='pattern'?(bgRecipe.sourceName||'pattern'):(bgTypes.find(t=>t[0]===bgRecipe.type)||['','background'])[1])}-${w}x${w}-${dpi}dpi.png`);},w=>`Exports the current background as a seamless ${w}×${w}px PNG.`);
  q('bgFromPatternBtn')?.addEventListener('click',openBgPatternPicker);
  q('bgPatternPickerClose')?.addEventListener('click',closeBgPatternPicker);
  q('bgPatternPickerOverlay')?.addEventListener('click',e=>{if(e.target.id==='bgPatternPickerOverlay')closeBgPatternPicker();});
